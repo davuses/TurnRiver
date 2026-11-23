@@ -6,7 +6,7 @@ export const LOCALE_STORAGE_KEY = 'feltlab_locale_v1';
 
 const en = {
   // Document Metadata
-  'meta.pageTitle': "FeltLab — 6-Max Texas Hold'em Mastery Studio",
+  'meta.pageTitle': "TurnRiver — 6-Max Texas Hold'em Training Studio",
 
   // Navigation & Global
   'nav.preflop': 'Preflop',
@@ -464,7 +464,7 @@ export type TranslationKey = keyof typeof en;
 
 const zhCN: Record<TranslationKey, string> = {
   // Document Metadata
-  'meta.pageTitle': 'FeltLab — 6人桌德州扑克训练与复盘',
+  'meta.pageTitle': 'TurnRiver — 6人桌德州扑克训练与复盘',
 
   // Navigation & Global
   'nav.preflop': '翻前',

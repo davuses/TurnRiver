@@ -35,7 +35,7 @@ export class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error) {
-    console.error('FeltLab ErrorBoundary caught:', error);
+    console.error('TurnRiver ErrorBoundary caught:', error);
   }
 
   render() {

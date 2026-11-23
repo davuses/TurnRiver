@@ -63,7 +63,7 @@ function mulberry32(seed: number): () => number {
  * - Warm radial spotlight vignette
  * - Authentic woven speed-cloth diamond & suited micro-pattern
  * - Double brushed-gold oval betting line
- * - Embossed FeltLab High Stakes center watermark & 5 subtle board card slots
+ * - Embossed TurnRiver High Stakes center watermark & 5 subtle board card slots
  */
 export function createFeltTextures(
   theme: FeltThemeId,
@@ -151,7 +151,7 @@ export function createFeltTextures(
   ctx.font = '700 22px "Space Grotesk", Georgia, serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('FELTLAB  ·  HIGH STAKES', cx, cy - 150);
+  ctx.fillText('TURNRIVER  ·  HIGH STAKES', cx, cy - 150);
 
   ctx.fillStyle = 'rgba(225, 195, 125, 0.14)';
   ctx.font = '600 13px "JetBrains Mono", monospace';

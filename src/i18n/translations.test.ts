@@ -45,7 +45,7 @@ import type {
   WinnerSummarySpec,
 } from '../poker/tableEngine.ts';
 
-describe('FeltLab i18n EN / zh-CN locale support', () => {
+describe('TurnRiver i18n EN / zh-CN locale support', () => {
   it('maintains 100% key parity and non-empty values between en and zh-CN', () => {
     const enKeys = Object.keys(TRANSLATIONS.en).sort();
     const zhKeys = Object.keys(TRANSLATIONS['zh-CN']).sort();

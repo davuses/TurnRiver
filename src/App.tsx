@@ -45,7 +45,7 @@ function getInitialView(): AppView {
   return 'overview';
 }
 
-function FeltLabShell() {
+function TurnRiverShell() {
   const [activeView, setActiveView] = useState<AppView>(getInitialView);
   const store = useMasteryStore();
   const { locale, toggleLocale, t } = useLocale();
@@ -65,7 +65,7 @@ function FeltLabShell() {
             onClick={() => setActiveView('overview')}
             className="font-display text-xl font-bold tracking-tight text-white hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            FeltLab
+            TurnRiver
           </button>
 
           {/* Zone 2: Primary Drill & 3D Navigation */}
@@ -217,7 +217,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <LocaleProvider>
-        <FeltLabShell />
+        <TurnRiverShell />
       </LocaleProvider>
     </ErrorBoundary>
   );

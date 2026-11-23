@@ -1,20 +1,20 @@
-# FeltLab — 6-Max Texas Hold'em Mastery Studio
+# TurnRiver — 6-Max Texas Hold'em Training Studio
 
-[Open FeltLab](https://davuses.github.io/feltlab/)
+[Open TurnRiver](https://davuses.github.io/TurnRiver/)
 
-**FeltLab** is an interactive 6-max 100bb No-Limit Texas Hold'em training studio designed to replace table guesswork with deliberate, solver-grounded repetition. Practice preflop ranges, postflop decision trees, pot odds & EV math, multi-street hand reading, and full hands against configurable strategic bots on an interactive 3D casino poker table.
+**TurnRiver** is an interactive 6-max 100bb No-Limit Texas Hold'em training studio designed to help players make independent decisions at the table. Practice preflop ranges, spoiler-free postflop decision drills (including paired river bet-size comparisons), pot odds & Call EV math, multi-street hand reading, and full hands against configurable strategic bots on an interactive 3D casino poker table.
 
 ---
 
 ## Core Features
 
-- **Preflop Range & Position Lab** — 6-max 100bb RFI, 3-bet, and 4-bet defense drills with an interactive 169-hand mixed-strategy GTO matrix, solver frequency breakdowns, and EV loss grading.
-- **Postflop Live-Table Trainer** — Flop, turn, and river single-raised and 3-bet pot spots graded against solver frequencies, nut/range advantage, blockers, and concise strategic takeaways.
-- **Pot Odds, Equity & EV Math Lab** — Exact turn equity, required equity, call EV (in big blinds), bluff break-even %, and Minimum Defense Frequency (MDF) drills.
-- **Hand Reading & Range Narrowing** — Paint Villain's surviving range onto a 13×13 matrix street-by-street and score combo overlap against equilibrium.
-- **Configurable Multi-Bot Practice Arena** — Play complete cash hands against up to 5 distinct bot archetypes (*Balanced Reg, TAG, LAG, Calling Station, Nit*) with customizable table size (Heads-Up to 6-Max), stack depths, Hero position lock, live HUD stats, Blind Read mode, Fast-Fold, street-by-street EV audits, and **Theater / Fullscreen Mode**.
+- **Preflop Range & Position Lab** — 6-max 100bb RFI, 3-bet, and 4-bet defense drills with an interactive 169-hand mixed-strategy reference matrix and frequency-based grading.
+- **Postflop Live-Table Trainer** — Flop, turn, and river single-raised and 3-bet pot spots with spoiler-free prompts, a decisive-detail step, a paired river bet-size comparison drill (33% vs 125% pot), and hand-number breakdowns.
+- **Pot Odds, Equity & EV Math Lab** — Pot odds (graded in percentage points), exact turn equity enumeration / flop outs, Call EV in big blinds, bluff break-even %, and Minimum Defense Frequency (MDF) drills.
+- **Hand Reading & Range Narrowing** — Paint Villain's surviving range onto a 13×13 matrix street-by-street and score range overlap (%), precision, and recall.
+- **Configurable Multi-Bot Practice Arena** — Play complete cash hands against up to 5 distinct bot archetypes (*Balanced Reg, TAG, LAG, Calling Station, Nit*) with customizable table size (Heads-Up to 6-Max), stack depths, main & side-pot showdown payouts, Hero position lock, live HUD stats, Blind Read mode, Fast-Fold, street-by-street pot-odds reviews, and **Theater / Fullscreen Mode**.
 - **Interactive 3D High-Stakes Poker Studio** — Custom Three.js PBR casino table featuring mahogany racetrack trim, stitched leather rail, switchable speed-cloth felt themes, studio/daylight/lounge lighting presets, animated card dealing & chip-tossing physics, toggleable lounge props, and 4 camera angles.
-- **Mastery & Leak Tracker** — Aggregates accuracy, EV loss per decision, streaks, and leak breakdown across all drills with automatic local browser persistence (`localStorage`).
+- **Training Review & Leak Tracker** — Aggregates accuracy, average score (`/ 100`), streaks, and per-drill native metrics across all modules with automatic local browser persistence (`localStorage`).
 - **Bilingual Support** — Instant toggle between **English (`en`)** and **Simplified Chinese (`zh-CN`)**.
 
 ---
@@ -58,19 +58,19 @@ npm run preview
 
 ## Deployment
 
-FeltLab builds into a pure static Single-Page Application (`dist/`) with relative asset paths (`base: './'`), ready for GitHub Pages or any static host.
+TurnRiver builds into a pure static Single-Page Application (`dist/`) with relative asset paths (`base: './'`), ready for GitHub Pages or any static host.
 
 ### GitHub Pages (Automated via GitHub Actions)
 This repository includes `.github/workflows/deploy-pages.yml`.
 
 1. Push your repository to GitHub (`main` or `master` branch).
 2. In your GitHub repo, open **Settings → Pages → Build and deployment → Source** and select **GitHub Actions**.
-3. Wait for the **Deploy FeltLab to GitHub Pages** workflow in the **Actions** tab to finish.
+3. Wait for the **Deploy TurnRiver to GitHub Pages** workflow in the **Actions** tab to finish.
 
 ### Embedding in Google Sites
 1. Open [sites.google.com](https://sites.google.com).
 2. Go to **Pages** → hover **`+`** → **Full page embed** → **Add embed → By URL**.
-3. Paste your live GitHub Pages URL and click **Publish**.
+3. Paste your live GitHub Pages URL (`https://davuses.github.io/TurnRiver/`) and click **Publish**.
 
 ---
 
