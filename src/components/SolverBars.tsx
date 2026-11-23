@@ -23,7 +23,9 @@ function barColor(kind: SolverActionFreq['kind']): string {
 
 export function SolverBars({ actions, chosenLabel }: SolverBarsProps) {
   const { locale, t } = useLocale();
-  const sorted = [...actions].sort((a, b) => b.frequency - a.frequency || b.evBb - a.evBb);
+  const sorted = [...actions].sort(
+    (a, b) => b.frequency - a.frequency || (b.evBb ?? -999) - (a.evBb ?? -999)
+  );
 
   return (
     <div className="space-y-3">
@@ -45,10 +47,12 @@ export function SolverBars({ actions, chosenLabel }: SolverBarsProps) {
                 )}
               </span>
               <div className="flex items-center gap-3 font-mono tabular-nums shrink-0">
-                <span className="text-slate-400">
-                  EV {item.evBb >= 0 ? '+' : ''}
-                  {item.evBb.toFixed(2)}bb
-                </span>
+                {typeof item.evBb === 'number' && (
+                  <span className="text-slate-400">
+                    EV {item.evBb >= 0 ? '+' : ''}
+                    {item.evBb.toFixed(2)}bb
+                  </span>
+                )}
                 <span className="text-white font-semibold w-10 text-right">
                   {item.frequency}%
                 </span>

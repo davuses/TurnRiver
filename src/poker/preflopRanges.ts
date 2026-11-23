@@ -1,5 +1,5 @@
 import type { Card, DecisionEvaluation, Position, SolverActionFreq } from './types';
-import { accuracyFromGrade, gradeFromEvLoss } from './types';
+import { accuracyFromGrade, gradeFromFrequency } from './types';
 import { canonicalHandKey, expandHandCombos, gridCellLabel, RANKS } from './evaluator';
 
 export type PreflopScenarioType = 'RFI' | 'FACING_OPEN' | 'FACING_3BET';
@@ -9,9 +9,8 @@ export interface PreflopCellStrategy {
   raise: number; // 0-100 (Open / 3-Bet / 4-Bet)
   call: number;  // 0-100
   fold: number;  // 0-100
-  evRaise: number;
-  evCall: number;
-  evFold: number;
+  /** Internal 0-1 closeness rank used only to sample borderline folds for practice */
+  borderlineRank: number;
 }
 
 export interface PreflopSpotTemplate {
@@ -95,9 +94,8 @@ function expandRangeToken(token: string): string[] {
   return results;
 }
 
-function buildMatrix(spec: RangeSpec, scenarioType: PreflopScenarioType): Record<string, PreflopCellStrategy> {
+function buildMatrix(spec: RangeSpec, _scenarioType: PreflopScenarioType): Record<string, PreflopCellStrategy> {
   const matrix: Record<string, PreflopCellStrategy> = {};
-  const allowCall = scenarioType !== 'RFI';
 
   // Initialize all 169 hands as pure fold
   for (let r = 0; r < 13; r++) {
@@ -109,9 +107,7 @@ function buildMatrix(spec: RangeSpec, scenarioType: PreflopScenarioType): Record
         raise: 0,
         call: 0,
         fold: 100,
-        evRaise: Number((-0.42 - strengthPenalty * 0.95).toFixed(2)),
-        evCall: allowCall ? Number((-0.38 - strengthPenalty * 0.85).toFixed(2)) : -1.5,
-        evFold: 0,
+        borderlineRank: Number((1 - strengthPenalty).toFixed(2)),
       };
     }
   }
@@ -130,13 +126,10 @@ function buildMatrix(spec: RangeSpec, scenarioType: PreflopScenarioType): Record
 
   applyTokens(spec.pureCall, (h) => {
     matrix[h] = {
-      hand: h,
+      ...matrix[h],
       raise: 0,
       call: 100,
       fold: 0,
-      evRaise: 0.12,
-      evCall: 0.55,
-      evFold: 0,
     };
   });
 
@@ -146,29 +139,21 @@ function buildMatrix(spec: RangeSpec, scenarioType: PreflopScenarioType): Record
         if (!matrix[h]) continue;
         const f = Math.max(0, 100 - callPct);
         matrix[h] = {
-          hand: h,
+          ...matrix[h],
           raise: 0,
           call: callPct,
           fold: f,
-          evRaise: -0.28,
-          evCall: Number(((callPct / 100) * 0.08).toFixed(2)),
-          evFold: 0,
         };
       }
     }
   }
 
   applyTokens(spec.pureRaise, (h) => {
-    const isPremium = ['AA', 'KK', 'QQ', 'JJ', 'AKs', 'AKo'].includes(h);
-    const evR = isPremium ? 2.45 : 0.82;
     matrix[h] = {
-      hand: h,
+      ...matrix[h],
       raise: 100,
       call: 0,
       fold: 0,
-      evRaise: evR,
-      evCall: allowCall ? Number((evR - (isPremium ? 0.95 : 0.36)).toFixed(2)) : -1.5,
-      evFold: 0,
     };
   });
 
@@ -178,13 +163,10 @@ function buildMatrix(spec: RangeSpec, scenarioType: PreflopScenarioType): Record
         if (!matrix[h]) continue;
         const f = Math.max(0, 100 - raisePct);
         matrix[h] = {
-          hand: h,
+          ...matrix[h],
           raise: raisePct,
           call: 0,
           fold: f,
-          evRaise: Number(((raisePct / 100) * 0.07).toFixed(2)),
-          evCall: allowCall ? -0.24 : -1.5,
-          evFold: 0,
         };
       }
     }
@@ -196,13 +178,10 @@ function buildMatrix(spec: RangeSpec, scenarioType: PreflopScenarioType): Record
         if (!matrix[h]) continue;
         const c = Math.max(0, 100 - raisePct);
         matrix[h] = {
-          hand: h,
+          ...matrix[h],
           raise: raisePct,
           call: c,
           fold: 0,
-          evRaise: 0.64,
-          evCall: Number((0.64 - (raisePct > 65 ? 0.04 : 0.01)).toFixed(2)),
-          evFold: 0,
         };
       }
     }
@@ -214,13 +193,10 @@ function buildMatrix(spec: RangeSpec, scenarioType: PreflopScenarioType): Record
         if (!matrix[h]) continue;
         const f = Math.max(0, 100 - raisePct - callPct);
         matrix[h] = {
-          hand: h,
+          ...matrix[h],
           raise: raisePct,
           call: callPct,
           fold: f,
-          evRaise: 0.09,
-          evCall: 0.08,
-          evFold: 0,
         };
       }
     }
@@ -711,9 +687,9 @@ export function generatePreflopSpot(
   // while still including ~20% clear folds to test discipline.
   const interesting = allHands.filter((h) => h.raise > 0 || h.call > 0);
   const borderlineFolds = allHands.filter(
-    (h) => h.fold === 100 && h.evRaise > -0.82
+    (h) => h.fold === 100 && h.borderlineRank > 0.58
   );
-  const clearFolds = allHands.filter((h) => h.fold === 100 && h.evRaise <= -0.82);
+  const clearFolds = allHands.filter((h) => h.fold === 100 && h.borderlineRank <= 0.58);
 
   const roll = rng();
   let chosenCell: PreflopCellStrategy;
@@ -748,7 +724,6 @@ export function evaluatePreflopDecision(
       action: 'raise',
       label: spot.template.raiseLabel,
       frequency: cell.raise,
-      evBb: cell.evRaise,
       kind: 'raise',
     },
   ];
@@ -757,7 +732,6 @@ export function evaluatePreflopDecision(
       action: 'call',
       label: spot.template.callLabel ?? `Call ${spot.template.toCallBb}bb`,
       frequency: cell.call,
-      evBb: cell.evCall,
       kind: 'call',
     });
   }
@@ -765,23 +739,19 @@ export function evaluatePreflopDecision(
     action: 'fold',
     label: 'Fold',
     frequency: cell.fold,
-    evBb: cell.evFold,
     kind: 'fold',
   });
 
-  const bestEv = Math.max(...actions.map((a) => a.evBb));
-  const bestObj = [...actions].sort((a, b) => b.frequency - a.frequency || b.evBb - a.evBb)[0];
+  const bestObj = [...actions].sort((a, b) => b.frequency - a.frequency)[0];
   const chosenObj = actions.find((a) => a.action === chosenKey) ?? actions[actions.length - 1];
 
-  const evLossBb = Math.max(0, Number((bestEv - chosenObj.evBb).toFixed(2)));
-  const grade = gradeFromEvLoss(evLossBb, chosenObj.frequency);
-  const accuracyScore = accuracyFromGrade(grade, evLossBb);
+  const grade = gradeFromFrequency(chosenObj.frequency, bestObj.frequency);
+  const accuracyScore = accuracyFromGrade(grade);
 
   return {
     chosenAction: chosenObj.label,
     bestAction: bestObj.label,
     chosenFreq: chosenObj.frequency,
-    evLossBb,
     grade,
     accuracyScore,
     actions,

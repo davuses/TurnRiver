@@ -83,7 +83,8 @@ export function PreflopLabView({
         spotLabel: `${spot.template.title} (${spot.handKey})`,
         chosenAction: result.chosenAction,
         bestAction: result.bestAction,
-        evLossBb: result.evLossBb,
+        metricValue: result.chosenFreq,
+        metricKind: 'freq_pct',
         grade: result.grade,
         accuracyScore: result.accuracyScore,
       });
@@ -291,7 +292,10 @@ export function PreflopLabView({
               </div>
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-3 w-full">
-                <GradeBadge grade={evaluation.grade} evLossBb={evaluation.evLossBb} />
+                <GradeBadge
+                  grade={evaluation.grade}
+                  metricLabel={`${t('metric.freqPrefix')} ${evaluation.chosenFreq}%`}
+                />
                 <button
                   type="button"
                   onClick={() => dealNext()}
@@ -355,7 +359,11 @@ export function PreflopLabView({
                 <h2 className="text-base font-semibold text-white">
                   {t('preflop.solverSolution')} · {spot.handKey}
                 </h2>
-                <GradeBadge grade={evaluation.grade} evLossBb={evaluation.evLossBb} size="sm" />
+                <GradeBadge
+                  grade={evaluation.grade}
+                  metricLabel={`${t('metric.freqPrefix')} ${evaluation.chosenFreq}%`}
+                  size="sm"
+                />
               </div>
 
               <SolverBars actions={evaluation.actions} chosenLabel={evaluation.chosenAction} />

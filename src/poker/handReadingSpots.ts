@@ -153,7 +153,7 @@ export const HAND_READING_SPOTS: HandReadingSpot[] = [
     villainPos: 'BTN',
     heroPos: 'CO',
     streetLabel: 'Turn · 3-Bet Pot · 100bb',
-    potBb: 42.5,
+    potBb: 42.0,
     board: parseCards(['Qd', '9c', '4d', '2s']),
     timeline: [
       {
@@ -168,7 +168,7 @@ export const HAND_READING_SPOTS: HandReadingSpot[] = [
       },
       {
         street: 'Turn 2♠',
-        detail: 'CO checks, BTN fires 14.5bb (55% pot).',
+        detail: 'CO checks, BTN fires 14.5bb (53% pot).',
         narrowingHint: 'On a brick turn, BTN drops medium showdown pairs (JJ/TT) to check-back and barrels strong Qx+, overpairs, sets, and diamond/straight draws.',
       },
     ],
@@ -255,7 +255,7 @@ export interface HandReadingResult {
   missedHands: string[];
   extraHands: string[];
   grade: DecisionGrade;
-  evLossBb: number;
+  accuracyScore: number;
 }
 
 export function evaluateHandReading(
@@ -294,22 +294,16 @@ export function evaluateHandReading(
   const recallPct = targetCombos > 0 ? Math.round((matchedCombos / targetCombos) * 100) : 0;
 
   let grade: DecisionGrade;
-  let evLossBb: number;
   if (overlapPct >= 75) {
     grade = 'Optimal';
-    evLossBb = 0;
   } else if (overlapPct >= 58) {
     grade = 'Acceptable';
-    evLossBb = 0.12;
   } else if (overlapPct >= 42) {
     grade = 'Inaccuracy';
-    evLossBb = 0.3;
   } else if (overlapPct >= 25) {
     grade = 'Mistake';
-    evLossBb = 0.65;
   } else {
     grade = 'Blunder';
-    evLossBb = 1.15;
   }
 
   return {
@@ -322,7 +316,7 @@ export function evaluateHandReading(
     missedHands,
     extraHands,
     grade,
-    evLossBb,
+    accuracyScore: overlapPct,
   };
 }
 

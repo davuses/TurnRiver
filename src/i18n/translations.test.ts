@@ -28,7 +28,10 @@ import {
   translateHandRank,
 } from './drillContentZh.ts';
 import { PREFLOP_TEMPLATES } from '../poker/preflopRanges.ts';
-import { POSTFLOP_BLUEPRINTS, generatePostflopSpot } from '../poker/postflopSpots.ts';
+import {
+  POSTFLOP_BLUEPRINTS,
+  generatePostflopSpotById,
+} from '../poker/postflopSpots.ts';
 import { HAND_READING_SPOTS, QUICK_RANGE_PRESETS } from '../poker/handReadingSpots.ts';
 import {
   generateMathQuestion,
@@ -109,16 +112,12 @@ describe('FeltLab i18n EN / zh-CN locale support', () => {
     }
 
     for (const bp of POSTFLOP_BLUEPRINTS) {
-      const spot = generatePostflopSpot(bp.street, bp.potType, bp.heroInPosition ? 'IP' : 'OOP');
-      const zh = localizePostflopSpot('zh-CN', {
-        ...spot,
-        id: bp.id,
-        title: bp.title,
-        actionLog: bp.actionLog,
-        takeaways: bp.takeaways,
-      });
+      const spot = generatePostflopSpotById(bp.id, { preserveSuits: true })!;
+      const zh = localizePostflopSpot('zh-CN', spot);
       const blob = [
+        zh.neutralTitle,
         zh.title,
+        zh.numbersBreakdown,
         ...zh.actionLog,
         zh.takeaways.boardTexture,
         zh.takeaways.rangeAdvantage,
@@ -217,21 +216,32 @@ describe('FeltLab i18n EN / zh-CN locale support', () => {
       assert.match(zh.actionSummary, /[\u4e00-\u9fff]/);
     }
 
+    const zhSpoilerTerms = ['弃牌', '跟注', '诈唬', '价值下注', '过牌加注', '控池', '范围下注', '抓诈唬'];
     for (const bp of POSTFLOP_BLUEPRINTS) {
-      const spot = generatePostflopSpot(bp.street, bp.potType, bp.heroInPosition ? 'IP' : 'OOP');
-      const zh = localizePostflopSpot('zh-CN', {
-        ...spot,
-        id: bp.id,
-        title: bp.title,
-        actionLog: bp.actionLog,
-        takeaways: bp.takeaways,
-      });
+      const spot = generatePostflopSpotById(bp.id, { preserveSuits: true })!;
+      const zh = localizePostflopSpot('zh-CN', spot);
+      assert.notEqual(zh.neutralTitle, bp.neutralTitle, `Missing zh neutralTitle for ${bp.id}`);
       assert.notEqual(zh.title, bp.title, `Missing zh postflop title for ${bp.id}`);
+      assert.notEqual(zh.numbersBreakdown, bp.numbersBreakdown, `Missing zh numbersBreakdown for ${bp.id}`);
       assert.match(zh.takeaways.coreRule, /[\u4e00-\u9fff]/);
+      for (const spoiler of zhSpoilerTerms) {
+        assert.ok(
+          !zh.neutralTitle.includes(spoiler),
+          `zh neutralTitle "${zh.neutralTitle}" for ${bp.id} leaks action spoiler "${spoiler}"`
+        );
+      }
       for (const line of zh.actionLog) {
         assert.match(line, /[\u4e00-\u9fff]/, `Untranslated postflop actionLog line: ${line}`);
       }
     }
+
+    // Verify revised river bluff blocker spot in zh-CN references K9s and never KJ
+    const zhBluff = localizePostflopSpot(
+      'zh-CN',
+      generatePostflopSpotById('pf-srp-co-bb-river-bluff-blockers', { preserveSuits: true })!
+    );
+    assert.ok(zhBluff.title.includes('K9s'));
+    assert.ok(!zhBluff.title.includes('KJ') && !zhBluff.numbersBreakdown.includes('KJ'));
 
     for (const spot of HAND_READING_SPOTS) {
       const zh = localizeHandReadingSpot('zh-CN', spot);
@@ -423,6 +433,38 @@ describe('FeltLab i18n EN / zh-CN locale support', () => {
     assert.ok(zhSplit.includes('Bot Kai (BB)'));
     assert.ok(zhSplit.includes('顺子（K 高）'));
     assert.ok(zhSplit.includes('平分 32bb 底池'));
+
+    const multiPotSpec: WinnerSummarySpec = {
+      type: 'showdown',
+      isSplit: false,
+      potBb: 220,
+      handLabel: 'Pair of Aces',
+      winners: [{ name: 'Hero (You)', position: 'BTN', isHero: true }],
+      potBreakdowns: [
+        {
+          potIndex: 0,
+          amountBb: 60,
+          isSplit: false,
+          handLabel: 'Pair of Aces',
+          winners: [{ seatIndex: 0, name: 'Hero (You)', position: 'BTN', isHero: true, payoutBb: 60 }],
+        },
+        {
+          potIndex: 1,
+          amountBb: 160,
+          isSplit: false,
+          handLabel: 'Pair of Kings',
+          winners: [{ seatIndex: 1, name: 'Bot Viktor', position: 'SB', isHero: false, payoutBb: 160 }],
+        },
+      ],
+    };
+    const enMulti = formatWinnerSummary('en', multiPotSpec);
+    assert.ok(enMulti.includes('Main pot (60bb)'));
+    assert.ok(enMulti.includes('Side pot 1 (160bb)'));
+    const zhMulti = formatWinnerSummary('zh-CN', multiPotSpec);
+    assert.ok(zhMulti.includes('主池（60bb）'));
+    assert.ok(zhMulti.includes('边池 1（160bb）'));
+    assert.ok(zhMulti.includes('一对 A'));
+    assert.ok(zhMulti.includes('一对 K'));
 
     // Every AuditBaseReason + AuditExploitTipKind produces idiomatic Chinese
     const reasons: AuditBaseReason[] = [

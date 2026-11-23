@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Cloud, LogOut, Trash2 } from 'lucide-react';
-import type { User } from 'firebase/auth';
+import { Trash2 } from 'lucide-react';
 import type {
   DrillAttemptRecord,
   DrillModule,
@@ -12,32 +11,21 @@ import { useLocale } from '../i18n/LocaleContext';
 import {
   translateActionText,
   translateModuleLabel,
-  type TranslationKey,
 } from '../i18n/translations';
 import { localizeSpotLabel } from '../i18n/drillContentZh';
 
 interface LeakTrackerViewProps {
-  user: User | null;
-  syncing: boolean;
-  syncError: TranslationKey | null;
   summary: MasterySummary;
   attempts: DrillAttemptRecord[];
-  onSignIn: () => Promise<void>;
-  onSignOut: () => Promise<void>;
-  onResetProgress: () => Promise<void>;
+  onResetProgress: () => void;
   onNavigateDrill: (mod: DrillModule) => void;
 }
 
 const POSITIONS: Position[] = ['UTG', 'HJ', 'CO', 'BTN', 'SB', 'BB'];
 
 export function LeakTrackerView({
-  user,
-  syncing,
-  syncError,
   summary,
   attempts,
-  onSignIn,
-  onSignOut,
   onResetProgress,
   onNavigateDrill,
 }: LeakTrackerViewProps) {
@@ -50,10 +38,15 @@ export function LeakTrackerView({
     summary.totalDecisions > 0
       ? Math.round((summary.optimalCount / summary.totalDecisions) * 100)
       : 0;
-  const evLossPer100 =
+  const avgScore =
     summary.totalDecisions > 0
-      ? ((summary.totalEvLossBb / summary.totalDecisions) * 100).toFixed(1)
-      : '0.0';
+      ? Math.round((summary.totalAccuracyScore ?? 0) / summary.totalDecisions)
+      : 0;
+  const leaksCount = useMemo(
+    () =>
+      attempts.filter((a) => a.grade !== 'Optimal' && a.grade !== 'Acceptable').length,
+    [attempts]
+  );
 
   const moduleBreakdown = useMemo(() => {
     const mods: DrillModule[] = ['preflop', 'postflop', 'math', 'reading', 'table'];
@@ -61,13 +54,13 @@ export function LeakTrackerView({
       const rows = attempts.filter((a) => a.module === m);
       const count = rows.length;
       const good = rows.filter((r) => r.grade === 'Optimal' || r.grade === 'Acceptable').length;
-      const evLoss = rows.reduce((acc, r) => acc + r.evLossBb, 0);
+      const scoreSum = rows.reduce((acc, r) => acc + r.accuracyScore, 0);
       return {
         module: m,
         label: translateModuleLabel(locale, m),
         count,
         accuracyPct: count > 0 ? Math.round((good / count) * 100) : null,
-        avgEvLoss: count > 0 ? (evLoss / count).toFixed(2) : null,
+        avgScore: count > 0 ? Math.round(scoreSum / count) : null,
       };
     });
   }, [attempts, locale]);
@@ -77,15 +70,35 @@ export function LeakTrackerView({
       const rows = attempts.filter((a) => a.position === pos);
       const count = rows.length;
       const good = rows.filter((r) => r.grade === 'Optimal' || r.grade === 'Acceptable').length;
-      const evLoss = rows.reduce((acc, r) => acc + r.evLossBb, 0);
+      const scoreSum = rows.reduce((acc, r) => acc + r.accuracyScore, 0);
       return {
         pos,
         count,
         accuracyPct: count > 0 ? Math.round((good / count) * 100) : null,
-        avgEvLoss: count > 0 ? (evLoss / count).toFixed(2) : null,
+        avgScore: count > 0 ? Math.round(scoreSum / count) : null,
       };
     });
   }, [attempts]);
+
+  const formatAttemptMetric = (att: DrillAttemptRecord): string | undefined => {
+    if (typeof att.metricValue === 'number' && att.metricKind) {
+      switch (att.metricKind) {
+        case 'overlap_pct':
+          return `${att.metricValue}${t('metric.overlapSuffix')}`;
+        case 'error_pp':
+          return `±${att.metricValue} ${t('metric.ppUnit')}`;
+        case 'error_bb':
+          return `±${att.metricValue} ${t('metric.bbUnit')}`;
+        case 'freq_pct':
+          return `${t('metric.freqPrefix')} ${att.metricValue}%`;
+        case 'pot_odds_pct':
+          return `${t('metric.potOddsPrefix')} ${att.metricValue}%`;
+        case 'ev_bb':
+          return `${att.metricValue >= 0 ? '+' : ''}${att.metricValue} ${t('metric.bbUnit')}`;
+      }
+    }
+    return `${att.accuracyScore}/100`;
+  };
 
   const filteredAttempts = useMemo(() => {
     return attempts.filter((a) => {
@@ -102,7 +115,7 @@ export function LeakTrackerView({
 
   return (
     <div className="space-y-8 pb-12">
-      {/* Header & Cloud Sync Strip */}
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#222D3D] pb-5">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-white">{t('leaks.title')}</h1>
@@ -110,37 +123,6 @@ export function LeakTrackerView({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {user ? (
-            <div className="flex items-center gap-3 bg-[#111722] border border-[#222D3D] rounded-lg px-3.5 py-2">
-              <Cloud className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
-              <div className="text-xs">
-                <p className="font-medium text-white">
-                  {user.displayName || t('leaks.signedIn')}
-                </p>
-                <p className="text-slate-400">
-                  {syncing ? t('leaks.syncing') : t('leaks.syncActive')}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void onSignOut()}
-                className="ml-2 px-2.5 py-1.5 text-xs font-medium rounded-md bg-[#192334] hover:bg-[#233148] text-slate-200 inline-flex items-center gap-1 cursor-pointer whitespace-nowrap"
-              >
-                <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>{t('leaks.signOut')}</span>
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void onSignIn()}
-              className="min-h-[40px] px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
-            >
-              <Cloud className="w-4 h-4" aria-hidden="true" />
-              <span>{t('leaks.signIn')}</span>
-            </button>
-          )}
-
           {!confirmReset ? (
             <button
               type="button"
@@ -156,8 +138,8 @@ export function LeakTrackerView({
               <span className="text-rose-200">{t('leaks.confirmClear')}</span>
               <button
                 type="button"
-                onClick={async () => {
-                  await onResetProgress();
+                onClick={() => {
+                  onResetProgress();
                   setConfirmReset(false);
                 }}
                 className="px-2.5 py-1 rounded bg-rose-500 text-white font-semibold hover:bg-rose-400 cursor-pointer"
@@ -176,15 +158,6 @@ export function LeakTrackerView({
         </div>
       </div>
 
-      {syncError && (
-        <div
-          role="status"
-          className="text-xs text-amber-200 bg-[#1B1810] border border-amber-500/35 rounded-lg px-4 py-3"
-        >
-          {t(syncError)}
-        </div>
-      )}
-
       {/* Headline Metrics */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[#222D3D] border border-[#222D3D] rounded-xl overflow-hidden">
         <div className="bg-[#111722] p-5 space-y-1">
@@ -202,13 +175,13 @@ export function LeakTrackerView({
         <div className="bg-[#111722] p-5 space-y-1">
           <span className="text-xs text-slate-400 block">{t('leaks.cumEvLoss')}</span>
           <span className="text-2xl font-mono tabular-nums font-semibold text-amber-300">
-            -{summary.totalEvLossBb.toFixed(2)} bb
+            {summary.totalDecisions > 0 ? `${avgScore} / 100` : '—'}
           </span>
         </div>
         <div className="bg-[#111722] p-5 space-y-1">
           <span className="text-xs text-slate-400 block">{t('leaks.leakRate')}</span>
           <span className="text-2xl font-mono tabular-nums font-semibold text-rose-400">
-            -{evLossPer100} bb
+            {leaksCount}
           </span>
         </div>
       </section>
@@ -249,7 +222,7 @@ export function LeakTrackerView({
                         {row.accuracyPct}% {t('leaks.accurate')}
                       </span>
                       <span className="text-slate-400">
-                        -{row.avgEvLoss} {t('leaks.bbPerSpot')}
+                        {row.avgScore}/100 {t('leaks.bbPerSpot')}
                       </span>
                     </>
                   ) : (
@@ -278,15 +251,16 @@ export function LeakTrackerView({
                   <div className="flex items-center justify-between">
                     <span className="font-mono font-bold text-sm text-white">{seat.pos}</span>
                     <span className="text-[11px] font-mono tabular-nums text-slate-400">
-                      {seat.count} {seat.count === 1 ? t('leaks.spotSingular') : t('leaks.spotPlural')}
+                      {seat.count}{' '}
+                      {seat.count === 1 ? t('leaks.spotSingular') : t('leaks.spotPlural')}
                     </span>
                   </div>
                   <p className="font-mono tabular-nums text-lg font-semibold text-slate-100">
                     {seat.accuracyPct !== null ? `${seat.accuracyPct}%` : '—'}
                   </p>
                   <p className="text-[11px] font-mono tabular-nums text-slate-400">
-                    {seat.avgEvLoss !== null
-                      ? `-${seat.avgEvLoss} ${t('leaks.bbAvg')}`
+                    {seat.avgScore !== null
+                      ? `${seat.avgScore}/100 ${t('leaks.bbAvg')}`
                       : t('leaks.noData')}
                   </p>
                 </div>
@@ -390,7 +364,11 @@ export function LeakTrackerView({
                       {translateActionText(locale, att.bestAction)}
                     </td>
                     <td className="py-3 pl-3 text-right whitespace-nowrap">
-                      <GradeBadge grade={att.grade} evLossBb={att.evLossBb} size="sm" />
+                      <GradeBadge
+                        grade={att.grade}
+                        metricLabel={formatAttemptMetric(att)}
+                        size="sm"
+                      />
                     </td>
                   </tr>
                 ))}

@@ -202,13 +202,8 @@ function FeltLabShell() {
 
         {activeView === 'leaks' && (
           <LeakTrackerView
-            user={store.user}
-            syncing={store.syncing}
-            syncError={store.syncError}
             summary={store.summary}
             attempts={store.attempts}
-            onSignIn={store.handleSignIn}
-            onSignOut={store.handleSignOut}
             onResetProgress={store.resetProgress}
             onNavigateDrill={(mod) => setActiveView(mod)}
           />

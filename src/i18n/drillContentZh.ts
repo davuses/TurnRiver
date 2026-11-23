@@ -107,7 +107,9 @@ export function localizePreflopTemplate(
 }
 
 interface PostflopZhCopy {
+  neutralTitle: string;
   title: string;
+  numbersBreakdown: string;
   takeaways: {
     boardTexture: string;
     rangeAdvantage: string;
@@ -118,111 +120,203 @@ interface PostflopZhCopy {
 
 const POSTFLOP_ZH: Record<string, PostflopZhCopy> = {
   'pf-srp-btn-bb-a72r': {
-    title: 'BTN 在干燥 A 高彩虹面持续下注',
+    neutralTitle: '翻牌决策：BTN 有位置面对 BB 过牌（干燥 A 高面）',
+    title: 'BTN 在干燥 A 高彩虹面做小尺度持续下注',
+    numbersBreakdown:
+      '底池 5.5bb，有效筹码 97.5bb（SPR 筹码底池比 17.7）。下注 1.8bb（33% 底池）时，对手只要弃牌超过 24.7%，哪怕纯空气牌也能立刻盈利。',
     takeaways: {
       boardTexture: '干燥、不相连的 A 高彩虹牌面，顺子与同花听牌非常少。',
-      rangeAdvantage: 'BTN 握有完整的 AA、AK、AQ、AJ 组合，面对翻前跟注封顶的大盲位（BB）范围拥有明显的范围优势与坚果优势。',
-      blockerNote: 'KQo 阻挡了对手部分后门大牌组合，同时小尺度下注能有效打弃大盲位（BB）的 6x–5x 边缘牌，拒绝其免费实现权益。',
-      coreRule: '在干燥牌面握有明显范围优势时，适合高频使用 25%–33% 底池的小尺度持续下注。',
+      rangeAdvantage:
+        'BTN 拥有完整的 AA、AK、AQ、AJ 组合，面对翻前平跟封顶的大盲位（BB）握有明显的范围优势（整体牌力领先）与坚果优势。',
+      blockerNote:
+        'KQo 带有高张和后门潜力，用小尺度下注能顺手打弃大盲位（BB）的 6x–5x 边缘牌，不让对手免费看转牌。',
+      coreRule: '在干燥牌面握有明显范围优势时，高频使用 25%–33% 底池的小尺度持续下注非常高效。',
     },
   },
   'pf-srp-co-bb-765tt': {
+    neutralTitle: '翻牌决策：CO 有位置面对 BB 过牌（7-6-5 两同花）',
     title: 'CO 在低张相连两同花牌面在后位过牌',
+    numbersBreakdown:
+      '底池 5.5bb，有效筹码 97.5bb（SPR 17.7）。如果在这里习惯性下注，很容易撞上大盲位（BB）密集的两对、暗三条和强听牌过牌加注。',
     takeaways: {
-      boardTexture: '低张高度相连的两同花牌面，两对、暗三条、成牌顺子及各类听牌都非常密集。',
-      rangeAdvantage: '大盲位（BB）非常契合 7-6-5 结构（98s、84s、76s、75s、65s 以及 55–77），CO 在这里没有坚果优势。',
-      blockerNote: 'AKo 带有后门坚果同花潜质和两张高张，在后位过牌能更稳妥地实现权益，也避免撞上大盲位（BB）的过牌加注。',
-      coreRule: '面对低张相连、听牌多的牌面且大盲位（BB）握有坚果优势时，避免惯性持续下注，应提高在后位过牌的频率。',
+      boardTexture: '低张高度相连的两同花牌面，两对、暗三条、成牌顺子及各类听牌都很密集。',
+      rangeAdvantage:
+        '大盲位（BB）非常契合 7-6-5 结构（98s、84s、76s、75s、65s 以及 55–77），CO 在这里没有坚果优势。',
+      blockerNote:
+        'AKo 带有两张高张和后门同花潜质，在后位过牌可以免费看转牌并稳稳实现权益，不必冒被过牌加注逼弃的风险。',
+      coreRule: '在低张相连、明显利于大盲位（BB）的动态连张面上，克制惯性持续下注，提高在后位过牌的频率。',
     },
   },
   'pf-srp-bb-btn-xr-984': {
-    title: 'BB 面对小尺度持续下注做过牌加注半诈唬',
+    neutralTitle: '翻牌决策：BB 面对 BTN 33% 持续下注（9-8-4 彩虹面）',
+    title: 'BB 持强两头顺听牌面对小下注做过牌加注半诈唬',
+    numbersBreakdown:
+      '底池 7.3bb（含 BTN 下注的 1.8bb）。跟注 1.8bb 只需 19.8% 胜率，但加注到 7.0bb 能用 8 张两头顺补牌加两张高张直接给 BTN 宽范围施压。',
     takeaways: {
-      boardTexture: '动态的 9 高彩虹牌面，按钮位（BTN）高频小尺度持续下注范围较宽，容易承受加注压力。',
-      rangeAdvantage: '大盲位（BB）保留了 98s、94s、84s、44 和 88 等强成牌，能支撑两极化的过牌加注范围。',
-      blockerNote: 'JTs 同花拥有 8 张两头顺补牌、两张高张以及后门同花听牌，是很适合拿来做半诈唬过牌加注的听牌。',
-      coreRule: '持有高权益的两头顺听牌搭配两张高张时，用过牌加注做半诈唬既能做大底池，也能迫使按钮位（BTN）的空气牌弃牌。',
+      boardTexture: '9-8-4 彩虹面中段相连，按钮位（BTN）高频小尺度持续下注的范围很宽，容易承受加注压力。',
+      rangeAdvantage:
+        '大盲位（BB）握有 98s、94s、84s、44 和 88 等强成牌，能支撑两极化（强价值牌配听牌半诈唬）的过牌加注范围。',
+      blockerNote:
+        'JTs 同花拥有 8 张两头顺补牌、两张高张和后门同花听牌，是很优质的半诈唬（靠对手弃牌或自己成牌双路盈利）候选。',
+      coreRule: '面对小尺度持续下注，拿着两头顺加两张高张的强听牌，用过牌加注半诈唬既能做大底池，也能抢下弃牌率。',
     },
   },
   'pf-3bp-btn-co-k94r': {
-    title: '3-Bet 底池有位置在干燥 K 高面持续下注',
+    neutralTitle: '翻牌决策：3-Bet 底池 BTN 面对 CO 过牌（K-9-4 彩虹面）',
+    title: '3-Bet 底池有位置在干燥 K 高面做小尺度范围持续下注',
+    numbersBreakdown:
+      '底池 16.5bb，有效筹码 92.5bb（SPR 5.6）。下注 5.5bb（33% 底池）时，对手需要弃牌超过 25.0% 即可让空气牌直接盈利，对中弱牌压力很大。',
     takeaways: {
-      boardTexture: '低筹码底池比（SPR 5.6）的静态 K 高彩虹牌面，听牌极少。',
-      rangeAdvantage: 'BTN 保留完整权重的 AA、KK、AK 和 KQs，而 CO 翻前未做 4-Bet，很少持有 KK 或 AK。',
-      blockerNote: 'QJs 同花带有卡顺听牌和后门同花听牌，小尺度持续下注就能给对手的 AQo、AJo 及 66–88 带来很大弃牌压力。',
-      coreRule: '在有位置的 3-Bet 底池干燥 A／K 高翻牌面上，使用 25%–33% 底池的小尺度范围持续下注通常是高 EV 选择。',
+      boardTexture: '低筹码底池比（SPR 5.6）的干燥 K 高彩虹牌面，牌面听牌极少。',
+      rangeAdvantage:
+        'BTN 保留完整权重的 AA、KK、AK 和 KQs，而 CO 翻前未做 4-Bet，范围里几乎没有 KK 或 AK。',
+      blockerNote:
+        'QJs 同花带有后门同花听牌和卡顺潜质，小尺度持续下注就能给 CO 的 AQo、AJo 与 66–88 带来很大防守压力。',
+      coreRule: '在有位置的 3-Bet 底池干燥 A／K 高翻牌面上，用 25%–33% 底池的小尺度高频持续下注通常是简洁好用的基准打法。',
     },
   },
   'pf-3bp-sb-btn-qjt-oop': {
-    title: '3-Bet 底池没位置在单花色大牌相连面过牌',
+    neutralTitle: '翻牌决策：3-Bet 底池 SB 没位置率先行动（单花色 Q-J-T）',
+    title: '3-Bet 底池没位置在单花色大牌相连面过牌控池',
+    numbersBreakdown:
+      '底池 22.0bb，有效筹码 89.0bb（SPR 4.0）。单花色 Q-J-T 面大量组合已成同花或顺子，无同花阻挡牌的 AA 没位置不宜把底池急着打大。',
     takeaways: {
-      boardTexture: '单花色 Q-J-T 大牌相连牌面，双方范围中都包含大量成牌同花、顺子与两对。',
-      rangeAdvantage: '手中口袋 AA 不带牌面同花花色的 A 阻挡牌，面对已成牌的同花、顺子和两对时，更接近脆弱的抓诈唬牌。',
-      blockerNote: '两张 A 既不阻挡对手的同花组合，也不阻挡 K9s／98s 顺子；选择过牌有助于保护没位置的过牌范围。',
-      coreRule: '在单花色且高度相连的翻牌面上，不含同花阻挡牌的超对优先过牌控池，避免没位置把底池打得过大。',
+      boardTexture: '单花色 Q-J-T 大牌相连牌面，双方范围里都有不少成牌同花、顺子与两对。',
+      rangeAdvantage:
+        '手里的口袋 AA 不带牌面同花花色的 A 阻挡牌，面对已成牌的同花、顺子和两对时，实战更接近偏脆的抓诈唬牌。',
+      blockerNote:
+        '两张 A 既不减少对手同花组合，也不挡 K9s／98s 顺子；先过牌能保护没位置的过牌范围，避免被对手加注陷入被动。',
+      coreRule: '在单花色且高度相连的翻牌面上，不含同花阻挡牌的超对优先过牌控池。',
     },
   },
   'pf-srp-utg-bb-turn-overcard': {
-    title: '转牌发高张干净牌后的大尺度转牌继续下注',
+    neutralTitle: '转牌决策：UTG 面对 BB 过牌（转牌发出高张 K）',
+    title: '转牌发高张 K 偏向 UTG 范围，加大转牌继续下注尺度',
+    numbersBreakdown:
+      '底池 9.5bb，有效筹码 95.5bb（SPR 10.1）。转牌 K 极度利于 UTG，用 7.1bb（75%）或 11.9bb（125% 超池）向大盲位的 Tx、6x 和听牌收取高额价值。',
     takeaways: {
-      boardTexture: '转牌的高张 K 明显偏向枪口位（UTG）的范围，同时翻牌面上的同花听牌仍未成型。',
-      rangeAdvantage: 'UTG 拥有 KK、AK、KQ、KT 等强 K 成牌，而大盲位（BB）翻牌跟注范围主要集中在 Tx 和 6x 等抓诈唬牌。',
-      blockerNote: '顶对顶踢脚在转牌倾向于两极化并加大尺度，向对手的 Tx、6x 以及卡顺听牌收取更高的跟注代价。',
-      coreRule: '当转牌高张明显有利于翻前加注者范围时，适合放大转牌继续下注的尺度（75%–125% 底池）。',
+      boardTexture: '转牌高张 K 明显偏向枪口位（UTG）范围，同时翻牌面上的同花听牌仍未成型。',
+      rangeAdvantage:
+        'UTG 握有 KK、AK、KQ、KT 等强 K 组合，大盲位（BB）翻牌跟注范围大多停留在 Tx、6x 和未成牌的听牌上。',
+      blockerNote:
+        '顶对顶踢脚在转牌适合两极化并放大尺度，直接向对手的 Tx、6x 和未成听牌榨取价值。',
+      coreRule: '当转牌高张明显偏向翻前加注者范围时，适合放大转牌继续下注的尺度（75%–125% 底池）。',
     },
   },
   'pf-srp-bb-co-turn-call-fd': {
-    title: 'BB 持组合听牌在转牌跟注 75% 底池下注',
+    neutralTitle: '转牌决策：BB 面对 CO 75% 底池下注（组合听牌）',
+    title: 'BB 持 15 张补牌组合听牌，按底池赔率在转牌跟注',
+    numbersBreakdown:
+      '下注前底池 11.0bb，CO 下注 8.3bb（75% 底池），跟注后总底池 27.6bb。跟注盈亏平衡需 8.3 ÷ 27.6 = 30.1%（按 19.3bb 跟注前底池精确算为 29.8%）；你手握 15 张补牌，河牌直接击中概率就有 15 ÷ 46 = 32.6%。',
     takeaways: {
-      boardTexture: '转牌发出 6 后，我方形成两头顺加同花组合听牌（15 张有效补牌，河牌击中概率约 34%）。',
-      rangeAdvantage: 'CO 的 75% 转牌继续下注偏两极化（强 Kx+ 价值与诈唬）；按底池赔率计算，跟注盈亏平衡仅需 29.9% 权益。',
-      blockerNote: '仅按直接底池赔率看已支持跟注，而且河牌击中非同花顺子时还具有可观的隐含赔率。',
-      coreRule: '转牌面对下注考虑是否弃掉听牌前，先把补牌权益与隐含赔率同底池赔率所需最低权益逐一对照。',
+      boardTexture: '转牌发出 6 后，我方组成两头顺加同花组合听牌（15 张干净补牌，河牌单街击中概率约 32.6%）。',
+      rangeAdvantage:
+        'CO 的 75% 转牌继续下注偏两极化（强 Kx+ 价值下注配诈唬）；仅按底池赔率（29.8%），你的直接补牌胜率就已经过线。',
+      blockerNote:
+        '直接赔率已经足够支持跟注，而且河牌击中非同花顺子时还有可观的隐含赔率（成牌后还能从对手价值牌多赢筹码）。',
+      coreRule: '转牌拿听牌面对下注时，先把“补牌 ÷ 46”算出的直接成牌率，和底池赔率门槛摆在一起对比。',
     },
   },
   'pf-3bp-btn-bb-turn-checkback': {
-    title: '3-Bet 底池转牌有位置用中等成牌在后位过牌',
+    neutralTitle: '转牌决策：3-Bet 底池 BTN 有位置面对 BB 过牌（口袋 JJ）',
+    title: '3-Bet 底池转牌有位置用中等成牌在后位过牌控池',
+    numbersBreakdown:
+      '底池 34.5bb，有效筹码 83.0bb（SPR 2.4）。口袋 JJ 很难在 2.4 SPR 下连打两条街价值，转牌在后位过牌能把底池控制在舒适大小。',
     takeaways: {
-      boardTexture: '大盲位（BB）翻牌持续下注后，转牌发出无关低张白板并选择过牌。',
-      rangeAdvantage: '口袋 JJ 位于按钮位（BTN）范围中段——领先对手的空气牌、TT 与 99，但落后于 Qx 以及慢打的 AA／KK。',
-      blockerNote: '此时下注容易打跑我们领先的弱牌，同时在面对慢打 Qx 或过牌加注陷阱时把底池做大。',
-      coreRule: '有位置持有中等摊牌价值的成牌时，转牌常倾向于在后位过牌控池，留待河牌抓诈唬或视情况打薄价值下注。',
+      boardTexture: '大盲位（BB）翻牌持续下注后，转牌发出低张白板并转入过牌。',
+      rangeAdvantage:
+        '口袋 JJ 处在按钮位（BTN）范围中段：领先对手的空气牌、TT 与 99，但落后于 Qx 以及慢打的 AA／KK。',
+      blockerNote:
+        '转牌继续下注会把落后于我们的弱牌打弃，却让更强的 Qx 轻松跟注甚至设下过牌加注陷阱。',
+      coreRule: '有位置拿着中等摊牌价值的成牌时，转牌常选择在后位过牌控池，留到河牌抓诈唬或打薄价值下注。',
     },
   },
   'pf-srp-btn-bb-river-thin-value': {
-    title: '河牌白板上有位置做薄价值下注',
+    neutralTitle: '河牌决策：BTN 有位置面对 BB 过牌（J 高白板河牌）',
+    title: '河牌白板上有位置用强顶对做 50% 底池薄价值下注',
+    numbersBreakdown:
+      '底池 22.5bb，有效筹码 89.0bb。河牌白板让翻牌/转牌听牌全部落空，下注 11.3bb（50% 底池）能让对手大量较弱的 Jx 和 8x 跟注买单。',
     takeaways: {
-      boardTexture: '河牌发出干净低张白板，牌面听牌全部落空，大盲位（BB）范围中保留了大量较弱的 Jx 和 8x。',
-      rangeAdvantage: 'BTN 范围未封顶，仍保留暗三条与超对；AJ 顶对顶踢脚明显领先大盲位（BB）大部分抓诈唬牌。',
-      blockerNote: '河牌在后位过牌会损失不少期望值，50% 底池的中等尺度更适合针对较弱的 Jx 和 8x 做薄价值下注。',
-      coreRule: '当对手行动线偏封顶且听牌落空时，适合用强顶对在河牌寻找薄价值下注机会。',
+      boardTexture: '河牌发出干净低张白板，牌面听牌全部落空，大盲位（BB）范围里留着不少偏弱的 Jx 和 8x。',
+      rangeAdvantage:
+        'BTN 范围未封顶，仍保留暗三条与超对；AJ 顶对顶踢脚明显领先大盲位（BB）绝大多数抓诈唬牌。',
+      blockerNote:
+        '对手过牌范围偏弱，河牌在后位过牌会白白错过价值；50% 底池（11.3bb）既能让弱 Jx／8x 跟注，又不会把自己孤立在更强牌面前。',
+      coreRule: '当对手行动线显露封顶且河牌未成听牌时，强顶对适合用中等尺度做薄价值下注。',
     },
   },
   'pf-srp-bb-btn-river-bluffcatch-blockers': {
-    title: '河牌持坚果同花阻挡牌抓诈唬',
+    neutralTitle: '河牌决策：BB 面对 BTN 71% 底池下注（同花成型河牌）',
+    title: '河牌持坚果同花阻挡牌做抓诈唬跟注',
+    numbersBreakdown:
+      '下注前底池 29.5bb，BTN 下注 21.0bb（71% 底池），跟注后总底池 71.5bb。跟注盈亏平衡需要 21.0 ÷ 71.5 = 29.4% 胜率；你手里的坚果花色 A 挡掉了对手最多的坚果同花价值组合。',
     takeaways: {
-      boardTexture: '翻牌同花听牌在河牌成花，按钮位（BTN）打出两极化的 70% 底池下注。',
-      rangeAdvantage: '跟注盈亏平衡需要 29.2% 权益；大盲位（BB）应优先用带关键阻挡牌的顶端抓诈唬牌防守。',
-      blockerNote: '手中持有成花花色的 A 阻挡牌，能有效减少对手最高频的坚果同花价值组合，同时不阻挡对手错失的顺子诈唬听牌。',
-      coreRule: '河牌抓诈唬时，优先选择能阻挡对手强价值组合、且不阻挡对手错失听牌诈唬的手牌。',
+      boardTexture: '翻牌同花听牌在河牌成花，按钮位（BTN）打出两极化的 71% 底池下注。',
+      rangeAdvantage:
+        '底池赔率要求 29.4% 胜率；大盲位（BB）面对同花河牌必须挑出带关键阻挡牌的抓诈唬牌来防守。',
+      blockerNote:
+        '手中的牌面花色 A 阻挡了对手最高频的坚果同花价值牌，同时不阻挡对手错失的顺子诈唬听牌，是教科书级的抓诈唬跟注候选。',
+      coreRule: '河牌抓诈唬时，优先选“能挡住对手最强价值牌、且不挡对手错失听牌”的组合。',
     },
   },
   'pf-srp-co-bb-river-bluff-blockers': {
-    title: '河牌借助顺子阻挡牌做两极化诈唬',
+    neutralTitle: '河牌决策：CO 有位置面对 BB 过牌（J-T-4-8-2 河牌）',
+    title: '河牌用错失听牌的 K9s 借顺子阻挡牌做两极化诈唬',
+    numbersBreakdown:
+      '底池 24.5bb，有效筹码 88.0bb。你手里只有 K 高牌（0 摊牌价值）。下注 18.4bb（75% 底池）时，盈亏平衡弃牌率 α = 18.4 ÷ (24.5 + 18.4) = 42.9%——只要大盲位弃掉超过 43% 的范围，诈唬就有利可图。',
     takeaways: {
-      boardTexture: 'Q-T-9 牌面上的卡顺与高张听牌在河牌落空，KJ 已没有摊牌价值。',
-      rangeAdvantage: 'CO 范围可以合理代表 KJ／J8 顺子、QQ、TT 及 QT 两对，而大盲位（BB）大多封顶在单对 Qx／Tx。',
-      blockerNote: '持有 K 和 J 阻挡了大盲位（BB）最强的坚果顺子跟注组合（KJ、J8），同时不阻挡对手可能弃牌的错失听牌与弱对子。',
-      coreRule: '挑选河牌诈唬组合时，优先考虑没有摊牌价值且能阻挡对手强跟注范围的手牌。',
+      boardTexture:
+        '翻牌卡顺、转牌两头顺在 2♦ 河牌彻底落空，K9s 现在只有 K 高牌，靠过牌几乎赢不了摊牌。',
+      rangeAdvantage:
+        'CO 在这条行动线上可以合理代表 Q9 顺子、97 顺子、暗三条（JJ／TT／88）与超对，而大盲位（BB）在河牌过牌后多集中在单对 Jx／Tx。',
+      blockerNote:
+        '手里的 9 直接阻挡了大盲位（BB）最硬的顺子跟注牌（Q9、97），同时不阻挡对手翻牌／转牌跟注后落空的同花听牌（这些牌在河牌必然弃牌）。',
+      coreRule: '选河牌诈唬牌看三条：几乎没摊牌价值、手里有阻挡对手强跟注牌的阻挡牌，且不挡对手会弃牌的错失听牌。',
     },
   },
   'pf-3bp-bb-btn-river-fold-overbet': {
-    title: '面对河牌两极化超池全下纪律弃牌',
+    neutralTitle: '河牌决策：3-Bet 底池 BB 面对 BTN 110% 超池全下',
+    title: '面对河牌 110% 超池全下，无阻挡牌中对纪律弃牌',
+    numbersBreakdown:
+      '下注前底池 62.5bb，BTN 全下 69.0bb（110% 超池），跟注后总底池 200.5bb。跟注盈亏平衡需要 69.0 ÷ 200.5 = 34.4% 胜率，而最小防守频率（MDF）已降到 62.5 ÷ 131.5 = 47.5%，你可以安心放弃边缘抓诈唬牌。',
     takeaways: {
-      boardTexture: '非常不利的河牌——成花花色的高张 A 既让同花成型，也提升了对手翻牌跟注的 Ax 浮牌。',
-      rangeAdvantage: 'BTN 转牌下注接河牌全下，范围高度两极化，集中在同花、AK、A8 以及暗三条。',
-      blockerNote: '口袋 TT 不带同花阻挡牌，难以击败对手的价值下注组合，反而阻挡了对手错失的 JT／T9 诈唬牌。',
-      coreRule: '面对河牌超池全下，尽量不要用“既不阻挡价值牌、又阻挡对手诈唬”的边缘抓诈唬牌跟注。',
+      boardTexture:
+        '河牌发出成花花色的高张 A，既让同花成型，也让对手此前跟注的 Ax 全部反超成为顶对。',
+      rangeAdvantage:
+        'BTN 在 3-Bet 底池转牌下注接河牌 110% 超池全下，范围高度两极化，价值端集中在同花、AK、A8 与暗三条。',
+      blockerNote:
+        '口袋 TT 既输给对手所有价值牌，又不带任何同花阻挡牌；面对高门槛赔率（34.4%），在没有关键阻挡牌时应纪律弃牌。',
+      coreRule: '面对河牌超池全下，先算清高昂的底池赔率——没阻挡对手核心价值牌的边缘对子果断弃牌。',
+    },
+  },
+  'pf-srp-bb-sb-river-size-small': {
+    neutralTitle: '河牌对比题（A）：BB 面对 SB 33% 小下注（6.6bb）',
+    title: '面对 33% 河牌小下注，底池赔率仅需 19.9%——顶对轻松跟注',
+    numbersBreakdown:
+      '下注前底池 20.0bb，SB 河牌只下注 6.6bb（33% 底池），跟注后总底池 33.2bb。跟注盈亏平衡只需 6.6 ÷ 33.2 = 19.9% 胜率，而最小防守频率（MDF，防止被任意牌诈唬盈利的最低防守比例）高达 20.0 ÷ 26.6 = 75.2%。',
+    takeaways: {
+      boardTexture:
+        'Q♦ 8♠ 5♣ 2♥ 3♦ 是非常干燥的 Q 高牌面，没有成同花，只有 64／76 等零星顺子组合。',
+      rangeAdvantage:
+        '小盲位（SB）连打三条街但河牌缩到 33% 小尺度，既可能用较弱 Qx／8x 打薄价值，也可能混入少量错失高张诈唬。',
+      blockerNote:
+        'Q♥ T♣ 是带不错踢脚的顶对，既不挡对手错失的 76／97／KJ 诈唬，面对 19.9% 的低赔率门槛完全够格轻松跟注。',
+      coreRule: '下注尺度直接决定你的价格：面对 33% 小下注只需赢不到五分之一，顶对基本是必跟抓诈唬牌。',
+    },
+  },
+  'pf-srp-bb-sb-river-size-overbet': {
+    neutralTitle: '河牌对比题（B）：BB 面对 SB 125% 超池下注（25.0bb）',
+    title: '同一手牌改面对 125% 超池下注，赔率飙升到 35.7%——转而弃牌',
+    numbersBreakdown:
+      '底牌、公共牌和 20.0bb 底池完全没变，但 SB 河牌下注从 6.6bb 跳到 25.0bb（125% 超池），跟注后总底池 70.0bb。所需胜率从 19.9% 飙升到 25.0 ÷ 70.0 = 35.7%，MDF 也从 75.2% 骤降到 20.0 ÷ 45.0 = 44.4%。',
+    takeaways: {
+      boardTexture:
+        '同样是干燥的 Q♦ 8♠ 5♣ 2♥ 3♦，牌面本身没变，但对手在河牌的 125% 超池下注彻底改变了对手范围结构。',
+      rangeAdvantage:
+        '125% 超池下注在河牌是强两极化尺度——价值端集中在两对以上、暗三条、KK／AA 与 AQ／KQ，较弱的 Qx 不会用这么大尺度价值下注。',
+      blockerNote:
+        '此时你只需防守 44.4% 的范围，应把跟注名额留给更好的顶对（AQ、KQ、QJ）、两对和暗三条；QTo 踢脚偏弱，面对 35.7% 赔率门槛应果断弃牌。',
+      coreRule: '同一手牌、同一张牌面，只要对手下注尺度从 33% 变成 125%，你的所需胜率和防守比例就会翻天覆地——看牌先看尺度和底池赔率。',
     },
   },
 };
@@ -246,7 +340,9 @@ export function localizePostflopSpot(
   if (!zh) return spot;
   return {
     ...spot,
+    neutralTitle: zh.neutralTitle,
     title: zh.title,
+    numbersBreakdown: zh.numbersBreakdown,
     actionLog: spot.actionLog.map((line) => localizePostflopLogLine(locale, line)),
     takeaways: zh.takeaways,
   };
@@ -327,7 +423,7 @@ const HAND_READING_ZH: Record<string, HandReadingZhCopy> = {
       },
       {
         street: '转牌 2♠',
-        detail: 'CO 过牌，BTN 转牌继续下注 14.5bb（55% 底池）。',
+        detail: 'CO 过牌，BTN 转牌继续下注 14.5bb（53% 底池）。',
         narrowingHint: '在白板转牌上，BTN 通常会用中等对子（JJ／TT）在后位过牌控池，转而用强 Qx+、超对、暗三条以及方块同花／顺子听牌继续施压。',
       },
     ],
@@ -672,6 +768,28 @@ export function formatWinnerSummary(
   fallbackSummary: string | null = null
 ): string {
   if (spec) {
+    const contestedPots = spec.potBreakdowns?.filter((p) => !p.isUncalledReturn) ?? [];
+    if (spec.type === 'showdown' && contestedPots.length > 1) {
+      const parts = contestedPots.map((pot, idx) => {
+        const names = pot.winners
+          .map((w) => `${formatSeatDisplayName(locale, w.name, w.isHero)} (${w.position})`)
+          .join(locale === 'zh-CN' ? '、' : ' & ');
+        if (locale === 'en') {
+          const potLabel = idx === 0 ? 'Main pot' : `Side pot ${idx}`;
+          const hand = pot.handLabel ?? '';
+          return pot.isSplit
+            ? `${potLabel} (${pot.amountBb}bb): ${names} split with ${hand}`
+            : `${potLabel} (${pot.amountBb}bb): ${names} wins with ${hand}`;
+        }
+        const potLabelZh = idx === 0 ? '主池' : `边池 ${idx}`;
+        const handZh = pot.handLabel ? translateHandRank(locale, pot.handLabel) : '';
+        return pot.isSplit
+          ? `${potLabelZh}（${pot.amountBb}bb）：${names} 凭「${handZh}」平分`
+          : `${potLabelZh}（${pot.amountBb}bb）：${names} 凭「${handZh}」赢下`;
+      });
+      return locale === 'zh-CN' ? `${parts.join('；')}。` : `${parts.join(' · ')}.`;
+    }
+
     const names = spec.winners
       .map((w) => `${formatSeatDisplayName(locale, w.name, w.isHero)} (${w.position})`)
       .join(locale === 'zh-CN' ? '、' : ' & ');
@@ -759,10 +877,10 @@ export function formatArenaAuditNote(
       base = '对抗当前下注具备明显权益优势，支持加注获取价值并保护手牌权益。';
       break;
     case 'pot_odds_call':
-      base = `当前牌力已高于底池赔率门槛（${spec.reqEqPct ?? 0}%），跟注属于正 EV 选择。`;
+      base = `面对 ${spec.toCallBb ?? 0}bb 下注至少需要 ${spec.reqEqPct ?? 0}% 胜率，这手牌的牌力足以继续跟注。`;
       break;
     case 'pot_odds_fold':
-      base = `面对 ${spec.toCallBb ?? 0}bb 下注至少需要 ${spec.reqEqPct ?? 0}% 权益，此时弃牌有助于控制损失。`;
+      base = `面对 ${spec.toCallBb ?? 0}bb 下注至少需要 ${spec.reqEqPct ?? 0}% 胜率，此时弃牌有助于控制损失。`;
       break;
   }
 
@@ -900,6 +1018,8 @@ const TITLE_EN_TO_ZH: Record<string, string> = {
   'River Bluff-Catch with Nut Flush Blocker': POSTFLOP_ZH['pf-srp-bb-btn-river-bluffcatch-blockers'].title,
   'River Polarized Bluff with Straight Blocker': POSTFLOP_ZH['pf-srp-co-bb-river-bluff-blockers'].title,
   'Disciplined River Fold vs Polarized Overbet': POSTFLOP_ZH['pf-3bp-bb-btn-river-fold-overbet'].title,
+  'River Call vs 33% Bet on Dry Q-High Board': POSTFLOP_ZH['pf-srp-bb-sb-river-size-small'].title,
+  'River Fold vs 125% Overbet on Dry Q-High Board': POSTFLOP_ZH['pf-srp-bb-sb-river-size-overbet'].title,
   // Hand reading
   'Capped UTG Range After Turn Check-Back': HAND_READING_ZH['hr-utg-cbet-check-turn'].title,
   'BB Polarized Check-Raise Range on 8♠ 7♠ 3♦': HAND_READING_ZH['hr-bb-xr-low-board'].title,

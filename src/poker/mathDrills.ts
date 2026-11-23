@@ -56,8 +56,8 @@ export interface MathDrillResult {
   userAnswer: number;
   exactAnswer: number;
   delta: number;
+  errorUnit: 'pp' | 'bb';
   grade: DecisionGrade;
-  evLossBb: number;
   accuracyScore: number;
 }
 
@@ -312,29 +312,24 @@ export function evaluateMathAnswer(
   userAnswer: number
 ): MathDrillResult {
   const delta = Number(Math.abs(userAnswer - q.exactAnswer).toFixed(2));
+  const errorUnit: 'pp' | 'bb' = q.unit === '%' ? 'pp' : 'bb';
   let grade: DecisionGrade;
-  let evLossBb: number;
   let accuracyScore: number;
 
   if (delta <= q.toleranceExact) {
     grade = 'Optimal';
-    evLossBb = 0;
     accuracyScore = 100;
   } else if (delta <= q.toleranceClose) {
     grade = 'Acceptable';
-    evLossBb = 0.08;
     accuracyScore = 88;
   } else if (delta <= q.toleranceClose * 2) {
     grade = 'Inaccuracy';
-    evLossBb = 0.25;
     accuracyScore = 68;
   } else if (delta <= q.toleranceClose * 3.5) {
     grade = 'Mistake';
-    evLossBb = 0.55;
     accuracyScore = 40;
   } else {
     grade = 'Blunder';
-    evLossBb = 1.05;
     accuracyScore = 12;
   }
 
@@ -342,8 +337,8 @@ export function evaluateMathAnswer(
     userAnswer,
     exactAnswer: q.exactAnswer,
     delta,
+    errorUnit,
     grade,
-    evLossBb,
     accuracyScore,
   };
 }

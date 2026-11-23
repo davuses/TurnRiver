@@ -31,6 +31,7 @@ interface PokerTableOvalProps {
   sprLabel?: string;
   fourColor: boolean;
   compact?: boolean;
+  mobileTight?: boolean;
 }
 
 // 6-max clockwise positions anchored around oval:
@@ -52,61 +53,113 @@ export function PokerTableOval({
   sprLabel,
   fourColor,
   compact = false,
+  mobileTight = false,
 }: PokerTableOvalProps) {
   const { locale, t } = useLocale();
   const heroSeat = seats.find((s) => s.isHero) ?? seats[0];
   const otherSeats = seats.filter((s) => s.seatIndex !== heroSeat?.seatIndex);
 
   return (
-    <div className="w-full select-none space-y-3">
+    <div className={`w-full select-none ${mobileTight ? 'space-y-1.5 sm:space-y-3' : 'space-y-3'}`}>
       {/* Compact Mobile Opponent Bar (prevents seat/pot overlap on <640px screens) */}
-      <div className="grid grid-cols-3 gap-1.5 sm:hidden">
-        {otherSeats
-          .filter((s) => !s.folded || s.isVillain || s.actionText)
-          .slice(0, 6)
-          .map((seat) => (
-            <div
-              key={`mob-${seat.seatIndex}`}
-              className={`px-2 py-1.5 rounded-lg border text-[11px] ${
-                seat.isWinner
-                  ? 'bg-[#132620] border-emerald-400'
-                  : seat.isActiveTurn
-                    ? 'bg-[#192334] border-amber-400'
-                    : seat.isVillain
-                      ? 'bg-[#151D2B] border-sky-400/60'
-                      : 'bg-[#111722] border-[#263245]'
-              } ${seat.folded ? 'opacity-50' : ''}`}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span className="font-semibold text-slate-200 truncate">{seat.label}</span>
-                <span className="font-mono font-bold text-emerald-400">{seat.position}</span>
-              </div>
-              <div className="font-mono tabular-nums text-[10px] text-slate-400 mt-0.5">
-                {seat.stackBb.toFixed(1)}bb
-              </div>
-              {(seat.actionSpec || seat.actionText) && (
-                <div className="font-mono tabular-nums text-[10px] text-amber-300 truncate mt-0.5">
-                  {formatArenaAction(locale, seat.actionSpec, seat.actionText)}
+      {mobileTight ? (
+        <div className="flex flex-wrap items-center gap-1.5 sm:hidden">
+          {otherSeats
+            .filter((s) => !s.folded || s.isVillain || s.actionText)
+            .slice(0, 4)
+            .map((seat) => (
+              <div
+                key={`mob-${seat.seatIndex}`}
+                className={`flex-1 min-w-[140px] px-2.5 py-1 rounded-lg border text-[11px] flex items-center justify-between gap-2 ${
+                  seat.isVillain
+                    ? 'bg-[#151D2B] border-sky-400/60'
+                    : 'bg-[#111722] border-[#263245]'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="font-semibold text-slate-200 truncate">{seat.label}</span>
+                  <span className="font-mono font-bold text-emerald-400">{seat.position}</span>
+                  <span className="font-mono tabular-nums text-[10px] text-slate-400">
+                    {seat.stackBb.toFixed(1)}bb
+                  </span>
                 </div>
-              )}
-            </div>
-          ))}
-      </div>
+                {(seat.actionSpec || seat.actionText) && (
+                  <span className="font-mono tabular-nums text-[10px] text-amber-300 shrink-0">
+                    {formatArenaAction(locale, seat.actionSpec, seat.actionText)}
+                  </span>
+                )}
+              </div>
+            ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-1.5 sm:hidden">
+          {otherSeats
+            .filter((s) => !s.folded || s.isVillain || s.actionText)
+            .slice(0, 6)
+            .map((seat) => (
+              <div
+                key={`mob-${seat.seatIndex}`}
+                className={`px-2 py-1.5 rounded-lg border text-[11px] ${
+                  seat.isWinner
+                    ? 'bg-[#132620] border-emerald-400'
+                    : seat.isActiveTurn
+                      ? 'bg-[#192334] border-amber-400'
+                      : seat.isVillain
+                        ? 'bg-[#151D2B] border-sky-400/60'
+                        : 'bg-[#111722] border-[#263245]'
+                } ${seat.folded ? 'opacity-50' : ''}`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-semibold text-slate-200 truncate">{seat.label}</span>
+                  <span className="font-mono font-bold text-emerald-400">{seat.position}</span>
+                </div>
+                <div className="font-mono tabular-nums text-[10px] text-slate-400 mt-0.5">
+                  {seat.stackBb.toFixed(1)}bb
+                </div>
+                {(seat.actionSpec || seat.actionText) && (
+                  <div className="font-mono tabular-nums text-[10px] text-amber-300 truncate mt-0.5">
+                    {formatArenaAction(locale, seat.actionSpec, seat.actionText)}
+                  </div>
+                )}
+              </div>
+            ))}
+        </div>
+      )}
 
       <div
         className={`relative w-full ${
-          compact ? 'min-h-[290px] sm:min-h-[420px]' : 'min-h-[310px] sm:min-h-[480px]'
-        } flex items-center justify-center px-1 py-3 sm:px-6 sm:py-6`}
+          mobileTight
+            ? 'min-h-[222px] sm:min-h-[372px] px-0.5 pt-1 pb-4 sm:px-5 sm:py-5'
+            : compact
+              ? 'min-h-[290px] sm:min-h-[420px] px-1 py-3 sm:px-6 sm:py-6'
+              : 'min-h-[310px] sm:min-h-[480px] px-1 py-3 sm:px-6 sm:py-6'
+        } flex items-center justify-center`}
       >
         {/* Outer matte graphite rail */}
-        <div className="felt-rail relative w-full max-w-[780px] sm:aspect-[16/10] min-h-[260px] sm:min-h-[340px] rounded-[72px] sm:rounded-[160px] p-2.5 sm:p-4 flex items-center justify-center border border-[#2A3648]">
+        <div
+          className={`felt-rail relative w-full max-w-[780px] sm:aspect-[16/10] ${
+            mobileTight
+              ? 'min-h-[208px] sm:min-h-[310px] rounded-[46px]'
+              : 'min-h-[260px] sm:min-h-[340px] rounded-[72px]'
+          } sm:rounded-[160px] p-2 sm:p-4 flex items-center justify-center border border-[#2A3648]`}
+        >
           {/* Inner high-stakes dark emerald felt */}
-          <div className="felt-surface relative w-full h-full min-h-[236px] sm:min-h-0 rounded-[62px] sm:rounded-[145px] border border-emerald-400/15 flex flex-col items-center justify-center px-4 sm:px-6 pb-8 sm:pb-0">
+          <div
+            className={`felt-surface relative w-full h-full ${
+              mobileTight
+                ? 'min-h-[190px] sm:min-h-0 rounded-[38px] justify-start pt-3 pb-16 sm:justify-center sm:pt-0 sm:pb-0'
+                : 'min-h-[236px] sm:min-h-0 rounded-[62px] justify-center pb-8 sm:pb-0'
+            } sm:rounded-[145px] border border-emerald-400/15 flex flex-col items-center px-2.5 sm:px-6`}
+          >
             {/* Subtle inner betting ring line */}
-            <div className="pointer-events-none absolute inset-4 sm:inset-9 rounded-[52px] sm:rounded-[115px] border border-white/[0.06]" />
+            <div className="pointer-events-none absolute inset-3 sm:inset-9 rounded-[32px] sm:rounded-[115px] border border-white/[0.06]" />
 
             {/* Center Pot & Board Stage */}
-            <div className="relative z-10 flex flex-col items-center gap-2.5 sm:gap-3 -mt-2">
+            <div
+              className={`relative z-10 flex flex-col items-center ${
+                mobileTight ? 'gap-1.5 sm:gap-3 mt-0 sm:-mt-2' : 'gap-2 sm:gap-3 -mt-2'
+              }`}
+            >
               <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-xs font-mono tabular-nums text-emerald-200/80">
                 {streetLabel && <span>{streetLabel}</span>}
                 {streetLabel && <span aria-hidden="true" className="text-white/25">·</span>}
@@ -233,7 +286,11 @@ export function PokerTableOval({
 
           {/* Hero Seat (Bottom Center) */}
           {heroSeat && (
-            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-end gap-2.5 sm:gap-3">
+            <div
+              className={`absolute ${
+                mobileTight ? '-bottom-3 sm:-bottom-5' : '-bottom-5'
+              } left-1/2 -translate-x-1/2 z-30 flex items-end gap-2 sm:gap-3`}
+            >
               {heroSeat.cards && (
                 <div className="flex items-center gap-1.5">
                   <PlayingCard

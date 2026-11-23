@@ -220,6 +220,7 @@ export function PlayTableView({
     if (shouldLog) {
       loggedHandRef.current = table.handNumber;
       for (const audit of table.heroAudits) {
+        const hasBet = Boolean(audit.noteSpec?.toCallBb && audit.noteSpec.toCallBb > 0);
         onRecordAttempt({
           module: 'table',
           position: audit.position,
@@ -227,7 +228,8 @@ export function PlayTableView({
           spotLabel: `${table.config.tableSize}-Max Hand #${table.handNumber} (${audit.street})`,
           chosenAction: audit.chosenAction,
           bestAction: audit.recommendedAction,
-          evLossBb: audit.evLossBb,
+          metricValue: hasBet ? audit.noteSpec?.reqEqPct : undefined,
+          metricKind: hasBet ? 'pot_odds_pct' : undefined,
           grade: audit.grade,
           accuracyScore: audit.accuracyScore,
         });
@@ -613,7 +615,15 @@ export function PlayTableView({
                         {translateStreetLabel(locale, audit.street)} ·{' '}
                         {formatArenaAction(locale, audit.chosenActionSpec, audit.chosenAction)}
                       </span>
-                      <GradeBadge grade={audit.grade} evLossBb={audit.evLossBb} size="sm" />
+                      <GradeBadge
+                        grade={audit.grade}
+                        metricLabel={
+                          audit.noteSpec?.toCallBb && audit.noteSpec.toCallBb > 0
+                            ? `${t('metric.potOddsPrefix')} ${audit.noteSpec.reqEqPct}%`
+                            : undefined
+                        }
+                        size="sm"
+                      />
                     </div>
                     <p className="text-slate-400 leading-relaxed">
                       {formatArenaAuditNote(locale, audit.noteSpec, audit.note)}

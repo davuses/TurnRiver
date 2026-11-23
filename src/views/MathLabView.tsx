@@ -74,7 +74,8 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
       spotLabel: `${question.categoryLabel} (${question.potBb}bb pot / ${question.betBb}bb bet)`,
       chosenAction: `${parsed}${question.unit}`,
       bestAction: `${evaluated.exactAnswer}${question.unit}`,
-      evLossBb: evaluated.evLossBb,
+      metricValue: evaluated.delta,
+      metricKind: evaluated.errorUnit === 'pp' ? 'error_pp' : 'error_bb',
       grade: evaluated.grade,
       accuracyScore: evaluated.accuracyScore,
     });
@@ -365,7 +366,13 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
             <div className="space-y-5">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-base font-semibold text-white">{t('math.verificationTitle')}</h2>
-                <GradeBadge grade={result.grade} evLossBb={result.evLossBb} size="sm" />
+                <GradeBadge
+                  grade={result.grade}
+                  metricLabel={`±${result.delta} ${
+                    result.errorUnit === 'pp' ? t('metric.ppUnit') : t('metric.bbUnit')
+                  }`}
+                  size="sm"
+                />
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-xs font-mono tabular-nums">
@@ -386,8 +393,8 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
                 <div className="bg-[#0B1017] border border-[#1E293B] rounded-lg p-3">
                   <span className="text-slate-400 block font-sans">{t('math.errorDelta')}</span>
                   <span className="text-base font-semibold text-amber-300">
-                    ±{result.delta}
-                    {question.unit}
+                    ±{result.delta}{' '}
+                    {result.errorUnit === 'pp' ? t('metric.ppUnit') : t('metric.bbUnit')}
                   </span>
                 </div>
               </div>

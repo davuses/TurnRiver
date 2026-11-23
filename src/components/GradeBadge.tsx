@@ -6,10 +6,11 @@ import { translateGrade } from '../i18n/translations';
 interface GradeBadgeProps {
   grade: DecisionGrade;
   evLossBb?: number;
+  metricLabel?: string;
   size?: 'sm' | 'md';
 }
 
-export function GradeBadge({ grade, evLossBb, size = 'md' }: GradeBadgeProps) {
+export function GradeBadge({ grade, evLossBb, metricLabel, size = 'md' }: GradeBadgeProps) {
   const { locale } = useLocale();
   const config: Record<
     DecisionGrade,
@@ -48,11 +49,13 @@ export function GradeBadge({ grade, evLossBb, size = 'md' }: GradeBadgeProps) {
     >
       <Icon className={iconClass} aria-hidden="true" />
       <span>{translateGrade(locale, grade)}</span>
-      {typeof evLossBb === 'number' && (
+      {metricLabel ? (
+        <span className="font-mono tabular-nums text-slate-400 ml-1">{metricLabel}</span>
+      ) : typeof evLossBb === 'number' ? (
         <span className="font-mono tabular-nums text-slate-400 ml-1">
           {evLossBb === 0 ? '0.00 bb' : `-${evLossBb.toFixed(2)} bb`}
         </span>
-      )}
+      ) : null}
     </span>
   );
 }

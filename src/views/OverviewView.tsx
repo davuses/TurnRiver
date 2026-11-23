@@ -86,10 +86,10 @@ export function OverviewView({ summary, attempts, onNavigate }: OverviewViewProp
     summary.totalDecisions > 0
       ? Math.round((summary.optimalCount / summary.totalDecisions) * 100)
       : 0;
-  const avgEvLoss =
+  const avgScore =
     summary.totalDecisions > 0
-      ? (summary.totalEvLossBb / summary.totalDecisions).toFixed(2)
-      : '0.00';
+      ? Math.round((summary.totalAccuracyScore ?? 0) / summary.totalDecisions)
+      : 0;
 
   const countByModule = (mod: DrillModule | 'studio3d') =>
     mod === 'studio3d' ? null : attempts.filter((a) => a.module === mod).length;
@@ -195,7 +195,7 @@ export function OverviewView({ summary, attempts, onNavigate }: OverviewViewProp
         <div className="bg-[#111722] p-5 space-y-1">
           <p className="text-xs text-slate-400">{t('overview.kpiEvLoss')}</p>
           <p className="text-2xl font-mono tabular-nums font-semibold text-amber-300">
-            -{avgEvLoss} bb
+            {summary.totalDecisions > 0 ? `${avgScore} / 100` : '—'}
           </p>
           <p className="text-xs text-slate-400">{t('overview.kpiEvLossSub')}</p>
         </div>

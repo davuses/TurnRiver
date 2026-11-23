@@ -1,5 +1,5 @@
 import type { Card, DecisionGrade, Position, Street } from './types';
-import { accuracyFromGrade, gradeFromEvLoss } from './types';
+import { accuracyFromGrade } from './types';
 import {
   canonicalHandKey,
   createDeck,
@@ -117,12 +117,34 @@ export interface AuditNoteSpec {
   villainArchetype?: BotArchetype;
 }
 
+export interface PotSlice {
+  potIndex: number; // 0 = Main pot, 1+ = Side pot
+  amountBb: number;
+  eligibleSeatIndices: number[];
+}
+
+export interface PotPayoutBreakdown {
+  potIndex: number;
+  amountBb: number;
+  winners: {
+    seatIndex: number;
+    name: string;
+    isHero: boolean;
+    position: Position;
+    payoutBb: number;
+  }[];
+  handLabel?: string;
+  isSplit: boolean;
+  isUncalledReturn?: boolean;
+}
+
 export interface WinnerSummarySpec {
   type: 'uncontested' | 'showdown';
   winners: { name: string; isHero: boolean; position: Position }[];
   potBb: number;
   handLabel?: string;
   isSplit: boolean;
+  potBreakdowns?: PotPayoutBreakdown[];
 }
 
 export interface TableSeat {
@@ -155,7 +177,7 @@ export interface HeroStreetAudit {
   recommendedAction: string;
   chosenActionSpec?: TableActionSpec;
   recommendedActionSpec?: TableActionSpec;
-  evLossBb: number;
+  evLossBb?: number;
   grade: DecisionGrade;
   accuracyScore: number;
   note: string;
@@ -770,7 +792,7 @@ function evaluateHeroActionForAudit(
     } else if (strength >= reqEq - 0.04 + villainCallAdjust) {
       recommended = 'call';
       reason = 'pot_odds_call';
-      note = `Hand strength clears required pot odds (${reqEqPct}%)—calling is +EV.`;
+      note = `Facing ${toCall}bb requires ${reqEqPct}% equity; this holding is strong enough to continue with a call.`;
     } else {
       recommended = 'fold';
       reason = 'pot_odds_fold';
@@ -785,16 +807,20 @@ function evaluateHeroActionForAudit(
     exploitTipKind = tip.kind;
   }
 
-  let evLossBb = 0;
+  let grade: DecisionGrade = 'Optimal';
   if (actionType !== recommended) {
-    if (actionType === 'fold' && strength > reqEq + 0.22) {
-      evLossBb = roundBb(Math.min(3.5, state.potBb * 0.25));
+    if (actionType === 'fold' && strength > reqEq + 0.34) {
+      grade = 'Blunder';
+    } else if (actionType === 'fold' && strength > reqEq + 0.2) {
+      grade = 'Mistake';
+    } else if (actionType === 'call' && strength < reqEq - 0.24) {
+      grade = 'Blunder';
     } else if (actionType === 'call' && strength < reqEq - 0.14) {
-      evLossBb = roundBb(Math.min(4.0, toCall * 0.45));
+      grade = 'Mistake';
     } else if (actionType === 'raise' && strength < 0.35 && toCall > 2) {
-      evLossBb = roundBb(Math.min(3.0, (raiseToBb ?? toCall) * 0.2));
+      grade = 'Mistake';
     } else {
-      evLossBb = 0.12;
+      grade = 'Inaccuracy';
     }
   }
 
@@ -837,7 +863,6 @@ function evaluateHeroActionForAudit(
           ? { kind: 'call', amountBb: toCall }
           : { kind: state.currentBetBb === 0 ? 'bet' : 'raise' };
 
-  const grade = gradeFromEvLoss(evLossBb, actionType === recommended ? 80 : 10);
   const villainArchetype = villain && villain.archetype !== 'Hero' ? villain.archetype : undefined;
   return {
     street,
@@ -846,9 +871,8 @@ function evaluateHeroActionForAudit(
     recommendedAction: recLabel,
     chosenActionSpec,
     recommendedActionSpec,
-    evLossBb,
     grade,
-    accuracyScore: accuracyFromGrade(grade, evLossBb),
+    accuracyScore: accuracyFromGrade(grade),
     note,
     noteSpec: {
       reason,
@@ -885,15 +909,77 @@ function nextSeatToAct(seats: TableSeat[], fromIndex: number): number | null {
   return null;
 }
 
-function resolveShowdown(state: PokerTableState): PokerTableState {
+/**
+ * Constructs main and side pots directly from each seat's actual totalInvestedBb.
+ * Folded players' dead money stays in the pot layers they contributed to, while only
+ * non-folded seats remain eligible to win each layer. Consecutive layers with identical
+ * eligible contenders are merged into a single pot.
+ */
+export function buildSidePots(seats: TableSeat[]): PotSlice[] {
+  const levels = Array.from(
+    new Set(seats.map((s) => roundBb(s.totalInvestedBb)).filter((v) => v > 0))
+  ).sort((a, b) => a - b);
+
+  if (levels.length === 0) return [];
+
+  const merged: { amountBb: number; eligibleSeatIndices: number[] }[] = [];
+  let prevLevel = 0;
+
+  for (const level of levels) {
+    const band = roundBb(level - prevLevel);
+    if (band <= 0) continue;
+
+    const contributors = seats.filter((s) => roundBb(s.totalInvestedBb) >= level);
+    const sliceAmount = roundBb(band * contributors.length);
+    const eligibleSeatIndices = contributors
+      .filter((s) => !s.folded)
+      .map((s) => s.seatIndex)
+      .sort((a, b) => a - b);
+
+    if (eligibleSeatIndices.length === 0) {
+      // Dead money above all remaining contenders folds back into the previous eligible slice
+      if (merged.length > 0) {
+        merged[merged.length - 1].amountBb = roundBb(
+          merged[merged.length - 1].amountBb + sliceAmount
+        );
+      } else {
+        const activeFallback = seats
+          .filter((s) => !s.folded)
+          .map((s) => s.seatIndex)
+          .sort((a, b) => a - b);
+        if (activeFallback.length > 0) {
+          merged.push({ amountBb: sliceAmount, eligibleSeatIndices: activeFallback });
+        }
+      }
+    } else {
+      const prev = merged[merged.length - 1];
+      const sameEligible =
+        prev &&
+        prev.eligibleSeatIndices.length === eligibleSeatIndices.length &&
+        prev.eligibleSeatIndices.every((idx, i) => idx === eligibleSeatIndices[i]);
+
+      if (sameEligible) {
+        prev.amountBb = roundBb(prev.amountBb + sliceAmount);
+      } else {
+        merged.push({ amountBb: sliceAmount, eligibleSeatIndices });
+      }
+    }
+
+    prevLevel = level;
+  }
+
+  return merged.map((slice, idx) => ({
+    potIndex: idx,
+    amountBb: roundBb(slice.amountBb),
+    eligibleSeatIndices: slice.eligibleSeatIndices,
+  }));
+}
+
+export function resolveShowdown(state: PokerTableState): PokerTableState {
   const contenders = activeSeats(state.seats);
   const seats = state.seats.map((s) => ({ ...s, stats: { ...s.stats } }));
   const deck = [...state.deck];
   const board = [...state.board];
-
-  while (board.length < 5 && deck.length > 0) {
-    board.push(deck.shift()!);
-  }
 
   if (contenders.length === 1) {
     const winner = seats[contenders[0].seatIndex];
@@ -917,31 +1003,144 @@ function resolveShowdown(state: PokerTableState): PokerTableState {
     };
   }
 
-  const evaluated = contenders.map((c) => ({
-    seatIndex: c.seatIndex,
-    eval: evaluateHand([...c.cards!, ...board]),
-  }));
-  const bestScore = Math.max(...evaluated.map((e) => e.eval.score));
-  const winners = evaluated.filter((e) => e.eval.score === bestScore);
-  const splitShare = roundBb(state.potBb / winners.length);
-  let distributed = 0;
+  while (board.length < 5 && deck.length > 0) {
+    board.push(deck.shift()!);
+  }
 
-  winners.forEach((w, i) => {
-    const share = i === winners.length - 1 ? roundBb(state.potBb - distributed) : splitShare;
-    distributed = roundBb(distributed + share);
-    seats[w.seatIndex].stackBb = roundBb(seats[w.seatIndex].stackBb + share);
-    seats[w.seatIndex].stats.handsWon += 1;
+  const evalBySeat = new Map<number, ReturnType<typeof evaluateHand>>();
+  for (const c of contenders) {
+    evalBySeat.set(c.seatIndex, evaluateHand([...c.cards!, ...board]));
+  }
+
+  let slices = buildSidePots(seats);
+  const totalFromSlices = roundBb(slices.reduce((sum, sl) => sum + sl.amountBb, 0));
+
+  if (slices.length === 0 && state.potBb > 0) {
+    slices = [
+      {
+        potIndex: 0,
+        amountBb: roundBb(state.potBb),
+        eligibleSeatIndices: contenders.map((c) => c.seatIndex).sort((a, b) => a - b),
+      },
+    ];
+  } else if (slices.length > 0 && Math.abs(totalFromSlices - state.potBb) >= 0.05) {
+    // Reconcile any floating-point rounding drift onto the main pot
+    slices[0].amountBb = roundBb(slices[0].amountBb + (state.potBb - totalFromSlices));
+  }
+
+  const potBreakdowns: PotPayoutBreakdown[] = [];
+  const contestedWinnerSet = new Set<number>();
+
+  for (const slice of slices) {
+    if (slice.amountBb <= 0 || slice.eligibleSeatIndices.length === 0) continue;
+
+    // Uncalled excess bet: return directly to the sole contributor without showdown
+    if (slice.eligibleSeatIndices.length === 1) {
+      const onlyIdx = slice.eligibleSeatIndices[0];
+      seats[onlyIdx].stackBb = roundBb(seats[onlyIdx].stackBb + slice.amountBb);
+      potBreakdowns.push({
+        potIndex: slice.potIndex,
+        amountBb: slice.amountBb,
+        winners: [
+          {
+            seatIndex: onlyIdx,
+            name: seats[onlyIdx].name,
+            isHero: seats[onlyIdx].isHero,
+            position: seats[onlyIdx].position,
+            payoutBb: slice.amountBb,
+          },
+        ],
+        isSplit: false,
+        isUncalledReturn: true,
+      });
+      continue;
+    }
+
+    const sliceEvaluated = slice.eligibleSeatIndices.map((seatIndex) => ({
+      seatIndex,
+      eval: evalBySeat.get(seatIndex)!,
+    }));
+    const bestScore = Math.max(...sliceEvaluated.map((e) => e.eval.score));
+    const sliceWinners = sliceEvaluated.filter((e) => e.eval.score === bestScore);
+    const splitShare = roundBb(slice.amountBb / sliceWinners.length);
+    let distributed = 0;
+
+    const winnerPayouts = sliceWinners.map((w, i) => {
+      const payoutBb =
+        i === sliceWinners.length - 1 ? roundBb(slice.amountBb - distributed) : splitShare;
+      distributed = roundBb(distributed + payoutBb);
+      seats[w.seatIndex].stackBb = roundBb(seats[w.seatIndex].stackBb + payoutBb);
+      contestedWinnerSet.add(w.seatIndex);
+      return {
+        seatIndex: w.seatIndex,
+        name: seats[w.seatIndex].name,
+        isHero: seats[w.seatIndex].isHero,
+        position: seats[w.seatIndex].position,
+        payoutBb,
+      };
+    });
+
+    potBreakdowns.push({
+      potIndex: slice.potIndex,
+      amountBb: slice.amountBb,
+      winners: winnerPayouts,
+      handLabel: sliceWinners[0].eval.label,
+      isSplit: sliceWinners.length > 1,
+    });
+  }
+
+  for (const seatIdx of contestedWinnerSet) {
+    seats[seatIdx].stats.handsWon += 1;
+  }
+
+  const contestedPots = potBreakdowns.filter((p) => !p.isUncalledReturn);
+  const winnerSeatIndices = Array.from(contestedWinnerSet);
+  const mainPot = contestedPots[0];
+
+  if (contestedPots.length <= 1 && mainPot) {
+    const winnerEntries = mainPot.winners.map((w) => ({
+      name: w.name,
+      isHero: w.isHero,
+      position: w.position,
+    }));
+    const winnerNames = winnerEntries.map((w) => `${w.name} (${w.position})`).join(' & ');
+
+    return {
+      ...state,
+      phase: 'SHOWDOWN',
+      actingSeatIndex: null,
+      board,
+      deck,
+      seats,
+      winnerSeatIndices,
+      winnerSummary: mainPot.isSplit
+        ? `${winnerNames} split ${mainPot.amountBb}bb with ${mainPot.handLabel}.`
+        : `${winnerNames} wins ${mainPot.amountBb}bb with ${mainPot.handLabel}.`,
+      winnerSpec: {
+        type: 'showdown',
+        winners: winnerEntries,
+        potBb: mainPot.amountBb,
+        handLabel: mainPot.handLabel,
+        isSplit: mainPot.isSplit,
+        potBreakdowns,
+      },
+    };
+  }
+
+  // Multi-pot showdown summary (Main pot + Side pot(s))
+  const parts = contestedPots.map((p, idx) => {
+    const label = idx === 0 ? 'Main pot' : `Side pot ${idx}`;
+    const names = p.winners.map((w) => `${w.name} (${w.position})`).join(' & ');
+    return p.isSplit
+      ? `${label} (${p.amountBb}bb): ${names} split with ${p.handLabel}`
+      : `${label} (${p.amountBb}bb): ${names} wins with ${p.handLabel}`;
   });
 
-  const isSplit = winners.length > 1;
-  const winnerEntries = winners.map((w) => ({
-    name: seats[w.seatIndex].name,
-    isHero: seats[w.seatIndex].isHero,
-    position: seats[w.seatIndex].position,
+  const allWinnerEntries = winnerSeatIndices.map((idx) => ({
+    name: seats[idx].name,
+    isHero: seats[idx].isHero,
+    position: seats[idx].position,
   }));
-  const winnerNames = winnerEntries
-    .map((w) => `${w.name} (${w.position})`)
-    .join(' & ');
 
   return {
     ...state,
@@ -950,16 +1149,15 @@ function resolveShowdown(state: PokerTableState): PokerTableState {
     board,
     deck,
     seats,
-    winnerSeatIndices: winners.map((w) => w.seatIndex),
-    winnerSummary: isSplit
-      ? `${winnerNames} split ${state.potBb}bb with ${winners[0].eval.label}.`
-      : `${winnerNames} wins ${state.potBb}bb with ${winners[0].eval.label}.`,
+    winnerSeatIndices,
+    winnerSummary: `${parts.join(' · ')}.`,
     winnerSpec: {
       type: 'showdown',
-      winners: winnerEntries,
+      winners: allWinnerEntries,
       potBb: state.potBb,
-      handLabel: winners[0].eval.label,
-      isSplit,
+      handLabel: mainPot?.handLabel,
+      isSplit: Boolean(mainPot?.isSplit),
+      potBreakdowns,
     },
   };
 }

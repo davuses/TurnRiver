@@ -94,7 +94,8 @@ export function HandReadingView({ prefs, onRecordAttempt }: HandReadingViewProps
       spotLabel: spot.title,
       chosenAction: `${evaluated.selectedCombos} combos (${evaluated.overlapPct}% overlap)`,
       bestAction: `${evaluated.targetCombos} solver combos`,
-      evLossBb: evaluated.evLossBb,
+      metricValue: evaluated.overlapPct,
+      metricKind: 'overlap_pct',
       grade: evaluated.grade,
       accuracyScore: evaluated.overlapPct,
     });
@@ -309,7 +310,11 @@ export function HandReadingView({ prefs, onRecordAttempt }: HandReadingViewProps
             <div className="border-t border-[#1F2A3A] pt-5 space-y-4">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-white">{t('reading.auditTitle')}</h3>
-                <GradeBadge grade={result.grade} evLossBb={result.evLossBb} size="sm" />
+                <GradeBadge
+                  grade={result.grade}
+                  metricLabel={`${result.overlapPct}${t('metric.overlapSuffix')}`}
+                  size="sm"
+                />
               </div>
 
               <div className="grid grid-cols-3 gap-2 font-mono tabular-nums text-xs">
