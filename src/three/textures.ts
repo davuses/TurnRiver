@@ -464,7 +464,7 @@ export function createCardFaceTexture(card: Card, fourColor: boolean): THREE.Can
   ctx.font = 'bold 100px Georgia, serif';
   ctx.fillText(glyph, 38, 152);
 
-  // Center emblem (ornate halo for Ace, regal crown chevron for J/Q/K, large crisp pip for numbers)
+  // Center emblem (ornate halo for Ace, regal crown chevron for J/Q/K, authentic casino pip grid for 2–10)
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   if (isAce) {
@@ -483,8 +483,34 @@ export function createCardFaceTexture(card: Card, fourColor: boolean): THREE.Can
     ctx.font = '235px Georgia, serif';
     ctx.fillText(glyph, w / 2, h / 2 + 24);
   } else {
-    ctx.font = '260px Georgia, serif';
-    ctx.fillText(glyph, w / 2, h / 2 + 12);
+    // Authentic casino pip layouts for 2–10 so number cards never look like single-pip Aces
+    const PIP_LAYOUTS: Record<string, Array<[number, number, boolean?]>> = {
+      '2': [[0.5, 0.24], [0.5, 0.76, true]],
+      '3': [[0.5, 0.22], [0.5, 0.5], [0.5, 0.78, true]],
+      '4': [[0.34, 0.24], [0.66, 0.24], [0.34, 0.76, true], [0.66, 0.76, true]],
+      '5': [[0.34, 0.24], [0.66, 0.24], [0.5, 0.5], [0.34, 0.76, true], [0.66, 0.76, true]],
+      '6': [[0.34, 0.22], [0.66, 0.22], [0.34, 0.5], [0.66, 0.5], [0.34, 0.78, true], [0.66, 0.78, true]],
+      '7': [[0.34, 0.22], [0.66, 0.22], [0.5, 0.36], [0.34, 0.5], [0.66, 0.5], [0.34, 0.78, true], [0.66, 0.78, true]],
+      '8': [[0.34, 0.22], [0.66, 0.22], [0.5, 0.36], [0.34, 0.5], [0.66, 0.5], [0.5, 0.64, true], [0.34, 0.78, true], [0.66, 0.78, true]],
+      '9': [[0.34, 0.2], [0.66, 0.2], [0.34, 0.4], [0.66, 0.4], [0.5, 0.5], [0.34, 0.6, true], [0.66, 0.6, true], [0.34, 0.8, true], [0.66, 0.8, true]],
+      'T': [[0.34, 0.19], [0.66, 0.19], [0.5, 0.31], [0.34, 0.41], [0.66, 0.41], [0.34, 0.59, true], [0.66, 0.59, true], [0.5, 0.69, true], [0.34, 0.81, true], [0.66, 0.81, true]],
+    };
+    const pips = PIP_LAYOUTS[card.rank] ?? [[0.5, 0.5]];
+    const pipFontSize = pips.length >= 9 ? 94 : pips.length >= 6 ? 104 : 118;
+    ctx.font = `${pipFontSize}px Georgia, serif`;
+    for (const [nx, ny, inverted] of pips) {
+      const px = nx * w;
+      const py = ny * h;
+      if (inverted) {
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(Math.PI);
+        ctx.fillText(glyph, 0, 0);
+        ctx.restore();
+      } else {
+        ctx.fillText(glyph, px, py);
+      }
+    }
   }
 
   // Bottom-right inverted corner index

@@ -7,7 +7,7 @@ import {
   QUICK_RANGE_PRESETS,
   type HandReadingResult,
 } from '../poker/handReadingSpots';
-import { comboCountForHand } from '../poker/evaluator';
+import { expandHandCombos } from '../poker/evaluator';
 import { PlayingCard } from '../components/PlayingCard';
 import { RangeMatrix13x13 } from '../components/RangeMatrix13x13';
 import { GradeBadge } from '../components/GradeBadge';
@@ -36,10 +36,10 @@ export function HandReadingView({ prefs, onRecordAttempt }: HandReadingViewProps
   const selectedComboCount = useMemo(() => {
     let total = 0;
     selectedHands.forEach((h) => {
-      total += comboCountForHand(h);
+      total += expandHandCombos(h, spot.board).length;
     });
     return total;
-  }, [selectedHands]);
+  }, [selectedHands, spot.board]);
 
   const selectSpot = (idx: number) => {
     setSpotIndex(idx);

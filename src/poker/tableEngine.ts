@@ -208,6 +208,8 @@ export interface PokerTableState {
   potBb: number;
   currentBetBb: number;
   minRaiseBb: number;
+  lastFullRaiseIncrementBb?: number;
+  callOnlySeatIndices?: number[];
   board: Card[];
   deck: Card[];
   seats: TableSeat[];
@@ -425,6 +427,8 @@ export function createTableFromConfig(config: ArenaConfig): PokerTableState {
     potBb: 0,
     currentBetBb: 0,
     minRaiseBb: 1,
+    lastFullRaiseIncrementBb: 1.0,
+    callOnlySeatIndices: [],
     board: [],
     deck: [],
     seats,
@@ -539,6 +543,8 @@ export function startNewHand(
     potBb: roundBb(sbAmt + bbAmt),
     currentBetBb: 1.0,
     minRaiseBb: 2.0,
+    lastFullRaiseIncrementBb: 1.0,
+    callOnlySeatIndices: [],
     board: [],
     deck: deck.slice(cursor),
     seats,
@@ -568,11 +574,77 @@ export function startNewHand(
 }
 
 export function rebuyHeroTo100(state: PokerTableState): PokerTableState {
+  if (state.phase !== 'IDLE' && state.phase !== 'SHOWDOWN') {
+    return state;
+  }
   const target = state.config.startingStackBb;
   return {
     ...state,
-    seats: state.seats.map((s) => (s.isHero ? { ...s, stackBb: target } : s)),
+    seats: state.seats.map((s) => {
+      if (!s.isHero) return s;
+      const nextStack = Math.max(s.stackBb, target);
+      return {
+        ...s,
+        stackBb: nextStack,
+        allIn: nextStack > 0 ? false : s.allIn,
+      };
+    }),
   };
+}
+
+/**
+ * Cleanly finishes any in-progress hand (folding Hero if still active and stepping remaining bots
+ * to showdown so pot chips are never vaporized) before dealing the next hand.
+ */
+export function settleAndStartNewHand(
+  state: PokerTableState,
+  rng: () => number = Math.random
+): PokerTableState {
+  if (state.phase === 'IDLE' || state.phase === 'SHOWDOWN') {
+    return startNewHand(state, rng);
+  }
+
+  let curr = state;
+  const hero = curr.seats[0];
+  if (hero && !hero.folded) {
+    if (curr.actingSeatIndex === 0) {
+      curr = applyPlayerAction(curr, 0, 'fold');
+    } else {
+      const seats = curr.seats.map((s) =>
+        s.seatIndex === 0
+          ? {
+              ...s,
+              folded: true,
+              actedThisStreet: true,
+              lastActionText: 'Fold',
+              lastActionSpec: { kind: 'fold' } as TableActionSpec,
+            }
+          : s
+      );
+      curr = { ...curr, seats };
+      if (activeSeats(seats).length <= 1) {
+        curr = resolveShowdown(curr);
+      }
+    }
+  }
+
+  let guard = 0;
+  while (curr.phase !== 'SHOWDOWN' && curr.actingSeatIndex !== null && guard < 120) {
+    const actorIdx = curr.actingSeatIndex;
+    if (actorIdx === 0) {
+      curr = applyPlayerAction(curr, 0, 'fold');
+    } else {
+      const move = chooseBotAction(curr, actorIdx, rng);
+      curr = applyPlayerAction(curr, actorIdx, move.type, move.raiseToBb);
+    }
+    guard++;
+  }
+
+  if (curr.phase !== 'SHOWDOWN') {
+    curr = resolveShowdown(curr);
+  }
+
+  return startNewHand(curr, rng);
 }
 
 export interface LegalActions {
@@ -595,7 +667,9 @@ export function getLegalActions(state: PokerTableState, seatIndex: number): Lega
   const minTotalBetBb = isBet
     ? Math.min(maxTotalBetBb, 1.0)
     : Math.min(maxTotalBetBb, roundBb(Math.max(state.currentBetBb + 1.0, state.minRaiseBb)));
-  const canBetOrRaise = seat.stackBb > callAmountBb && maxTotalBetBb > state.currentBetBb;
+  const isCallOnly = (state.callOnlySeatIndices ?? []).includes(seatIndex);
+  const canBetOrRaise =
+    !isCallOnly && seat.stackBb > callAmountBb && maxTotalBetBb > state.currentBetBb;
 
   return {
     canFold: toCall > 0,
@@ -784,6 +858,22 @@ function evaluateHeroActionForAudit(
       reason = 'pot_control';
       note = `Medium strength hand plays cleanly as a check for pot control on ${street}.`;
     }
+  } else if (street === 'preflop' && state.preflopRaiseCount === 0) {
+    // Unopened preflop pot: prefer RFI raise with playable range instead of open-limping
+    const openThreshold = 0.56 - preflopPositionShift(seat.position, state.config.tableSize);
+    if (strength >= openThreshold) {
+      recommended = 'raise';
+      reason = 'strong_value';
+      note = `Strong holding (${handKey}) opens for value and initiative from ${seat.position}.`;
+    } else if (strength >= openThreshold - 0.10 && seat.position === 'SB') {
+      recommended = 'call';
+      reason = 'pot_odds_call';
+      note = `Facing ${toCall}bb from SB requires ${reqEqPct}% equity; completing is playable.`;
+    } else {
+      recommended = 'fold';
+      reason = 'pot_odds_fold';
+      note = `Marginal off-range hand (${handKey}) prefers folding from ${seat.position} rather than open-limping.`;
+    }
   } else {
     if (strength >= Math.max(0.72, reqEq + 0.32)) {
       recommended = 'raise';
@@ -807,6 +897,8 @@ function evaluateHeroActionForAudit(
     exploitTipKind = tip.kind;
   }
 
+  const chosenAmount = roundBb(raiseToBb ?? state.minRaiseBb);
+
   let grade: DecisionGrade = 'Optimal';
   if (actionType !== recommended) {
     if (actionType === 'fold' && strength > reqEq + 0.34) {
@@ -817,14 +909,14 @@ function evaluateHeroActionForAudit(
       grade = 'Blunder';
     } else if (actionType === 'call' && strength < reqEq - 0.14) {
       grade = 'Mistake';
-    } else if (actionType === 'raise' && strength < 0.35 && toCall > 2) {
+    } else if (actionType === 'raise' && strength < 0.32 && (chosenAmount >= 15 || toCall > 2)) {
+      grade = 'Blunder';
+    } else if (actionType === 'raise' && strength < 0.42 && (chosenAmount >= 8 || toCall > 2)) {
       grade = 'Mistake';
     } else {
       grade = 'Inaccuracy';
     }
   }
-
-  const chosenAmount = roundBb(raiseToBb ?? state.minRaiseBb);
   const chosenLabel =
     actionType === 'fold'
       ? 'Fold'
@@ -1201,6 +1293,8 @@ function advanceStreet(state: PokerTableState): PokerTableState {
       seats,
       currentBetBb: 0,
       minRaiseBb: 1.0,
+      lastFullRaiseIncrementBb: 1.0,
+      callOnlySeatIndices: [],
     });
   }
 
@@ -1215,6 +1309,8 @@ function advanceStreet(state: PokerTableState): PokerTableState {
     seats,
     currentBetBb: 0,
     minRaiseBb: 1.0,
+    lastFullRaiseIncrementBb: 1.0,
+    callOnlySeatIndices: [],
     actingSeatIndex: firstActor,
   };
 }
@@ -1248,10 +1344,20 @@ export function applyPlayerAction(
   let potBb = state.potBb;
   let currentBetBb = state.currentBetBb;
   let minRaiseBb = state.minRaiseBb;
+  let lastFullRaiseIncrementBb = state.lastFullRaiseIncrementBb ?? 1.0;
+  let callOnlySeatIndices = [...(state.callOnlySeatIndices ?? [])];
   let preflopAggressorSeatIndex = state.preflopAggressorSeatIndex;
   let preflopRaiseCount = state.preflopRaiseCount;
   let actionText = '';
   let actionSpec: TableActionSpec = { kind: 'check' };
+
+  // Enforce call-only restriction after an incomplete short all-in
+  const effectiveActionType: 'fold' | 'check' | 'call' | 'raise' =
+    actionType === 'raise' && !legal.canBetOrRaise
+      ? legal.canCheck
+        ? 'check'
+        : 'call'
+      : actionType;
 
   // Record 3-bet opportunity when facing a single open raise preflop
   if (currentStreet === 'preflop' && preflopRaiseCount === 1 && !actor.hadThreeBetOppThisHand) {
@@ -1259,20 +1365,20 @@ export function applyPlayerAction(
     actor.stats.threeBetOpps += 1;
   }
 
-  if (actionType === 'fold') {
+  if (effectiveActionType === 'fold') {
     actor.folded = true;
     actor.actedThisStreet = true;
     actor.lastActionText = 'Fold';
     actor.lastActionSpec = { kind: 'fold' };
     actionText = 'Folds';
     actionSpec = { kind: 'fold' };
-  } else if (actionType === 'check') {
+  } else if (effectiveActionType === 'check') {
     actor.actedThisStreet = true;
     actor.lastActionText = 'Check';
     actor.lastActionSpec = { kind: 'check' };
     actionText = 'Checks';
     actionSpec = { kind: 'check' };
-  } else if (actionType === 'call') {
+  } else if (effectiveActionType === 'call') {
     const putIn = legal.callAmountBb;
     actor.stackBb = roundBb(actor.stackBb - putIn);
     actor.streetBetBb = roundBb(actor.streetBetBb + putIn);
@@ -1305,13 +1411,21 @@ export function applyPlayerAction(
     );
     const putIn = roundBb(clampedTarget - actor.streetBetBb);
     const raiseDelta = roundBb(clampedTarget - currentBetBb);
+    const wasBet = currentBetBb === 0;
+    const isFullRaise = wasBet ? clampedTarget >= 1.0 : raiseDelta >= lastFullRaiseIncrementBb;
 
     actor.stackBb = roundBb(actor.stackBb - putIn);
     actor.streetBetBb = clampedTarget;
     actor.totalInvestedBb = roundBb(actor.totalInvestedBb + putIn);
     potBb = roundBb(potBb + putIn);
-    minRaiseBb = roundBb(clampedTarget + Math.max(1.0, raiseDelta));
-    const wasBet = currentBetBb === 0;
+    if (isFullRaise) {
+      lastFullRaiseIncrementBb = Math.max(1.0, raiseDelta);
+      minRaiseBb = roundBb(clampedTarget + lastFullRaiseIncrementBb);
+      callOnlySeatIndices = [];
+    } else {
+      // Short all-in: preserve lastFullRaiseIncrementBb and do NOT reopen betting for prior actors
+      minRaiseBb = roundBb(clampedTarget + lastFullRaiseIncrementBb);
+    }
     currentBetBb = clampedTarget;
 
     if (currentStreet === 'preflop') {
@@ -1337,6 +1451,9 @@ export function applyPlayerAction(
       if (s.seatIndex === seatIndex) {
         s.actedThisStreet = true;
       } else if (!s.folded && !s.allIn) {
+        if (!isFullRaise && s.actedThisStreet && !callOnlySeatIndices.includes(s.seatIndex)) {
+          callOnlySeatIndices.push(s.seatIndex);
+        }
         s.actedThisStreet = false;
       }
     }
@@ -1379,6 +1496,8 @@ export function applyPlayerAction(
     potBb,
     currentBetBb,
     minRaiseBb,
+    lastFullRaiseIncrementBb,
+    callOnlySeatIndices,
     preflopAggressorSeatIndex,
     preflopRaiseCount,
     seats,

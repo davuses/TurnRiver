@@ -5,6 +5,7 @@ import {
   createSuitRotation,
   evaluateHand,
   HandCategory,
+  handStrengthScore,
   parseCards,
   rotateCards,
 } from './evaluator';
@@ -40,8 +41,11 @@ import {
   createInitialTable,
   createTableFromConfig,
   DEFAULT_ARENA_CONFIG,
+  getLegalActions,
+  rebuyHeroTo100,
   resolveShowdown,
   roundBb,
+  settleAndStartNewHand,
   startNewHand,
   type ArenaSize,
   type PokerTableState,
@@ -511,5 +515,170 @@ test('Multi-Bot Arena pool presets, Hero position lock, and live HUD stats track
     const hud = computeHudDisplay(s.stats);
     assert.ok(hud.vpipPct >= 0 && hud.vpipPct <= 100);
     assert.ok(hud.pfrPct <= hud.vpipPct, 'PFR% can never exceed VPIP%');
+  }
+});
+
+test('settleAndStartNewHand and guarded rebuyHeroTo100 preserve exact chip conservation', () => {
+  let seed = 101;
+  const rng = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+  let table = startNewHand(createTableFromConfig(DEFAULT_ARENA_CONFIG), rng);
+  const expectedTotal = 600;
+
+  // Mid-hand Top-Up must be a no-op (never mint chips mid-hand)
+  const actor = table.actingSeatIndex!;
+  if (actor === 0) {
+    table = applyPlayerAction(table, 0, 'raise', 3.0);
+  }
+  const afterMidHandRebuy = rebuyHeroTo100(table);
+  const totalAfterMidHandRebuy = roundBb(
+    afterMidHandRebuy.seats.reduce((s, x) => s + x.stackBb, 0) + afterMidHandRebuy.potBb
+  );
+  assert.equal(totalAfterMidHandRebuy, expectedTotal, 'Mid-hand rebuy must not create chips');
+
+  // Fast-Fold / Skip mid-hand settles pot before dealing next hand
+  const nextHand = settleAndStartNewHand(table, rng);
+  const totalAfterFastFold = roundBb(
+    nextHand.seats.reduce((s, x) => s + x.stackBb, 0) + nextHand.potBb
+  );
+  assert.equal(totalAfterFastFold, expectedTotal, 'settleAndStartNewHand must conserve all 600bb');
+
+  // At SHOWDOWN, rebuyHeroTo100 must never wipe a stack > startingStackBb back down to 100bb
+  const winningShowdown: PokerTableState = {
+    ...nextHand,
+    phase: 'SHOWDOWN',
+    potBb: 0,
+    seats: nextHand.seats.map((s) => (s.isHero ? { ...s, stackBb: 145.5 } : s)),
+  };
+  const afterShowdownRebuy = rebuyHeroTo100(winningShowdown);
+  assert.equal(afterShowdownRebuy.seats[0].stackBb, 145.5, 'Top-Up must never reduce a >100bb stack');
+});
+
+test('Short all-in does not reopen betting for already-acted players or shrink minRaiseBb', () => {
+  let table = startNewHand(
+    createTableFromConfig({
+      ...DEFAULT_ARENA_CONFIG,
+      tableSize: 3,
+      botArchetypes: ['Balanced Reg', 'Tight-Aggressive'],
+    })
+  );
+  // Set deterministic stacks on flop: Seat 0 (100bb), Seat 1 (100bb), Seat 2 (12bb short stack)
+  table = {
+    ...table,
+    phase: 'FLOP',
+    board: parseCards(['Ks', '8d', '3c']),
+    potBb: 6.0,
+    currentBetBb: 0,
+    minRaiseBb: 1.0,
+    lastFullRaiseIncrementBb: 1.0,
+    callOnlySeatIndices: [],
+    actingSeatIndex: 0,
+    seats: table.seats.map((s, idx) => ({
+      ...s,
+      stackBb: idx === 2 ? 12.0 : 100.0,
+      streetBetBb: 0,
+      totalInvestedBb: 2.0,
+      folded: false,
+      allIn: false,
+      actedThisStreet: false,
+    })),
+  };
+
+  // Seat 0 bets 10bb (full bet -> minRaiseBb = 20bb, lastFullRaiseIncrementBb = 10bb)
+  table = applyPlayerAction(table, 0, 'raise', 10.0);
+  assert.equal(table.minRaiseBb, 20.0);
+  // Seat 1 calls 10bb
+  table = applyPlayerAction(table, 1, 'call');
+  // Seat 2 jams short to 12bb (raiseDelta = 2bb < 10bb full raise increment)
+  table = applyPlayerAction(table, 2, 'raise', 12.0);
+  assert.equal(table.currentBetBb, 12.0);
+  assert.equal(table.minRaiseBb, 22.0, 'Short all-in must not shrink minRaiseBb');
+  assert.equal(table.actingSeatIndex, 0);
+
+  const seat0Legal = getLegalActions(table, 0);
+  assert.equal(seat0Legal.canBetOrRaise, false, 'Prior actor must be call/fold only after short all-in');
+  assert.equal(seat0Legal.callAmountBb, 2.0);
+});
+
+test('Calibrated handStrengthScore ranks AKs properly, avoids paired-board inflation, and audits preflop accurately', () => {
+  const aks = handStrengthScore(parseCards(['As', 'Ks']) as [any, any], []);
+  const sixes = handStrengthScore(parseCards(['6h', '6d']) as [any, any], []);
+  assert.ok(aks > sixes, `Expected AKs (${aks}) > 66 (${sixes})`);
+
+  // Playing a paired board with weak hole cards must not score as Top Pair / Two Pair
+  const weakOnPaired = handStrengthScore(
+    parseCards(['3c', '4s']) as [any, any],
+    parseCards(['As', 'Ah', 'Qd', '8c', '2s'])
+  );
+  const weakOnDoublePaired = handStrengthScore(
+    parseCards(['4s', '3d']) as [any, any],
+    parseCards(['Ks', 'Kh', '8d', '8c', '2s'])
+  );
+  assert.ok(weakOnPaired < 0.3, `Expected weak hand on paired board < 0.30, got ${weakOnPaired}`);
+  assert.ok(weakOnDoublePaired < 0.3, `Expected weak hand on double-paired board < 0.30, got ${weakOnDoublePaired}`);
+
+  // BTN Hero opening AKs to 2.5bb should be Optimal; 72o 100bb preflop shove should be Blunder
+  const base = startNewHand(
+    createTableFromConfig({ ...DEFAULT_ARENA_CONFIG, heroPositionLock: 'BTN' })
+  );
+  const heroBtnBase: PokerTableState = {
+    ...base,
+    phase: 'PREFLOP',
+    preflopRaiseCount: 0,
+    potBb: 1.5,
+    currentBetBb: 1.0,
+    minRaiseBb: 2.0,
+    actingSeatIndex: 0,
+    seats: base.seats.map((s) =>
+      s.isHero
+        ? { ...s, position: 'BTN', streetBetBb: 0, stackBb: 100, folded: false, allIn: false }
+        : s
+    ),
+  };
+
+  const aksOpen = applyPlayerAction(
+    {
+      ...heroBtnBase,
+      seats: heroBtnBase.seats.map((s) =>
+        s.isHero ? { ...s, cards: parseCards(['As', 'Ks']) as [any, any] } : s
+      ),
+    },
+    0,
+    'raise',
+    2.5
+  );
+  assert.equal(aksOpen.heroAudits[0]?.grade, 'Optimal', 'BTN AKs 2.5bb open must be Optimal');
+
+  const trashShove = applyPlayerAction(
+    {
+      ...heroBtnBase,
+      seats: heroBtnBase.seats.map((s) =>
+        s.isHero ? { ...s, cards: parseCards(['7c', '2d']) as [any, any] } : s
+      ),
+    },
+    0,
+    'raise',
+    100
+  );
+  assert.equal(trashShove.heroAudits[0]?.grade, 'Blunder', '72o 100bb preflop open-shove must be Blunder');
+});
+
+test('Hand Reading counts exact board-blocked combos across all 4 spots', () => {
+  const expectedBlocked: Record<string, number> = {
+    'hr-utg-cbet-check-turn': 90,
+    'hr-bb-xr-low-board': 58,
+    'hr-btn-3bet-double-barrel': 67,
+    'hr-co-river-overbet': 63,
+  };
+  for (const spot of HAND_READING_SPOTS) {
+    const res = evaluateHandReading(spot, new Set(spot.targetHands));
+    assert.equal(
+      res.targetCombos,
+      expectedBlocked[spot.id],
+      `Expected blocked target combos for ${spot.id} to be ${expectedBlocked[spot.id]}, got ${res.targetCombos}`
+    );
+    assert.equal(res.overlapPct, 100);
   }
 });

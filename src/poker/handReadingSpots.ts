@@ -1,5 +1,5 @@
 import type { Card, DecisionGrade, Position } from './types';
-import { comboCountForHand, parseCards, RANKS } from './evaluator';
+import { expandHandCombos, parseCards, RANKS } from './evaluator';
 
 export interface HandReadingSpot {
   id: string;
@@ -271,7 +271,7 @@ export function evaluateHandReading(
   const extraHands: string[] = [];
 
   for (const h of targetSet) {
-    const c = comboCountForHand(h);
+    const c = expandHandCombos(h, spot.board).length;
     targetCombos += c;
     if (selectedHands.has(h)) {
       matchedCombos += c;
@@ -281,7 +281,7 @@ export function evaluateHandReading(
   }
 
   for (const h of selectedHands) {
-    const c = comboCountForHand(h);
+    const c = expandHandCombos(h, spot.board).length;
     selectedCombos += c;
     if (!targetSet.has(h)) {
       extraHands.push(h);

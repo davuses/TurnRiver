@@ -26,6 +26,7 @@ import {
   getLegalActions,
   rebuyHeroTo100,
   roundBb,
+  settleAndStartNewHand,
   startNewHand,
   type ArenaConfig,
   type PokerTableState,
@@ -179,10 +180,10 @@ export function PlayTableView({
       return;
     }
 
-    // Fast-fold: if Hero folded and fastFold is enabled, immediately deal the next hand
+    // Fast-fold: if Hero folded and fastFold is enabled, settle the hand cleanly before dealing next
     if (heroSeat.folded && table.config.fastFold) {
       const fastTimer = window.setTimeout(() => {
-        setTable((curr) => startNewHand(curr));
+        setTable((curr) => settleAndStartNewHand(curr));
       }, 360);
       return () => window.clearTimeout(fastTimer);
     }
@@ -256,7 +257,7 @@ export function PlayTableView({
 
   const handleDealNext = () => {
     playPokerSound('card', prefs.soundEnabled);
-    setTable((curr) => startNewHand(curr));
+    setTable((curr) => settleAndStartNewHand(curr));
   };
 
   const handleRebuy = () => {
@@ -898,7 +899,8 @@ export function PlayTableView({
               type="button"
               onClick={handleRebuy}
               disabled={
-                heroSeat.stackBb >= table.config.startingStackBb && table.phase !== 'SHOWDOWN'
+                !((table.phase === 'IDLE' || table.phase === 'SHOWDOWN') &&
+                  heroSeat.stackBb < table.config.startingStackBb)
               }
               className="px-2.5 py-2 text-xs font-medium rounded-lg bg-[#111722] border border-[#222D3D] text-slate-200 hover:bg-[#192334] disabled:opacity-45 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
