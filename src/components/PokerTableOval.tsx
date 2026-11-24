@@ -40,7 +40,7 @@ const SEAT_COORDS: string[] = [
   'bottom-2 left-1/2 -translate-x-1/2',
   'bottom-[24%] left-3 sm:left-5',
   'top-[16%] left-3 sm:left-5',
-  'top-2 left-1/2 -translate-x-1/2',
+  '-top-4 left-1/2 -translate-x-1/2',
   'top-[16%] right-3 sm:right-5',
   'bottom-[24%] right-3 sm:right-5',
 ];
@@ -157,7 +157,7 @@ export function PokerTableOval({
             {/* Center Pot & Board Stage */}
             <div
               className={`relative z-10 flex flex-col items-center ${
-                mobileTight ? 'gap-1.5 sm:gap-3 mt-0 sm:-mt-2' : 'gap-2 sm:gap-3 -mt-2'
+                mobileTight ? 'gap-1.5 sm:gap-2.5 mt-0 sm:mt-8' : 'gap-2 sm:gap-3 mt-0 sm:mt-8'
               }`}
             >
               <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-xs font-mono tabular-nums text-emerald-200/80">

@@ -95,13 +95,26 @@ export function PreflopLabView({
   // Keyboard shortcuts: F = Fold, C = Call, R = Raise, Enter = Next Spot
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
       const k = e.key.toLowerCase();
       if (!evaluation) {
         if (k === 'f') handleAction('fold');
         if (k === 'c' && spot.template.scenarioType !== 'RFI') handleAction('call');
         if (k === 'r') handleAction('raise');
-      } else if (e.key === 'Enter') {
+      } else if (
+        e.key === 'Enter' &&
+        !(target instanceof HTMLButtonElement) &&
+        !(target instanceof HTMLAnchorElement)
+      ) {
         dealNext();
       }
     };

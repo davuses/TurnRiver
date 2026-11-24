@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Bot, EyeOff, SlidersHorizontal, X, Zap } from 'lucide-react';
 import {
   ALL_BOT_ARCHETYPES,
@@ -35,6 +35,10 @@ const STACK_OPTIONS: (50 | 100 | 200)[] = [50, 100, 200];
 export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupModalProps) {
   const { locale, t } = useLocale();
   const [draft, setDraft] = useState<ArenaConfig>(config);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (open) {
@@ -47,12 +51,50 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
 
   useEffect(() => {
     if (!open) return;
+    const prevActive =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    closeBtnRef.current?.focus();
+
+    const FOCUSABLE_SELECTOR =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const container = dialogRef.current;
+      if (!container) return;
+      const focusables = Array.from(
+        container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+      ).filter((el) => el.offsetParent !== null);
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey) {
+        if (!active || active === first || !container.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (!active || active === last || !container.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
+
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      prevActive?.focus();
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -98,7 +140,10 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
       aria-modal="true"
       aria-labelledby="arena-setup-title"
     >
-      <div className="w-full max-w-2xl max-h-[90vh] flex flex-col bg-[#0F1520] border border-[#263449] rounded-xl overflow-hidden shadow-2xl">
+      <div
+        ref={dialogRef}
+        className="w-full max-w-2xl max-h-[90vh] flex flex-col bg-[#0F1520] border border-[#263449] rounded-xl overflow-hidden shadow-2xl"
+      >
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-[#1E2A3C] bg-[#0B1018]">
           <div className="flex items-start gap-2.5">
@@ -111,6 +156,7 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
             </div>
           </div>
           <button
+            ref={closeBtnRef}
             type="button"
             onClick={onClose}
             aria-label={t('arena.cancel')}
@@ -123,10 +169,10 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
         {/* Scrollable Config Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {/* Pool Presets */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
+          <fieldset className="border-0 p-0 m-0">
+            <legend className="text-xs font-semibold text-slate-300 uppercase tracking-wide mb-2">
               {t('arena.poolPreset')}
-            </label>
+            </legend>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {PRESET_LIST.map((preset) => {
                 const active = draft.poolPreset === preset;
@@ -135,6 +181,7 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
                     key={preset}
                     type="button"
                     data-testid={`preset-${preset}`}
+                    aria-pressed={active}
                     onClick={() => handleSelectPreset(preset)}
                     className={`px-2.5 py-2 text-xs font-medium rounded-lg border text-center transition-colors cursor-pointer ${
                       active
@@ -147,14 +194,14 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
                 );
               })}
             </div>
-          </div>
+          </fieldset>
 
           {/* Table Size & Starting Stack */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
+            <fieldset className="border-0 p-0 m-0">
+              <legend className="text-xs font-semibold text-slate-300 uppercase tracking-wide mb-2">
                 {t('arena.tableSize')}
-              </label>
+              </legend>
               <div className="grid grid-cols-2 gap-1.5">
                 {TABLE_SIZES.map((sz) => {
                   const active = draft.tableSize === sz;
@@ -163,6 +210,7 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
                       key={sz}
                       type="button"
                       data-testid={`table-size-${sz}`}
+                      aria-pressed={active}
                       onClick={() => handleSelectSize(sz)}
                       className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
                         active
@@ -175,18 +223,19 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
                   );
                 })}
               </div>
-            </div>
+            </fieldset>
 
             <div className="space-y-3">
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
+              <fieldset className="border-0 p-0 m-0">
+                <legend className="text-xs font-semibold text-slate-300 uppercase tracking-wide mb-2">
                   {t('arena.startingStack')}
-                </label>
+                </legend>
                 <div className="grid grid-cols-3 gap-1.5">
                   {STACK_OPTIONS.map((st) => (
                     <button
                       key={st}
                       type="button"
+                      aria-pressed={draft.startingStackBb === st}
                       onClick={() => setDraft({ ...draft, startingStackBb: st })}
                       className={`px-2.5 py-2 text-xs font-mono tabular-nums rounded-lg border transition-colors cursor-pointer ${
                         draft.startingStackBb === st
@@ -198,7 +247,7 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
                     </button>
                   ))}
                 </div>
-              </div>
+              </fieldset>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">
@@ -297,6 +346,7 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
             <button
               type="button"
+              aria-pressed={draft.blindReadMode}
               onClick={() => setDraft({ ...draft, blindReadMode: !draft.blindReadMode })}
               className={`flex items-start gap-2.5 p-3 rounded-lg border text-left transition-colors cursor-pointer ${
                 draft.blindReadMode
@@ -320,6 +370,7 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
 
             <button
               type="button"
+              aria-pressed={draft.fastFold}
               onClick={() => setDraft({ ...draft, fastFold: !draft.fastFold })}
               className={`flex items-start gap-2.5 p-3 rounded-lg border text-left transition-colors cursor-pointer ${
                 draft.fastFold

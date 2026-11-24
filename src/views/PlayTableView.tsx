@@ -14,6 +14,7 @@ import {
   SlidersHorizontal,
   Volume2,
   VolumeX,
+  X,
   Zap,
 } from 'lucide-react';
 import type { DrillAttemptRecord, UserPreferences } from '../poker/types';
@@ -64,6 +65,23 @@ const ARCHETYPE_SHORT: Record<string, string> = {
   'Tight Nit': 'NIT',
   Maniac: 'MANIAC',
 };
+
+const ARCHETYPE_SHORT_ZH: Record<string, string> = {
+  'Balanced Reg': '均衡',
+  'Tight-Aggressive': '紧凶',
+  'Loose-Aggressive': '松凶',
+  'Calling Station': '跟注站',
+  'Tight Nit': '紧弱',
+  Maniac: '激进',
+};
+
+const AGGRESSIVE_ACTION_KINDS = new Set([
+  'bet',
+  'raise',
+  'three_bet',
+  'four_bet',
+  'all_in',
+]);
 
 export function PlayTableView({
   prefs,
@@ -142,6 +160,7 @@ export function PlayTableView({
     table.actingSeatIndex === 0;
   const legal = getLegalActions(table, 0);
   const botDelayMs = table.config.speed === 'fast' ? 220 : 480;
+  const is3DActive = viewMode === '3d' || theaterMode;
 
   // Sync default raise sizing whenever it becomes Hero's turn
   useEffect(() => {
@@ -193,7 +212,7 @@ export function PlayTableView({
       setTable((curr) => {
         if (curr.actingSeatIndex !== botIndex || curr.phase === 'SHOWDOWN') return curr;
         const move = chooseBotAction(curr, botIndex);
-        if (move.type === 'raise' || move.type === 'call') {
+        if (!is3DActive && (move.type === 'raise' || move.type === 'call')) {
           playPokerSound('chip', prefs.soundEnabled);
         }
         return applyPlayerAction(curr, botIndex, move.type, move.raiseToBb);
@@ -208,6 +227,7 @@ export function PlayTableView({
     table.config.fastFold,
     heroSeat.folded,
     botDelayMs,
+    is3DActive,
     prefs.soundEnabled,
   ]);
 
@@ -251,22 +271,30 @@ export function PlayTableView({
     customTarget?: number
   ) => {
     if (!isHeroTurn) return;
-    playPokerSound(type === 'fold' ? 'card' : 'chip', prefs.soundEnabled);
+    if (!is3DActive) {
+      playPokerSound(type === 'fold' ? 'card' : 'chip', prefs.soundEnabled);
+    }
     setTable((curr) => applyPlayerAction(curr, 0, type, customTarget ?? raiseAmount));
   };
 
   const handleDealNext = () => {
-    playPokerSound('card', prefs.soundEnabled);
+    if (!is3DActive) {
+      playPokerSound('card', prefs.soundEnabled);
+    }
     setTable((curr) => settleAndStartNewHand(curr));
   };
 
   const handleRebuy = () => {
-    playPokerSound('chip', prefs.soundEnabled);
+    if (!is3DActive) {
+      playPokerSound('chip', prefs.soundEnabled);
+    }
     setTable((curr) => rebuyHeroTo100(curr));
   };
 
   const handleApplyArenaConfig = (nextConfig: ArenaConfig) => {
-    playPokerSound('card', prefs.soundEnabled);
+    if (!is3DActive) {
+      playPokerSound('card', prefs.soundEnabled);
+    }
     loggedHandRef.current = 0;
     setTable(startNewHand(createTableFromConfig(nextConfig)));
   };
@@ -323,11 +351,19 @@ export function PlayTableView({
       table.seats.map((s, idx) => {
         const d = displaySeats[idx];
         const hud = computeHudDisplay(s.stats);
+        const shortStyle =
+          locale === 'zh-CN'
+            ? (ARCHETYPE_SHORT_ZH[s.archetype] ?? translateArchetype(locale, s.archetype))
+            : (ARCHETYPE_SHORT[s.archetype] ?? s.archetype);
         const styleTag = s.isHero
           ? undefined
           : table.config.blindReadMode
-            ? `??? ${hud.vpipPct}/${hud.pfrPct}`
-            : `${ARCHETYPE_SHORT[s.archetype] ?? s.archetype} ${hud.vpipPct}/${hud.pfrPct}`;
+            ? `${locale === 'zh-CN' ? '未知' : '???'} ${hud.vpipPct}/${hud.pfrPct}`
+            : `${shortStyle} ${hud.vpipPct}/${hud.pfrPct}`;
+        const isAggressiveAction = s.lastActionSpec
+          ? AGGRESSIVE_ACTION_KINDS.has(s.lastActionSpec.kind)
+          : undefined;
+        const winnerLabel = locale === 'zh-CN' ? '赢家' : 'WINNER';
 
         return {
           seatIndex: s.seatIndex,
@@ -339,11 +375,13 @@ export function PlayTableView({
           isActiveTurn: d.isActiveTurn ?? false,
           folded: s.folded,
           isWinner: d.isWinner ?? false,
+          winnerLabel,
           streetBetBb: s.streetBetBb,
           actionText:
             s.lastActionSpec || s.lastActionText
               ? formatArenaAction(locale, s.lastActionSpec, s.lastActionText)
               : undefined,
+          isAggressiveAction,
           styleTag,
           cards: s.cards,
           revealCards: d.revealCards,
@@ -504,9 +542,11 @@ export function PlayTableView({
         className="grid grid-cols-2 gap-1 p-1 bg-[#0B1017] border border-[#1E293B] rounded-lg"
       >
         <button
+          id="arena-tab-hud"
           type="button"
           role="tab"
           aria-selected={rightTab === 'hud'}
+          aria-controls="arena-panel-hud"
           onClick={() => setRightTab('hud')}
           className={`py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
             rightTab === 'hud' ? 'bg-[#1D283A] text-white' : 'text-slate-400 hover:text-slate-200'
@@ -515,9 +555,11 @@ export function PlayTableView({
           {t('arena.tabHud')}
         </button>
         <button
+          id="arena-tab-feed"
           type="button"
           role="tab"
           aria-selected={rightTab === 'feed'}
+          aria-controls="arena-panel-feed"
           onClick={() => setRightTab('feed')}
           className={`py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
             rightTab === 'feed' ? 'bg-[#1D283A] text-white' : 'text-slate-400 hover:text-slate-200'
@@ -528,7 +570,12 @@ export function PlayTableView({
       </div>
 
       {rightTab === 'hud' ? (
-        <div className="space-y-5">
+        <div
+          id="arena-panel-hud"
+          role="tabpanel"
+          aria-labelledby="arena-tab-hud"
+          className="space-y-5"
+        >
           {/* Live Opponent HUD Table */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between gap-2">
@@ -556,6 +603,9 @@ export function PlayTableView({
                     .map((bot) => {
                       const hud = computeHudDisplay(bot.stats);
                       const isActing = table.actingSeatIndex === bot.seatIndex;
+                      const styleLabel = table.config.blindReadMode
+                        ? t('arena.hiddenTag')
+                        : translateArchetype(locale, bot.archetype);
                       return (
                         <tr
                           key={bot.seatIndex}
@@ -567,11 +617,14 @@ export function PlayTableView({
                             <span className="text-emerald-400 mr-1.5">{bot.position}</span>
                             <span>{bot.name.split(' ')[1] ?? bot.name}</span>
                           </td>
-                          <td className="py-2 px-2 text-slate-300 truncate max-w-[92px]">
+                          <td
+                            className="py-2 px-2 text-slate-300 truncate max-w-[92px]"
+                            title={styleLabel}
+                          >
                             {table.config.blindReadMode ? (
-                              <span className="text-amber-300">{t('arena.hiddenTag')}</span>
+                              <span className="text-amber-300">{styleLabel}</span>
                             ) : (
-                              translateArchetype(locale, bot.archetype)
+                              styleLabel
                             )}
                           </td>
                           <td className="py-2 px-1.5 text-right text-slate-200">{hud.vpipPct}%</td>
@@ -637,7 +690,12 @@ export function PlayTableView({
         </div>
       ) : (
         /* Live Table Action Feed Tab */
-        <div className="space-y-2.5">
+        <div
+          id="arena-panel-feed"
+          role="tabpanel"
+          aria-labelledby="arena-tab-feed"
+          className="space-y-2.5"
+        >
           <h3 className="text-sm font-semibold text-white">{t('table.actionFeedTitle')}</h3>
           <ol className="space-y-1 max-h-[480px] overflow-y-auto text-xs font-mono pr-1">
             {table.actionLog.map((item, idx) => (
@@ -691,6 +749,8 @@ export function PlayTableView({
             <button
               type="button"
               data-testid="theater-toggle-hud"
+              aria-expanded={theaterHudOpen}
+              aria-controls="theater-hud-drawer"
               onClick={() => setTheaterHudOpen((v) => !v)}
               className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                 theaterHudOpen
@@ -975,6 +1035,8 @@ export function PlayTableView({
                 seats={seats3D}
                 fourColorDeck={prefs.fourColorDeck}
                 onToggleFourColor={() => onUpdatePrefs({ fourColorDeck: !prefs.fourColorDeck })}
+                soundEnabled={prefs.soundEnabled}
+                onToggleSound={() => onUpdatePrefs({ soundEnabled: !prefs.soundEnabled })}
                 fillParent={theaterMode}
                 isTheater={theaterMode}
                 onToggleTheater={theaterMode ? undefined : handleToggleTheater}
@@ -1002,16 +1064,33 @@ export function PlayTableView({
           </div>
         </div>
 
-        {/* Analytics Column (Always visible in Standard Mode; Collapsible Slide Drawer in Theater Mode) */}
+        {/* Analytics Column (Always visible in Standard Mode; Full-screen overlay on <lg, side drawer on lg+ in Theater Mode) */}
         {(!theaterMode || theaterHudOpen) && (
           <aside
+            id={theaterMode ? 'theater-hud-drawer' : undefined}
             data-testid={theaterMode ? 'theater-hud-drawer' : 'arena-analytics-panel'}
             className={
               theaterMode
-                ? 'w-[340px] lg:w-[370px] shrink-0 border-l border-[#222D3D] bg-[#0D131D] p-4 overflow-y-auto'
+                ? 'fixed inset-0 z-50 lg:static lg:inset-auto lg:z-auto lg:w-[370px] shrink-0 border-l border-[#222D3D] bg-[#0D131D] p-4 overflow-y-auto flex flex-col'
                 : 'xl:col-span-4 bg-[#111722] border border-[#222D3D] rounded-xl p-5'
             }
           >
+            {theaterMode && (
+              <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-[#1E293B] lg:hidden shrink-0">
+                <span className="text-sm font-semibold text-white">
+                  {t('arena.toggleHudDrawer')}
+                </span>
+                <button
+                  type="button"
+                  data-testid="close-theater-hud"
+                  onClick={() => setTheaterHudOpen(false)}
+                  aria-label={t('common.close')}
+                  className="p-1.5 rounded-lg bg-[#161F2E] hover:bg-[#222F44] border border-[#2B394F] text-slate-300 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+            )}
             {analyticsPanelNode}
           </aside>
         )}

@@ -953,11 +953,14 @@ export function createTurnHaloMesh(colorHex: number, radius = 0.62): THREE.Mesh 
 /**
  * Composite 3-part Dealer Button Puck (beveled metallic rim + brushed ivory "D" cap + contact shadow)
  */
-export function createDealerPuckGroup(contactShadowTex: THREE.CanvasTexture): THREE.Group {
+export function createDealerPuckGroup(
+  contactShadowTex: THREE.CanvasTexture,
+  dealerPuckTex?: THREE.CanvasTexture
+): THREE.Group {
   const group = new THREE.Group();
   group.name = 'DealerButtonPuck';
 
-  const puckTex = createDealerPuckTexture();
+  const puckTex = dealerPuckTex ?? createDealerPuckTexture();
 
   const rimGeo = new THREE.CylinderGeometry(0.145, 0.152, 0.036, 28);
   const rimMat = new THREE.MeshStandardMaterial({
@@ -1242,7 +1245,8 @@ export function createPlayingCardGroup(
   fourColor: boolean,
   cardBackTex: THREE.CanvasTexture,
   contactShadowTex: THREE.CanvasTexture,
-  scale = 1
+  scale = 1,
+  cardFaceTex?: THREE.CanvasTexture
 ): THREE.Group {
   const group = new THREE.Group();
   const w = 0.36 * scale;
@@ -1250,7 +1254,8 @@ export function createPlayingCardGroup(
   const r = 0.03 * scale;
   const thickness = 0.0085;
 
-  const frontTex = createCardFaceTexture(card, fourColor);
+  // Skip painting frontTex completely for face-down opponent hole cards
+  const frontTex = faceUp ? (cardFaceTex ?? createCardFaceTexture(card, fourColor)) : cardBackTex;
 
   // Rounded-corner extruded cardstock core
   const bodyShape = createRoundedRectShape(w, h, r);
@@ -1296,7 +1301,7 @@ export function createPlayingCardGroup(
   const botGeo = createNormalizedRoundedCardFaceGeo(w * 0.992, h * 0.992, r * 0.96, true);
   const botMat = new THREE.MeshStandardMaterial({
     color: 0xe6dfd0,
-    map: faceUp ? cardBackTex : frontTex,
+    map: cardBackTex,
     roughness: 0.88,
     metalness: 0.0,
     envMapIntensity: 0.04,
@@ -1335,7 +1340,9 @@ export interface ChipStackSpec {
  */
 export function createChipStacksGroup(
   stacks: ChipStackSpec[],
-  contactShadowTex: THREE.CanvasTexture
+  contactShadowTex: THREE.CanvasTexture,
+  sharedChipSideTex?: THREE.CanvasTexture,
+  sharedChipTopTex?: THREE.CanvasTexture
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = 'InstancedCasinoChipStacks';
@@ -1345,8 +1352,8 @@ export function createChipStacksGroup(
 
   const chipRadius = 0.095;
   const chipHeight = 0.023;
-  const chipSideTex = createChipSideTexture();
-  const chipTopTex = createChipTopTexture();
+  const chipSideTex = sharedChipSideTex ?? createChipSideTexture();
+  const chipTopTex = sharedChipTopTex ?? createChipTopTexture();
 
   const bodyGeo = new THREE.CylinderGeometry(chipRadius, chipRadius, chipHeight, 24, 1, true);
   const bodyMat = new THREE.MeshStandardMaterial({
@@ -1436,8 +1443,10 @@ export interface Seat3DSpec {
   isActiveTurn: boolean;
   folded: boolean;
   isWinner?: boolean;
+  winnerLabel?: string;
   streetBetBb?: number;
   actionText?: string;
+  isAggressiveAction?: boolean;
   styleTag?: string;
   cards?: [Card, Card] | null;
   revealCards?: boolean;
@@ -1488,7 +1497,9 @@ export function createSeatPlaqueMesh(seat: Seat3DSpec): THREE.Group {
     seat.folded,
     seat.styleTag,
     seat.actionText,
-    seat.isWinner
+    seat.isWinner,
+    seat.winnerLabel,
+    seat.isAggressiveAction
   );
 
   // Sleek tapered brushed-brass or emerald active-turn pedestal base sitting cleanly atop the leather rail
@@ -1502,7 +1513,7 @@ export function createSeatPlaqueMesh(seat: Seat3DSpec): THREE.Group {
   base.position.y = 0.011;
   group.add(base);
 
-  // Anti-glare obsidian face plate
+  // Anti-glare double-sided obsidian face plate so Broadcast & Rail angles never see blank dark backs
   const faceMat = new THREE.MeshStandardMaterial({
     map: tex,
     roughness: 0.9,
@@ -1516,9 +1527,9 @@ export function createSeatPlaqueMesh(seat: Seat3DSpec): THREE.Group {
     envMapIntensity: 0.28,
   });
   const plateGeo = new THREE.BoxGeometry(0.68, 0.28, 0.024);
-  const plate = new THREE.Mesh(plateGeo, [backMat, backMat, backMat, backMat, faceMat, backMat]);
+  const plate = new THREE.Mesh(plateGeo, [backMat, backMat, backMat, backMat, faceMat, faceMat]);
   plate.position.set(0, 0.155, 0);
-  plate.rotation.x = -0.24;
+  plate.rotation.x = -0.14;
   group.add(plate);
 
   return group;

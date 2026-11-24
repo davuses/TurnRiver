@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Globe } from 'lucide-react';
 import type { DrillModule } from './poker/types';
 import { useMasteryStore } from './store/useMasteryStore';
@@ -6,13 +6,51 @@ import { LocaleProvider, useLocale } from './i18n/LocaleContext';
 import type { TranslationKey } from './i18n/translations';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { OverviewView } from './views/OverviewView';
-import { PreflopLabView } from './views/PreflopLabView';
-import { PostflopTrainerView } from './views/PostflopTrainerView';
-import { MathLabView } from './views/MathLabView';
-import { HandReadingView } from './views/HandReadingView';
-import { PlayTableView } from './views/PlayTableView';
-import { Studio3DView } from './views/Studio3DView';
-import { LeakTrackerView } from './views/LeakTrackerView';
+
+const PreflopLabView = lazy(() =>
+  import('./views/PreflopLabView').then((m) => ({ default: m.PreflopLabView }))
+);
+const PostflopTrainerView = lazy(() =>
+  import('./views/PostflopTrainerView').then((m) => ({ default: m.PostflopTrainerView }))
+);
+const MathLabView = lazy(() =>
+  import('./views/MathLabView').then((m) => ({ default: m.MathLabView }))
+);
+const HandReadingView = lazy(() =>
+  import('./views/HandReadingView').then((m) => ({ default: m.HandReadingView }))
+);
+const PlayTableView = lazy(() =>
+  import('./views/PlayTableView').then((m) => ({ default: m.PlayTableView }))
+);
+const Studio3DView = lazy(() =>
+  import('./views/Studio3DView').then((m) => ({ default: m.Studio3DView }))
+);
+const LeakTrackerView = lazy(() =>
+  import('./views/LeakTrackerView').then((m) => ({ default: m.LeakTrackerView }))
+);
+
+function ViewLoadingSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      className="space-y-6 pb-12 animate-pulse"
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div className="space-y-2">
+          <div className="h-7 w-56 rounded-lg bg-[#17202E]" />
+          <div className="h-4 w-80 max-w-full rounded bg-[#111722]" />
+        </div>
+        <div className="h-9 w-28 rounded-lg bg-[#17202E]" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-8 h-[420px] rounded-xl bg-[#111722] border border-[#222D3D]" />
+        <div className="lg:col-span-4 h-[420px] rounded-xl bg-[#111722] border border-[#222D3D]" />
+      </div>
+    </div>
+  );
+}
 
 export type AppView = 'overview' | DrillModule | 'studio3d' | 'leaks';
 
@@ -56,6 +94,12 @@ function TurnRiverShell() {
 
   return (
     <div className="min-h-screen bg-[#090D12] text-[#E6EDF5] flex flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:rounded-lg focus:bg-emerald-500 focus:text-slate-950 focus:text-sm focus:font-semibold focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-white"
+      >
+        {t('nav.skipToMain')}
+      </a>
       {/* Clean Single-Row Studio Top Bar */}
       <header className="sticky top-0 z-40 bg-[#090D12]/95 border-b border-[#1E2837]">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 lg:gap-8">
@@ -109,6 +153,7 @@ function TurnRiverShell() {
             <button
               type="button"
               onClick={() => setActiveView('leaks')}
+              aria-current={activeView === 'leaks' ? 'page' : undefined}
               className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 activeView === 'leaks'
                   ? 'bg-emerald-500 text-slate-950'
@@ -132,6 +177,7 @@ function TurnRiverShell() {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveView(item.id)}
+                aria-current={isActive ? 'page' : undefined}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap shrink-0 cursor-pointer ${
                   isActive
                     ? 'bg-[#1D283A] text-emerald-300'
@@ -146,7 +192,11 @@ function TurnRiverShell() {
       </header>
 
       {/* Main Content Stage */}
-      <main className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 focus:outline-none"
+      >
         {activeView === 'overview' && (
           <OverviewView
             summary={store.summary}
@@ -155,59 +205,61 @@ function TurnRiverShell() {
           />
         )}
 
-        {activeView === 'preflop' && (
-          <PreflopLabView
-            prefs={store.prefs}
-            onUpdatePrefs={store.updatePrefs}
-            onRecordAttempt={store.recordAttempt}
-          />
-        )}
+        <Suspense fallback={<ViewLoadingSkeleton />}>
+          {activeView === 'preflop' && (
+            <PreflopLabView
+              prefs={store.prefs}
+              onUpdatePrefs={store.updatePrefs}
+              onRecordAttempt={store.recordAttempt}
+            />
+          )}
 
-        {activeView === 'postflop' && (
-          <PostflopTrainerView
-            prefs={store.prefs}
-            onUpdatePrefs={store.updatePrefs}
-            onRecordAttempt={store.recordAttempt}
-          />
-        )}
+          {activeView === 'postflop' && (
+            <PostflopTrainerView
+              prefs={store.prefs}
+              onUpdatePrefs={store.updatePrefs}
+              onRecordAttempt={store.recordAttempt}
+            />
+          )}
 
-        {activeView === 'math' && (
-          <MathLabView
-            prefs={store.prefs}
-            onRecordAttempt={store.recordAttempt}
-          />
-        )}
+          {activeView === 'math' && (
+            <MathLabView
+              prefs={store.prefs}
+              onRecordAttempt={store.recordAttempt}
+            />
+          )}
 
-        {activeView === 'reading' && (
-          <HandReadingView
-            prefs={store.prefs}
-            onRecordAttempt={store.recordAttempt}
-          />
-        )}
+          {activeView === 'reading' && (
+            <HandReadingView
+              prefs={store.prefs}
+              onRecordAttempt={store.recordAttempt}
+            />
+          )}
 
-        {activeView === 'table' && (
-          <PlayTableView
-            prefs={store.prefs}
-            onUpdatePrefs={store.updatePrefs}
-            onRecordAttempt={store.recordAttempt}
-          />
-        )}
+          {activeView === 'table' && (
+            <PlayTableView
+              prefs={store.prefs}
+              onUpdatePrefs={store.updatePrefs}
+              onRecordAttempt={store.recordAttempt}
+            />
+          )}
 
-        {activeView === 'studio3d' && (
-          <Studio3DView
-            prefs={store.prefs}
-            onUpdatePrefs={store.updatePrefs}
-          />
-        )}
+          {activeView === 'studio3d' && (
+            <Studio3DView
+              prefs={store.prefs}
+              onUpdatePrefs={store.updatePrefs}
+            />
+          )}
 
-        {activeView === 'leaks' && (
-          <LeakTrackerView
-            summary={store.summary}
-            attempts={store.attempts}
-            onResetProgress={store.resetProgress}
-            onNavigateDrill={(mod) => setActiveView(mod)}
-          />
-        )}
+          {activeView === 'leaks' && (
+            <LeakTrackerView
+              summary={store.summary}
+              attempts={store.attempts}
+              onResetProgress={store.resetProgress}
+              onNavigateDrill={(mod) => setActiveView(mod)}
+            />
+          )}
+        </Suspense>
       </main>
     </div>
   );

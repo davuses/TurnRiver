@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Card, UserPreferences } from '../poker/types';
 import type { Seat3DSpec } from '../three/models';
 import { Studio3DTable } from '../components/Studio3DTable';
@@ -173,8 +173,12 @@ export function Studio3DView({ prefs, onUpdatePrefs }: Studio3DViewProps) {
     playPokerSound('card', prefs.soundEnabled);
   };
 
-  const localizedSeats = spot.seats.map((s) =>
-    s.isHero ? { ...s, label: t('common.heroShort') } : s
+  const localizedSeats = useMemo(
+    () =>
+      spot.seats.map((s) =>
+        s.isHero ? { ...s, label: t('common.heroShort') } : s
+      ),
+    [spot, t]
   );
 
   return (
@@ -191,6 +195,8 @@ export function Studio3DView({ prefs, onUpdatePrefs }: Studio3DViewProps) {
         seats={localizedSeats}
         fourColorDeck={prefs.fourColorDeck}
         onToggleFourColor={() => onUpdatePrefs({ fourColorDeck: !prefs.fourColorDeck })}
+        soundEnabled={prefs.soundEnabled}
+        onToggleSound={() => onUpdatePrefs({ soundEnabled: !prefs.soundEnabled })}
         onDealSample={handleDealNext}
         fullViewport
       />

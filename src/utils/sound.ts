@@ -1,19 +1,69 @@
 let audioCtx: AudioContext | null = null;
+let userActivated = false;
+let unlockListenersBound = false;
+
+function handleUserGesture() {
+  userActivated = true;
+  if (audioCtx && audioCtx.state === 'suspended') {
+    void audioCtx.resume().catch(() => {});
+  }
+  if (audioCtx && audioCtx.state === 'running' && typeof window !== 'undefined') {
+    window.removeEventListener('pointerdown', handleUserGesture, { capture: true });
+    window.removeEventListener('keydown', handleUserGesture, { capture: true });
+    unlockListenersBound = false;
+  }
+}
+
+function bindGestureUnlock() {
+  if (unlockListenersBound || typeof window === 'undefined') return;
+  unlockListenersBound = true;
+  window.addEventListener('pointerdown', handleUserGesture, { capture: true, passive: true });
+  window.addEventListener('keydown', handleUserGesture, { capture: true, passive: true });
+}
+
+if (typeof window !== 'undefined') {
+  bindGestureUnlock();
+}
+
+function hasUserActivation(): boolean {
+  if (userActivated) return true;
+  if (typeof navigator !== 'undefined') {
+    const nav = navigator as Navigator & { userActivation?: { hasBeenActive?: boolean } };
+    if (nav.userActivation?.hasBeenActive) return true;
+  }
+  return false;
+}
 
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   if (!audioCtx) {
-    const Ctx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (Ctx) {
-      audioCtx = new Ctx();
+    if (!hasUserActivation()) return null;
+    try {
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (Ctx) {
+        audioCtx = new Ctx();
+      }
+    } catch {
+      return null;
     }
   }
   if (audioCtx && audioCtx.state === 'suspended') {
     void audioCtx.resume().catch(() => {});
   }
+  // Never schedule nodes while AudioContext is suspended/closed to avoid autoplay bursts
+  if (!audioCtx || audioCtx.state !== 'running') {
+    return null;
+  }
   return audioCtx;
+}
+
+export function closePokerSound(): void {
+  if (audioCtx) {
+    void audioCtx.close().catch(() => {});
+    audioCtx = null;
+  }
 }
 
 export function playPokerSound(

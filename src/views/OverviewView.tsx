@@ -3,7 +3,7 @@ import { ArrowRight, Box, Calculator, Grid3x3, Layers, PlayCircle, SearchCheck }
 import type { DrillAttemptRecord, DrillModule, MasterySummary } from '../poker/types';
 import { useLocale } from '../i18n/LocaleContext';
 import type { TranslationKey } from '../i18n/translations';
-import heroStudioImg from '../assets/images/hero_studio_table_1795300932030.jpg';
+import heroStudioImg from '../assets/images/hero_studio_table.webp';
 
 interface OverviewViewProps {
   summary: MasterySummary;
@@ -142,6 +142,10 @@ export function OverviewView({ summary, attempts, onNavigate }: OverviewViewProp
             <img
               src={HERO_IMAGE}
               alt={t('overview.heroImgAlt')}
+              width={1376}
+              height={768}
+              fetchPriority="high"
+              decoding="async"
               referrerPolicy="no-referrer"
               onError={() => setImgFailed(true)}
               className="w-full h-full object-cover lg:h-full"

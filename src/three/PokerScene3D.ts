@@ -23,9 +23,11 @@ import {
 import { CasinoSoundEngine } from './soundEngine';
 import {
   createCardBackTexture,
+  createCardFaceTexture,
   createChipSideTexture,
   createChipTopTexture,
   createContactShadowTexture,
+  createDealerPuckTexture,
   createStudioFloorTexture,
   type FeltThemeId,
 } from './textures';
@@ -73,9 +75,9 @@ const CAMERA_PRESETS: Record<
   CameraPresetId,
   { pos: [number, number, number]; target: [number, number, number] }
 > = {
-  hero: { pos: [0, 3.02, 4.92], target: [0, FELT_Y + 0.05, 0.14] },
+  hero: { pos: [0, 3.22, 5.45], target: [0, FELT_Y + 0.04, 0.08] },
   broadcast: { pos: [3.95, 3.85, 4.45], target: [0, FELT_Y, 0] },
-  topdown: { pos: [0, 6.25, 0.95], target: [0, FELT_Y, 0] },
+  topdown: { pos: [0, 7.15, 0.85], target: [0, FELT_Y, 0] },
   closeup: { pos: [0.45, 2.02, 2.24], target: [0, FELT_Y + 0.04, -0.06] },
   rail: { pos: [-2.42, 1.84, 3.42], target: [0.12, FELT_Y + 0.12, -0.06] },
 };
@@ -160,13 +162,17 @@ function detectSoftwareWebGL(gl: WebGLRenderingContext | WebGL2RenderingContext)
 
 function disposeObject3D(obj: THREE.Object3D) {
   obj.traverse((child) => {
+    if ((child as THREE.InstancedMesh).isInstancedMesh) {
+      (child as THREE.InstancedMesh).dispose();
+    }
     const renderable = child as THREE.Mesh | THREE.Points;
     if ((renderable as THREE.Mesh).isMesh || (renderable as THREE.Points).isPoints) {
       renderable.geometry?.dispose();
       const mats = Array.isArray(renderable.material)
         ? renderable.material
         : [renderable.material];
-      for (const m of mats) {
+      const uniqueMats = new Set(mats);
+      for (const m of uniqueMats) {
         if (!m) continue;
         const std = m as THREE.MeshStandardMaterial;
         std.map?.dispose();
@@ -213,8 +219,13 @@ export class PokerScene3D {
   private floorTex: THREE.CanvasTexture;
   private chipSideTex: THREE.CanvasTexture;
   private chipTopTex: THREE.CanvasTexture;
+  private dealerPuckTex: THREE.CanvasTexture;
+  private cardFaceTexCache = new Map<string, THREE.CanvasTexture>();
+  private cardFaceTexSet = new Set<THREE.Texture>();
 
   private currentFeltTheme: FeltThemeId;
+  private currentCameraPreset: CameraPresetId = 'hero';
+  private userHasOrbited = false;
   private resizeObserver: ResizeObserver;
   private rafId: number | null = null;
   private timeoutId: number | null = null;
@@ -222,6 +233,7 @@ export class PokerScene3D {
   private elapsedSec = 0;
   private dirty = true;
   private disposed = false;
+  private contextLost = false;
 
   // Animation, active felt halos & state-delta trackers
   private activeTweens: ActiveTween[] = [];
@@ -271,7 +283,7 @@ export class PokerScene3D {
     this.renderer.toneMappingExposure = 0.92;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = !this.isSoftwareGl;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = false;
 
     const canvas = this.renderer.domElement;
@@ -280,146 +292,176 @@ export class PokerScene3D {
     canvas.style.display = 'block';
     container.appendChild(canvas);
 
-    this.scene = new THREE.Scene();
+    let createdPmrem: THREE.PMREMGenerator | null = null;
+    let createdEnvTarget: THREE.WebGLRenderTarget | null = null;
+    let createdControls: OrbitControls | null = null;
+    let createdKeyLight: THREE.DirectionalLight | null = null;
 
-    // Studio IBL via RoomEnvironment (zero external HDR network URLs)
-    this.pmrem = new THREE.PMREMGenerator(this.renderer);
-    const roomEnv = new RoomEnvironment();
-    this.envRenderTarget = this.pmrem.fromScene(roomEnv, 0.04);
-    this.scene.environment = this.envRenderTarget.texture;
-    roomEnv.dispose();
+    try {
+      this.scene = new THREE.Scene();
 
-    this.camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 45);
-    const startPreset = CAMERA_PRESETS.hero;
-    this.camera.position.set(...startPreset.pos);
+      // Studio IBL via RoomEnvironment (zero external HDR network URLs)
+      createdPmrem = new THREE.PMREMGenerator(this.renderer);
+      this.pmrem = createdPmrem;
+      const roomEnv = new RoomEnvironment();
+      createdEnvTarget = this.pmrem.fromScene(roomEnv, 0.04);
+      this.envRenderTarget = createdEnvTarget;
+      this.scene.environment = this.envRenderTarget.texture;
+      roomEnv.dispose();
 
-    this.controls = new OrbitControls(this.camera, canvas);
-    this.controls.target.set(...startPreset.target);
-    this.controls.enableDamping = !this.isSoftwareGl;
-    this.controls.dampingFactor = 0.085;
-    this.controls.enablePan = false;
-    this.controls.minDistance = 2.0;
-    this.controls.maxDistance = 9.5;
-    this.controls.minPolarAngle = 0.14;
-    this.controls.maxPolarAngle = Math.PI * 0.455;
-    this.controls.addEventListener('start', () => {
-      // Cancel scripted preset glide immediately so camera never fights manual user orbit
-      this.camAnimActive = false;
-    });
-    this.controls.addEventListener('change', () => {
+      const aspect = width / height;
+      const { vFov } = this.computeAspectFraming(aspect);
+      this.camera = new THREE.PerspectiveCamera(vFov, aspect, 0.1, 55);
+      const startAdapted = this.getAdaptedPreset('hero', aspect);
+      this.camera.position.copy(startAdapted.pos);
+
+      createdControls = new OrbitControls(this.camera, canvas);
+      this.controls = createdControls;
+      this.controls.target.copy(startAdapted.target);
+      this.controls.enableDamping = !this.isSoftwareGl;
+      this.controls.dampingFactor = 0.085;
+      this.controls.enablePan = false;
+      this.controls.minDistance = 2.0;
+      this.controls.maxDistance = 16;
+      this.controls.minPolarAngle = 0.14;
+      this.controls.maxPolarAngle = Math.PI * 0.455;
+      this.controls.addEventListener('start', () => {
+        // Cancel scripted preset glide immediately so camera never fights manual user orbit
+        this.camAnimActive = false;
+        this.userHasOrbited = true;
+      });
+      this.controls.addEventListener('change', () => {
+        this.requestRender();
+      });
+      this.controls.update();
+
+      // Balanced Casino Chandelier Rig (no expensive RectAreaLight or multi-pass bloom overhead)
+      this.hemiLight = new THREE.HemisphereLight(0x7aa2d4, 0x1e130c, 0.44);
+      this.scene.add(this.hemiLight);
+
+      createdKeyLight = new THREE.DirectionalLight(0xffe4bd, 1.08);
+      this.keyLight = createdKeyLight;
+      this.keyLight.position.set(2.4, 7.2, 3.2);
+      this.keyLight.castShadow = !this.isSoftwareGl;
+      this.keyLight.shadow.mapSize.set(1024, 1024);
+      this.keyLight.shadow.camera.near = 1;
+      this.keyLight.shadow.camera.far = 16;
+      this.keyLight.shadow.camera.left = -4.6;
+      this.keyLight.shadow.camera.right = 4.6;
+      this.keyLight.shadow.camera.top = 3.6;
+      this.keyLight.shadow.camera.bottom = -3.6;
+      this.keyLight.shadow.bias = -0.0005;
+      this.keyLight.shadow.normalBias = 0.02;
+      this.scene.add(this.keyLight);
+
+      // Focused overhead casino chandelier spotlight creating a warm velvet pool across the felt
+      this.casinoSpotLight = new THREE.SpotLight(0xffd596, 14, 16, Math.PI * 0.36, 0.92, 1.5);
+      this.casinoSpotLight.position.set(0, 4.85, 0.22);
+      this.casinoSpotLight.target.position.set(0, FELT_Y, 0);
+      this.scene.add(this.casinoSpotLight);
+      this.scene.add(this.casinoSpotLight.target);
+
+      this.rimLight = new THREE.DirectionalLight(0xd99b43, 0.62);
+      this.rimLight.position.set(-4.2, 3.4, -3.8);
+      this.scene.add(this.rimLight);
+
+      // Shared procedural textures (created once, reused across hand rebuilds)
+      const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
+      this.contactShadowTex = createContactShadowTexture();
+      this.cardBackTex = createCardBackTexture();
+      this.floorTex = createStudioFloorTexture(maxAniso);
+      this.chipSideTex = createChipSideTexture();
+      this.chipTopTex = createChipTopTexture();
+      this.dealerPuckTex = createDealerPuckTexture();
+
+      // Luxury Axminster casino salon carpet floor
+      const floorMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        map: this.floorTex,
+        roughness: 0.94,
+        metalness: 0.02,
+        envMapIntensity: 0.14,
+      });
+      const floor = new THREE.Mesh(new THREE.CircleGeometry(42, 56), floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      this.scene.add(floor);
+
+      // Grand Monte-Carlo Salon Privé architecture + Art-Deco chandelier + volumetric light cone
+      const salonBackdrop = createCasinoSalonBackdropGroup(maxAniso);
+      this.chandelierGroup = salonBackdrop.getObjectByName('ArtDecoSalonChandelier') ?? null;
+      this.scene.add(salonBackdrop);
+
+      // 5 Sculpted Executive Espresso-Leather Poker Chairs framing opponent seats
+      const chairsGroup = createCasinoChairsGroup(this.contactShadowTex, !this.isSoftwareGl);
+      this.scene.add(chairsGroup);
+
+      // Composite Bellagio/Monte-Carlo casino poker table (with contrast piping & warm LED cove)
+      this.tableAssembly = createPokerTableGroup(
+        initialData.feltTheme,
+        this.contactShadowTex,
+        maxAniso,
+        !this.isSoftwareGl
+      );
+      this.scene.add(this.tableAssembly.group);
+
+      // Toggleable high-roller lounge props (crystal tumbler + gold protector + cigar rest)
+      this.ambientPropsGroup = createAmbientPropsGroup(this.contactShadowTex, this.isSoftwareGl);
+      this.ambientPropsGroup.visible = initialData.showProps ?? true;
+      this.scene.add(this.ambientPropsGroup);
+
+      // Warm golden dust motes suspended in the chandelier spotlight beam
+      this.dustMotes = createChandelierDustMotes();
+      this.scene.add(this.dustMotes);
+
+      // Dynamic hand layer (rounded beveled cards, instanced chips, felt turn halos, dealer button, plaques)
+      this.dynamicGroup = new THREE.Group();
+      this.dynamicGroup.name = 'DynamicHandLayer';
+      this.scene.add(this.dynamicGroup);
+
+      // Transient animation FX layer (individual staggered tossed bet chips & pot-sweep streams)
+      this.fxGroup = new THREE.Group();
+      this.fxGroup.name = 'AnimationFxLayer';
+      this.scene.add(this.fxGroup);
+
+      this.applyLighting(initialData.lighting);
+      this.rebuildHandLayer(initialData);
+
+      // Pre-compile shaders & render initial shadow map once so first deal has zero micro-stutter
+      if (!this.isSoftwareGl) {
+        this.renderer.shadowMap.needsUpdate = true;
+        this.renderer.compile(this.scene, this.camera);
+      }
+
+      // Pointer listeners for Hero hole-card hover peek & WebGL context loss safety
+      canvas.addEventListener('pointermove', this.handlePointerMove);
+      canvas.addEventListener('pointerleave', this.handlePointerLeave);
+      canvas.addEventListener('webglcontextlost', this.handleContextLost, false);
+      canvas.addEventListener('webglcontextrestored', this.handleContextRestored, false);
+
+      // ResizeObserver for crisp layout transitions (standard <-> Theater / Fullscreen)
+      this.resizeObserver = new ResizeObserver(() => {
+        this.handleResize();
+      });
+      this.resizeObserver.observe(container);
+
       this.requestRender();
-    });
-    this.controls.update();
-
-    // Balanced Casino Chandelier Rig (no expensive RectAreaLight or multi-pass bloom overhead)
-    this.hemiLight = new THREE.HemisphereLight(0x7aa2d4, 0x1e130c, 0.44);
-    this.scene.add(this.hemiLight);
-
-    this.keyLight = new THREE.DirectionalLight(0xffe4bd, 1.08);
-    this.keyLight.position.set(2.4, 7.2, 3.2);
-    this.keyLight.castShadow = !this.isSoftwareGl;
-    this.keyLight.shadow.mapSize.set(1024, 1024);
-    this.keyLight.shadow.camera.near = 1;
-    this.keyLight.shadow.camera.far = 16;
-    this.keyLight.shadow.camera.left = -4.6;
-    this.keyLight.shadow.camera.right = 4.6;
-    this.keyLight.shadow.camera.top = 3.6;
-    this.keyLight.shadow.camera.bottom = -3.6;
-    this.keyLight.shadow.bias = -0.0005;
-    this.keyLight.shadow.normalBias = 0.02;
-    this.scene.add(this.keyLight);
-
-    // Focused overhead casino chandelier spotlight creating a warm velvet pool across the felt
-    this.casinoSpotLight = new THREE.SpotLight(0xffd596, 14, 16, Math.PI * 0.36, 0.92, 1.5);
-    this.casinoSpotLight.position.set(0, 4.85, 0.22);
-    this.casinoSpotLight.target.position.set(0, FELT_Y, 0);
-    this.scene.add(this.casinoSpotLight);
-    this.scene.add(this.casinoSpotLight.target);
-
-    this.rimLight = new THREE.DirectionalLight(0xd99b43, 0.62);
-    this.rimLight.position.set(-4.2, 3.4, -3.8);
-    this.scene.add(this.rimLight);
-
-    // Shared procedural textures
-    const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
-    this.contactShadowTex = createContactShadowTexture();
-    this.cardBackTex = createCardBackTexture();
-    this.floorTex = createStudioFloorTexture(maxAniso);
-    this.chipSideTex = createChipSideTexture();
-    this.chipTopTex = createChipTopTexture();
-
-    // Luxury Axminster casino salon carpet floor
-    const floorMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      map: this.floorTex,
-      roughness: 0.94,
-      metalness: 0.02,
-      envMapIntensity: 0.14,
-    });
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(42, 56), floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    this.scene.add(floor);
-
-    // Grand Monte-Carlo Salon Privé architecture + Art-Deco chandelier + volumetric light cone
-    const salonBackdrop = createCasinoSalonBackdropGroup(maxAniso);
-    this.chandelierGroup = salonBackdrop.getObjectByName('ArtDecoSalonChandelier') ?? null;
-    this.scene.add(salonBackdrop);
-
-    // 5 Sculpted Executive Espresso-Leather Poker Chairs framing opponent seats
-    const chairsGroup = createCasinoChairsGroup(this.contactShadowTex, !this.isSoftwareGl);
-    this.scene.add(chairsGroup);
-
-    // Composite Bellagio/Monte-Carlo casino poker table (with contrast piping & warm LED cove)
-    this.tableAssembly = createPokerTableGroup(
-      initialData.feltTheme,
-      this.contactShadowTex,
-      maxAniso,
-      !this.isSoftwareGl
-    );
-    this.scene.add(this.tableAssembly.group);
-
-    // Toggleable high-roller lounge props (crystal tumbler + gold protector + cigar rest)
-    this.ambientPropsGroup = createAmbientPropsGroup(this.contactShadowTex, this.isSoftwareGl);
-    this.ambientPropsGroup.visible = initialData.showProps ?? true;
-    this.scene.add(this.ambientPropsGroup);
-
-    // Warm golden dust motes suspended in the chandelier spotlight beam
-    this.dustMotes = createChandelierDustMotes();
-    this.scene.add(this.dustMotes);
-
-    // Dynamic hand layer (rounded beveled cards, instanced chips, felt turn halos, dealer button, plaques)
-    this.dynamicGroup = new THREE.Group();
-    this.dynamicGroup.name = 'DynamicHandLayer';
-    this.scene.add(this.dynamicGroup);
-
-    // Transient animation FX layer (individual staggered tossed bet chips & pot-sweep streams)
-    this.fxGroup = new THREE.Group();
-    this.fxGroup.name = 'AnimationFxLayer';
-    this.scene.add(this.fxGroup);
-
-    this.applyLighting(initialData.lighting);
-    this.rebuildHandLayer(initialData);
-
-    // Pre-compile shaders & render initial shadow map once so first deal has zero micro-stutter
-    if (!this.isSoftwareGl) {
-      this.renderer.shadowMap.needsUpdate = true;
-      this.renderer.compile(this.scene, this.camera);
+    } catch (err) {
+      // Clean up appended canvas & WebGL resources cleanly if constructor fails mid-init
+      this.disposed = true;
+      this.cancelScheduledFrame();
+      this.soundEngine.dispose();
+      createdControls?.dispose();
+      createdKeyLight?.dispose();
+      createdEnvTarget?.dispose();
+      createdPmrem?.dispose();
+      this.renderer.dispose();
+      this.renderer.forceContextLoss();
+      if (canvas.parentElement) {
+        canvas.parentElement.removeChild(canvas);
+      }
+      throw err;
     }
-
-    // Pointer listeners for Hero hole-card hover peek & WebGL context loss safety
-    canvas.addEventListener('pointermove', this.handlePointerMove);
-    canvas.addEventListener('pointerleave', this.handlePointerLeave);
-    canvas.addEventListener('webglcontextlost', this.handleContextLost, false);
-    canvas.addEventListener('webglcontextrestored', this.handleContextRestored, false);
-
-    // ResizeObserver for crisp layout transitions (standard <-> Theater / Fullscreen)
-    this.resizeObserver = new ResizeObserver(() => {
-      this.handleResize();
-    });
-    this.resizeObserver.observe(container);
-
-    this.requestRender();
   }
 
   private handlePointerMove = (e: PointerEvent) => {
@@ -463,10 +505,21 @@ export class PokerScene3D {
 
   private handleContextLost = (e: Event) => {
     e.preventDefault();
+    this.contextLost = true;
     this.cancelScheduledFrame();
   };
 
   private handleContextRestored = () => {
+    if (this.disposed) return;
+    this.contextLost = false;
+    // Regenerate RoomEnvironment PMREM render target on restored WebGL context
+    this.envRenderTarget.dispose();
+    this.pmrem.dispose();
+    this.pmrem = new THREE.PMREMGenerator(this.renderer);
+    const roomEnv = new RoomEnvironment();
+    this.envRenderTarget = this.pmrem.fromScene(roomEnv, 0.04);
+    this.scene.environment = this.envRenderTarget.texture;
+    roomEnv.dispose();
     this.renderer.shadowMap.needsUpdate = true;
     this.requestRender();
   };
@@ -482,13 +535,52 @@ export class PokerScene3D {
     }
   }
 
+  private computeAspectFraming(aspect: number): { vFov: number; distScale: number } {
+    const safeAspect = Math.max(0.42, aspect);
+    const baseVFov = 42;
+    const refAspect = 1.82;
+    const targetHalfTanH = Math.tan(THREE.MathUtils.degToRad(baseVFov / 2)) * refAspect;
+    const desiredVFov = THREE.MathUtils.radToDeg(2 * Math.atan(targetHalfTanH / safeAspect));
+    const vFov = THREE.MathUtils.clamp(desiredVFov, 42, 62);
+    const actualHalfTanH = Math.tan(THREE.MathUtils.degToRad(vFov / 2)) * safeAspect;
+    const distScale = THREE.MathUtils.clamp(targetHalfTanH / actualHalfTanH, 1, 2.25);
+    return { vFov, distScale };
+  }
+
+  private getAdaptedPreset(
+    preset: CameraPresetId,
+    aspect: number
+  ): { pos: THREE.Vector3; target: THREE.Vector3 } {
+    const cfg = CAMERA_PRESETS[preset];
+    const target = new THREE.Vector3(...cfg.target);
+    const basePos = new THREE.Vector3(...cfg.pos);
+    const { distScale } = this.computeAspectFraming(aspect);
+    const effectiveScale = preset === 'closeup' ? Math.min(1.55, distScale) : distScale;
+    const pos = target.clone().addScaledVector(basePos.sub(target), effectiveScale);
+    return { pos, target };
+  }
+
   private handleResize() {
     if (this.disposed) return;
     const width = Math.max(this.container.clientWidth, 280);
     const height = Math.max(this.container.clientHeight, 220);
-    this.camera.aspect = width / height;
+    const aspect = width / height;
+    const { vFov } = this.computeAspectFraming(aspect);
+    this.camera.aspect = aspect;
+    this.camera.fov = vFov;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+    if (!this.userHasOrbited) {
+      const adapted = this.getAdaptedPreset(this.currentCameraPreset, aspect);
+      if (this.camAnimActive) {
+        this.camTargetPos.copy(adapted.pos);
+        this.camTargetLook.copy(adapted.target);
+      } else {
+        this.camera.position.copy(adapted.pos);
+        this.controls.target.copy(adapted.target);
+        this.controls.update();
+      }
+    }
     this.requestRender();
   }
 
@@ -496,7 +588,25 @@ export class PokerScene3D {
     this.soundEngine.enabled = enabled;
   }
 
+  public setShowProps(show: boolean) {
+    if (this.disposed) return;
+    if (this.ambientPropsGroup.visible !== show) {
+      this.ambientPropsGroup.visible = show;
+      this.requestRender();
+    }
+  }
+
+  public setFeltTheme(theme: FeltThemeId) {
+    if (this.disposed) return;
+    if (theme !== this.currentFeltTheme) {
+      this.currentFeltTheme = theme;
+      this.tableAssembly.updateFeltTheme(theme, this.renderer.capabilities.getMaxAnisotropy());
+      this.requestRender();
+    }
+  }
+
   public applyLighting(preset: LightingPresetId) {
+    if (this.disposed) return;
     const cfg = LIGHTING_PRESETS[preset];
     this.scene.background = new THREE.Color(cfg.bg);
     this.scene.fog = new THREE.FogExp2(cfg.bg, cfg.fogDensity);
@@ -514,18 +624,28 @@ export class PokerScene3D {
   }
 
   public setCameraPreset(preset: CameraPresetId) {
-    const cfg = CAMERA_PRESETS[preset];
+    if (this.disposed) return;
+    this.currentCameraPreset = preset;
+    this.userHasOrbited = false;
+    const adapted = this.getAdaptedPreset(preset, this.camera.aspect);
     if (this.isSoftwareGl) {
-      this.camera.position.set(...cfg.pos);
-      this.controls.target.set(...cfg.target);
+      this.camera.position.copy(adapted.pos);
+      this.controls.target.copy(adapted.target);
       this.controls.update();
       this.camAnimActive = false;
       this.requestRender();
       return;
     }
-    this.camTargetPos.set(...cfg.pos);
-    this.camTargetLook.set(...cfg.target);
+    this.camTargetPos.copy(adapted.pos);
+    this.camTargetLook.copy(adapted.target);
     this.camAnimActive = true;
+    this.requestRender();
+  }
+
+  public updateHandLayer(data: Pick<Scene3DHandData, 'board' | 'potBb' | 'seats' | 'fourColorDeck'>) {
+    if (this.disposed) return;
+    this.rebuildHandLayer(data);
+    this.renderer.shadowMap.needsUpdate = true;
     this.requestRender();
   }
 
@@ -546,6 +666,28 @@ export class PokerScene3D {
     this.rebuildHandLayer(data);
     this.renderer.shadowMap.needsUpdate = true;
     this.requestRender();
+  }
+
+  private isSharedTexture(tex: THREE.Texture): boolean {
+    return (
+      tex === this.cardBackTex ||
+      tex === this.contactShadowTex ||
+      tex === this.chipSideTex ||
+      tex === this.chipTopTex ||
+      tex === this.dealerPuckTex ||
+      this.cardFaceTexSet.has(tex)
+    );
+  }
+
+  private getCardFaceTexture(card: Card, fourColor: boolean): THREE.CanvasTexture {
+    const key = `${card.rank}${card.suit}_${fourColor ? '4' : '2'}`;
+    let tex = this.cardFaceTexCache.get(key);
+    if (!tex) {
+      tex = createCardFaceTexture(card, fourColor);
+      this.cardFaceTexCache.set(key, tex);
+      this.cardFaceTexSet.add(tex);
+    }
+    return tex;
   }
 
   /**
@@ -641,26 +783,30 @@ export class PokerScene3D {
     });
   }
 
-  private rebuildHandLayer(data: Scene3DHandData) {
+  private rebuildHandLayer(data: Pick<Scene3DHandData, 'board' | 'potBb' | 'seats' | 'fourColorDeck'>) {
     // Drop non-FX card tweens belonging to the previous dynamic layer (keep flying chip FX running!)
     this.activeTweens = this.activeTweens.filter((tw) => tw.disposeOnEnd);
     this.activeHaloMats = [];
     this.heroCardTargets = [];
     this.hoveredHeroCardIdx = -1;
 
-    // Cleanly dispose previous dynamic meshes & per-card textures (preserve shared textures)
+    // Cleanly dispose previous dynamic meshes & per-plaque textures (preserve shared & cached textures)
     while (this.dynamicGroup.children.length > 0) {
       const child = this.dynamicGroup.children[0];
       this.dynamicGroup.remove(child);
       child.traverse((obj) => {
+        if ((obj as THREE.InstancedMesh).isInstancedMesh) {
+          (obj as THREE.InstancedMesh).dispose();
+        }
         if ((obj as THREE.Mesh).isMesh) {
           const mesh = obj as THREE.Mesh;
           mesh.geometry?.dispose();
           const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-          for (const m of mats) {
+          const uniqueMats = new Set(mats);
+          for (const m of uniqueMats) {
             if (!m) continue;
             const std = m as THREE.MeshStandardMaterial;
-            if (std.map && std.map !== this.cardBackTex && std.map !== this.contactShadowTex) {
+            if (std.map && !this.isSharedTexture(std.map)) {
               std.map.dispose();
             }
             m.dispose();
@@ -707,7 +853,8 @@ export class PokerScene3D {
         data.fourColorDeck,
         this.cardBackTex,
         this.contactShadowTex,
-        1.05
+        1.05,
+        this.getCardFaceTexture(data.board[i], data.fourColorDeck)
       );
       const targetPos = new THREE.Vector3(startX + i * cardSpacing, FELT_Y + 0.002, -0.08);
       const targetRot = new THREE.Euler(0, (i - (boardCount - 1) / 2) * 0.018, 0);
@@ -776,10 +923,20 @@ export class PokerScene3D {
     for (let i = 0; i < activeSeatsCount; i++) {
       const seat = data.seats[i];
       const anchor = anchors[i];
-      const inwardScale = 0.65;
       const isTopCenter = Math.abs(anchor.x) < 0.1 && anchor.z < 0;
-      const chipBaseX = anchor.x * inwardScale + (seat.isHero ? -0.68 : isTopCenter ? 0.56 : 0);
-      const chipBaseZ = anchor.z * inwardScale + (seat.isHero ? -0.06 : 0);
+      const isSideSeat = !seat.isHero && !isTopCenter;
+      const chipBaseX = seat.isHero
+        ? -0.68
+        : isTopCenter
+          ? 0.56
+          : anchor.x * 0.58;
+      const chipBaseZ = seat.isHero
+        ? anchor.z * 0.65 - 0.06
+        : isTopCenter
+          ? anchor.z * 0.65
+          : anchor.z * 0.9;
+      const sideHoleX = isSideSeat ? anchor.x * 0.75 : anchor.x * 0.72;
+      const sideHoleZ = isSideSeat ? anchor.z * 0.46 : anchor.z * 0.72;
 
       if (seat.isWinner) {
         hasWinnerNow = true;
@@ -791,8 +948,8 @@ export class PokerScene3D {
       plaque.position.set(anchor.x * 1.1, FELT_Y + 0.212, anchor.z * 1.1);
       plaque.lookAt(0, FELT_Y + 0.212, 0);
       if (seat.isHero) {
-        plaque.position.set(1.42, FELT_Y + 0.212, 2.02);
-        plaque.rotation.set(0, -0.34, 0);
+        plaque.position.set(1.05, FELT_Y + 0.212, 1.9);
+        plaque.rotation.set(0, -0.26, 0);
       }
       this.dynamicGroup.add(plaque);
 
@@ -801,17 +958,19 @@ export class PokerScene3D {
         const haloColor = seat.isWinner ? 0xfbbf24 : 0x34d399;
         const haloRadius = seat.isHero ? 0.72 : 0.58;
         const haloMesh = createTurnHaloMesh(haloColor, haloRadius);
-        const hx = seat.isHero ? 0 : anchor.x * 0.72;
-        const hz = seat.isHero ? 1.24 : anchor.z * 0.72;
+        const hx = seat.isHero ? 0 : sideHoleX;
+        const hz = seat.isHero ? 1.24 : sideHoleZ;
         haloMesh.position.set(hx, FELT_Y + 0.004, hz);
         this.dynamicGroup.add(haloMesh);
         this.activeHaloMats.push(haloMesh.material as THREE.ShaderMaterial);
       }
 
-      // Player chip stacks on felt near seat
+      // Player chip stacks on felt near seat (offset cleanly from opponent hole cards so Top-Down never overlaps)
       if (seat.stackBb > 0) {
         const stackA = Math.max(2, Math.min(10, Math.round(seat.stackBb / 12)));
         const stackB = Math.max(1, Math.min(8, Math.round(seat.stackBb / 18)));
+        const stackBOffsetX = isSideSeat ? Math.sign(anchor.x) * 0.21 : 0.22;
+        const stackBOffsetZ = isSideSeat ? Math.sign(anchor.z) * 0.05 : 0.08;
 
         chipSpecs.push({
           x: chipBaseX,
@@ -820,8 +979,8 @@ export class PokerScene3D {
           colorHex: seat.isHero ? 0x0d7a55 : 0x1d2432,
         });
         chipSpecs.push({
-          x: chipBaseX + 0.22,
-          z: chipBaseZ + 0.08,
+          x: chipBaseX + stackBOffsetX,
+          z: chipBaseZ + stackBOffsetZ,
           chips: stackB,
           colorHex: seat.isHero ? 0xd97706 : 0x991b1b,
         });
@@ -861,7 +1020,7 @@ export class PokerScene3D {
 
       // Dealer button puck near BTN seat
       if (seat.isDealer) {
-        const puck = createDealerPuckGroup(this.contactShadowTex);
+        const puck = createDealerPuckGroup(this.contactShadowTex, this.dealerPuckTex);
         puck.position.set(anchor.x * 0.54 + 0.34, FELT_Y + 0.002, anchor.z * 0.52);
         this.dynamicGroup.add(puck);
       }
@@ -876,7 +1035,8 @@ export class PokerScene3D {
           data.fourColorDeck,
           this.cardBackTex,
           this.contactShadowTex,
-          cardScale
+          cardScale,
+          reveal ? this.getCardFaceTexture(seat.cards[0], data.fourColorDeck) : undefined
         );
         const c2 = createPlayingCardGroup(
           seat.cards[1],
@@ -884,7 +1044,8 @@ export class PokerScene3D {
           data.fourColorDeck,
           this.cardBackTex,
           this.contactShadowTex,
-          cardScale
+          cardScale,
+          reveal ? this.getCardFaceTexture(seat.cards[1], data.fourColorDeck) : undefined
         );
 
         let pos1: THREE.Vector3;
@@ -902,8 +1063,8 @@ export class PokerScene3D {
             { group: c2, basePos: pos2.clone(), baseRot: rot2.clone(), peekAmount: 0, sideOffset: 0 }
           );
         } else {
-          const cx = anchor.x * 0.72;
-          const cz = anchor.z * 0.72;
+          const cx = sideHoleX;
+          const cz = sideHoleZ;
           pos1 = new THREE.Vector3(cx - 0.14, FELT_Y + 0.004, cz);
           rot1 = new THREE.Euler(0, anchor.rotY + 0.12, 0);
           pos2 = new THREE.Vector3(cx + 0.14, FELT_Y + 0.006, cz + 0.02);
@@ -1046,8 +1207,13 @@ export class PokerScene3D {
     stubDeck.receiveShadow = true;
     this.dynamicGroup.add(stubDeck);
 
-    // Build all chips via single InstancedMesh group
-    const chipsGroup = createChipStacksGroup(chipSpecs, this.contactShadowTex);
+    // Build all chips via single InstancedMesh group reusing shared procedural textures
+    const chipsGroup = createChipStacksGroup(
+      chipSpecs,
+      this.contactShadowTex,
+      this.chipSideTex,
+      this.chipTopTex
+    );
     this.dynamicGroup.add(chipsGroup);
 
     // Persist state snapshots for next animation diff
@@ -1060,7 +1226,7 @@ export class PokerScene3D {
   }
 
   public requestRender() {
-    if (this.disposed) return;
+    if (this.disposed || this.contextLost) return;
     this.dirty = true;
     if (this.rafId === null && this.timeoutId === null) {
       this.lastTickMs = performance.now();
@@ -1069,7 +1235,7 @@ export class PokerScene3D {
   }
 
   private scheduleNextFrame() {
-    if (this.disposed || this.rafId !== null || this.timeoutId !== null) return;
+    if (this.disposed || this.contextLost || this.rafId !== null || this.timeoutId !== null) return;
     if (!this.isSoftwareGl) {
       this.rafId = requestAnimationFrame(this.tick);
       return;
@@ -1077,7 +1243,7 @@ export class PokerScene3D {
     // Software WebGL (SwiftShader): yield cleanly so main thread stays responsive without fenceSync deadlocks
     this.timeoutId = window.setTimeout(() => {
       this.timeoutId = null;
-      if (!this.disposed && this.rafId === null) {
+      if (!this.disposed && !this.contextLost && this.rafId === null) {
         this.rafId = requestAnimationFrame(this.tick);
       }
     }, 24);
@@ -1085,7 +1251,7 @@ export class PokerScene3D {
 
   private tick = () => {
     this.rafId = null;
-    if (this.disposed) return;
+    if (this.disposed || this.contextLost) return;
 
     const now = performance.now();
     const maxStep = this.isSoftwareGl ? 1.0 : 0.05;
@@ -1272,14 +1438,25 @@ export class PokerScene3D {
     canvas.removeEventListener('webglcontextrestored', this.handleContextRestored);
 
     disposeObject3D(this.scene);
+    this.keyLight.dispose();
+    this.casinoSpotLight.dispose();
+    this.hemiLight.dispose();
+    this.rimLight.dispose();
     this.contactShadowTex.dispose();
     this.cardBackTex.dispose();
     this.floorTex.dispose();
     this.chipSideTex.dispose();
     this.chipTopTex.dispose();
+    this.dealerPuckTex.dispose();
+    for (const tex of this.cardFaceTexCache.values()) {
+      tex.dispose();
+    }
+    this.cardFaceTexCache.clear();
+    this.cardFaceTexSet.clear();
     this.envRenderTarget.dispose();
     this.pmrem.dispose();
     this.renderer.dispose();
+    this.renderer.forceContextLoss();
     if (canvas.parentElement) {
       canvas.parentElement.removeChild(canvas);
     }

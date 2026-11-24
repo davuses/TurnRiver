@@ -3,15 +3,15 @@ name: Deploy TurnRiver to GitHub Pages
 on:
   push:
     branches: ['main', 'master']
+  pull_request:
+    branches: ['main', 'master']
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || 'pages' }}
   cancel-in-progress: false
 
 jobs:
@@ -25,27 +25,42 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Type-check with TypeScript
+        run: npm run lint
+
+      - name: Run unit tests
+        run: npm test
 
       - name: Build production bundle
         run: npm run build
 
       - name: Prepare SPA fallback and disable Jekyll
+        if: github.event_name != 'pull_request'
         run: |
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
 
       - name: Setup GitHub Pages
+        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
 
   deploy:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

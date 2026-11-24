@@ -6,12 +6,67 @@
 export class CasinoSoundEngine {
   private ctx: AudioContext | null = null;
   private noiseBuffer: AudioBuffer | null = null;
+  private userActivated = false;
+  private gestureListenersBound = false;
   public enabled = true;
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      this.bindGestureUnlock();
+    }
+  }
+
+  private bindGestureUnlock() {
+    if (this.gestureListenersBound || typeof window === 'undefined') return;
+    this.gestureListenersBound = true;
+    window.addEventListener('pointerdown', this.handleUserGesture, { capture: true, passive: true });
+    window.addEventListener('keydown', this.handleUserGesture, { capture: true, passive: true });
+  }
+
+  private unbindGestureUnlock() {
+    if (!this.gestureListenersBound || typeof window === 'undefined') return;
+    this.gestureListenersBound = false;
+    window.removeEventListener('pointerdown', this.handleUserGesture, { capture: true });
+    window.removeEventListener('keydown', this.handleUserGesture, { capture: true });
+  }
+
+  private handleUserGesture = () => {
+    this.userActivated = true;
+    if (!this.enabled) return;
+    try {
+      if (!this.ctx) {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          this.ctx = new AudioCtx();
+        }
+      }
+      if (this.ctx && this.ctx.state === 'suspended') {
+        void this.ctx.resume().catch(() => {});
+      }
+      if (this.ctx && this.ctx.state === 'running') {
+        this.unbindGestureUnlock();
+      }
+    } catch {
+      // Ignore Web Audio construction or resume failures
+    }
+  };
+
+  private hasUserActivation(): boolean {
+    if (this.userActivated) return true;
+    if (typeof navigator !== 'undefined') {
+      const nav = navigator as Navigator & { userActivation?: { hasBeenActive?: boolean } };
+      if (nav.userActivation?.hasBeenActive) return true;
+    }
+    return false;
+  }
 
   private ensureContext(): AudioContext | null {
     if (!this.enabled || typeof window === 'undefined') return null;
     try {
       if (!this.ctx) {
+        if (!this.hasUserActivation()) return null;
         const AudioCtx =
           window.AudioContext ||
           (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -19,9 +74,13 @@ export class CasinoSoundEngine {
         this.ctx = new AudioCtx();
       }
       if (this.ctx.state === 'suspended') {
-        void this.ctx.resume();
+        void this.ctx.resume().catch(() => {});
       }
-      if (!this.noiseBuffer && this.ctx) {
+      // Never schedule Web Audio nodes while suspended/closed (prevents autoplay queue pile-up)
+      if (this.ctx.state !== 'running') {
+        return null;
+      }
+      if (!this.noiseBuffer) {
         const sampleRate = this.ctx.sampleRate;
         const length = Math.floor(sampleRate * 0.4);
         const buf = this.ctx.createBuffer(1, length, sampleRate);
@@ -156,8 +215,9 @@ export class CasinoSoundEngine {
   }
 
   public dispose() {
+    this.unbindGestureUnlock();
     if (this.ctx) {
-      void this.ctx.close();
+      void this.ctx.close().catch(() => {});
       this.ctx = null;
     }
     this.noiseBuffer = null;

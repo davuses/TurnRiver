@@ -592,7 +592,7 @@ export function createCardBackTexture(): THREE.CanvasTexture {
   ctx.font = 'bold 54px Georgia, serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('FL', w / 2, h / 2 + 2);
+  ctx.fillText('TR', w / 2, h / 2 + 2);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -839,7 +839,9 @@ export function createSeatPlaqueTexture(
   folded: boolean,
   styleTag?: string,
   actionText?: string,
-  isWinner?: boolean
+  isWinner?: boolean,
+  winnerLabel?: string,
+  isAggressiveAction?: boolean
 ): THREE.CanvasTexture {
   const w = 320;
   const h = 136;
@@ -898,17 +900,29 @@ export function createSeatPlaqueTexture(
   ctx.fillText(`${stackBb.toFixed(1)} bb`, 20, 86);
 
   // Bottom-right live action tag or winner badge
-  const badgeText = isWinner ? 'WINNER' : actionText ? actionText.slice(0, 13) : '';
+  const badgeText = isWinner
+    ? (winnerLabel ?? 'WINNER').slice(0, 13)
+    : actionText
+      ? actionText.slice(0, 13)
+      : '';
   if (badgeText) {
+    const isAgg =
+      isAggressiveAction ??
+      (badgeText.includes('Raise') ||
+        badgeText.includes('Bet') ||
+        badgeText.includes('All-In') ||
+        badgeText.includes('加注') ||
+        badgeText.includes('下注') ||
+        badgeText.includes('全下'));
     ctx.textAlign = 'right';
     ctx.fillStyle = isWinner
       ? '#fbbf24'
       : folded
         ? '#64748b'
-        : badgeText.includes('Raise') || badgeText.includes('Bet') || badgeText.includes('All-In')
+        : isAgg
           ? '#34d399'
           : '#38bdf8';
-    ctx.font = 'bold 20px "JetBrains Mono", monospace';
+    ctx.font = 'bold 20px "JetBrains Mono", Inter, system-ui, sans-serif';
     ctx.fillText(badgeText, w - 20, 92);
   }
 
