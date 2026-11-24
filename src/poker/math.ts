@@ -1,5 +1,6 @@
 import type { Card } from './types';
 import {
+  assertUniqueCards,
   cardKey,
   createDeck,
   evaluateHand,
@@ -61,11 +62,13 @@ export interface EquityResult {
   villainEquityPct: number;
   tiePct: number;
   samples: number;
+  method: 'exact' | 'monte_carlo';
 }
 
 /**
- * Computes exact equity on the turn (44 river cards) or fast deterministic/Monte Carlo
- * equity on flop/preflop against a specific villain holding.
+ * Computes exact equity on the river (1), turn (44 river cards), and flop (all C(45,2) = 990
+ * turn+river runouts), falling back to Monte Carlo sampling only when more than 2 cards remain
+ * (e.g., preflop).
  */
 export function computeHandVsHandEquity(
   hero: [Card, Card],
@@ -74,6 +77,11 @@ export function computeHandVsHandEquity(
   iterations = 1200,
   rng: () => number = Math.random
 ): EquityResult {
+  assertUniqueCards([...hero, ...villain, ...board], 'computeHandVsHandEquity');
+  if (board.length > 5) {
+    throw new Error(`Board cannot exceed 5 cards, received ${board.length}`);
+  }
+
   const dead = new Set([...hero, ...villain, ...board].map(cardKey));
   const remaining = createDeck().filter((c) => !dead.has(cardKey(c)));
   const cardsNeeded = 5 - board.length;
@@ -81,6 +89,7 @@ export function computeHandVsHandEquity(
   let wins = 0;
   let ties = 0;
   let total = 0;
+  let method: 'exact' | 'monte_carlo' = 'exact';
 
   if (cardsNeeded === 0) {
     const h = evaluateHand([...hero, ...board]).score;
@@ -90,10 +99,11 @@ export function computeHandVsHandEquity(
       villainEquityPct: v > h ? 100 : h === v ? 50 : 0,
       tiePct: h === v ? 100 : 0,
       samples: 1,
+      method: 'exact',
     };
   }
 
-  // Exact enumeration on Turn (only 44 remaining river cards)
+  // Exact enumeration on Turn (44 remaining river cards)
   if (cardsNeeded === 1) {
     for (const river of remaining) {
       const fullBoard = [...board, river];
@@ -103,20 +113,33 @@ export function computeHandVsHandEquity(
       else if (h === v) ties++;
       total++;
     }
-  } else {
-    // Fast Monte Carlo sampling for Flop / Preflop
+  } else if (cardsNeeded === 2) {
+    // Exact deterministic enumeration on Flop: all C(45, 2) = 990 turn+river pairs
     const n = remaining.length;
-    for (let iter = 0; iter < iterations; iter++) {
-      const picked: Card[] = [];
-      const usedIdx = new Set<number>();
-      while (picked.length < cardsNeeded) {
-        const idx = Math.floor(rng() * n);
-        if (!usedIdx.has(idx)) {
-          usedIdx.add(idx);
-          picked.push(remaining[idx]);
-        }
+    for (let i = 0; i < n; i++) {
+      const turn = remaining[i];
+      for (let j = i + 1; j < n; j++) {
+        const fullBoard = [...board, turn, remaining[j]];
+        const h = evaluateHand([...hero, ...fullBoard]).score;
+        const v = evaluateHand([...villain, ...fullBoard]).score;
+        if (h > v) wins++;
+        else if (h === v) ties++;
+        total++;
       }
-      const fullBoard = [...board, ...picked];
+    }
+  } else {
+    // Monte Carlo fallback when > 2 board cards remain (preflop) via partial Fisher-Yates
+    method = 'monte_carlo';
+    const n = remaining.length;
+    const pool = [...remaining];
+    for (let iter = 0; iter < iterations; iter++) {
+      for (let k = 0; k < cardsNeeded; k++) {
+        const j = k + Math.floor(rng() * (n - k));
+        const tmp = pool[k];
+        pool[k] = pool[j];
+        pool[j] = tmp;
+      }
+      const fullBoard = [...board, ...pool.slice(0, cardsNeeded)];
       const h = evaluateHand([...hero, ...fullBoard]).score;
       const v = evaluateHand([...villain, ...fullBoard]).score;
       if (h > v) wins++;
@@ -132,7 +155,23 @@ export function computeHandVsHandEquity(
     villainEquityPct: Number((100 - heroEquity).toFixed(1)),
     tiePct: Number(tiePct.toFixed(1)),
     samples: total,
+    method,
   };
+}
+
+function highestStraightRank(ranks: Set<number>): number {
+  for (let high = 14; high >= 5; high--) {
+    let ok = true;
+    for (let offset = 0; offset < 5; offset++) {
+      const needed = high - offset === 1 ? 14 : high - offset;
+      if (!ranks.has(needed)) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return high;
+  }
+  return 0;
 }
 
 export interface DrawAnalysis {
@@ -155,14 +194,18 @@ export function analyzeDrawsAndOuts(
   board: Card[],
   villain?: [Card, Card]
 ): DrawAnalysis {
+  assertUniqueCards([...hero, ...board, ...(villain ?? [])], 'analyzeDrawsAndOuts');
   const dead = new Set([...hero, ...board, ...(villain ?? [])].map(cardKey));
   const remaining = createDeck().filter((c) => !dead.has(cardKey(c)));
   const all = [...hero, ...board];
 
-  // Flush draw check (4 to a flush)
+  // Flush draw check (4 to a flush, requiring at least one hero hole card of that suit)
   let flushDraw = false;
   for (const s of SUITS) {
-    if (all.filter((c) => c.suit === s).length === 4) {
+    if (
+      all.filter((c) => c.suit === s).length === 4 &&
+      hero.some((c) => c.suit === s)
+    ) {
       flushDraw = true;
     }
   }
@@ -187,16 +230,25 @@ export function analyzeDrawsAndOuts(
     }
   }
 
-  // Detect OESD vs Gutshot by counting non-flush straight outs
-  let straightOutRanks = new Set<number>();
-  if (currentEval.category < HandCategory.Straight) {
-    for (const nextCard of remaining) {
-      const nextEval = evaluateHand([...hero, ...board, nextCard]);
-      if (
-        nextEval.category === HandCategory.Straight ||
-        nextEval.category === HandCategory.StraightFlush
-      ) {
-        straightOutRanks.add(RANK_VALUE[nextCard.rank]);
+  // Detect OESD vs Gutshot by counting straight-making ranks that beat any board-only straight
+  const straightOutRanks = new Set<number>();
+  const allRanks = new Set(all.map((c) => RANK_VALUE[c.rank]));
+  const boardRanks = new Set(board.map((c) => RANK_VALUE[c.rank]));
+  if (currentEval.category < HandCategory.Straight && highestStraightRank(allRanks) === 0) {
+    const remainingRanks = new Set(remaining.map((c) => RANK_VALUE[c.rank]));
+    for (const r of remainingRanks) {
+      if (allRanks.has(r)) continue;
+      const heroWithR = new Set(allRanks);
+      heroWithR.add(r);
+      const heroStraight = highestStraightRank(heroWithR);
+      if (heroStraight === 0) continue;
+
+      const boardStraight =
+        board.length >= 4
+          ? highestStraightRank(new Set([...boardRanks, r]))
+          : 0;
+      if (heroStraight > boardStraight) {
+        straightOutRanks.add(r);
       }
     }
   }

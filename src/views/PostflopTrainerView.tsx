@@ -530,7 +530,9 @@ export function PostflopTrainerView({
                 <li>{t('postflop.check1')}</li>
                 <li>{t('postflop.check2')}</li>
                 <li>
-                  {t('postflop.check3Prefix')} {spr} {t('postflop.check3Suffix')}
+                  {locale === 'zh-CN'
+                    ? `${t('postflop.check3Prefix')} ${spr}${t('postflop.check3Suffix')}`
+                    : `${t('postflop.check3Prefix')} ${spr} ${t('postflop.check3Suffix')}`}
                 </li>
               </ul>
             </div>

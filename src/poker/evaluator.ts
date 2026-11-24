@@ -71,6 +71,17 @@ export function cardKey(card: Card): string {
   return `${card.rank}${card.suit}`;
 }
 
+export function assertUniqueCards(cards: Card[], context = 'card list'): void {
+  const seen = new Set<string>();
+  for (const card of cards) {
+    const key = cardKey(card);
+    if (seen.has(key)) {
+      throw new Error(`Duplicate card ${key} in ${context}`);
+    }
+    seen.add(key);
+  }
+}
+
 export function parseCard(code: string): Card {
   const rank = code[0] as Rank;
   const suit = code[1] as Suit;
@@ -271,6 +282,8 @@ function findStraightHigh(uniqueDescValues: number[]): number {
   return 0;
 }
 
+const SUIT_INDEX: Record<Suit, number> = { s: 0, h: 1, d: 2, c: 3 };
+
 /**
  * Exact 5-to-7 card Texas Hold'em hand evaluator.
  */
@@ -281,9 +294,25 @@ export function evaluateHand(cards: Card[]): EvaluatedHand {
 
   const rankCounts = new Map<number, number>();
   const suitGroups: Record<Suit, number[]> = { s: [], h: [], d: [], c: [] };
+  let seenLo = 0;
+  let seenHi = 0;
 
   for (const card of cards) {
     const val = RANK_VALUE[card.rank];
+    const bitId = (val - 2) * 4 + SUIT_INDEX[card.suit];
+    if (bitId < 30) {
+      const bit = 1 << bitId;
+      if ((seenLo & bit) !== 0) {
+        throw new Error(`Duplicate card ${cardKey(card)} in evaluateHand`);
+      }
+      seenLo |= bit;
+    } else {
+      const bit = 1 << (bitId - 30);
+      if ((seenHi & bit) !== 0) {
+        throw new Error(`Duplicate card ${cardKey(card)} in evaluateHand`);
+      }
+      seenHi |= bit;
+    }
     rankCounts.set(val, (rankCounts.get(val) ?? 0) + 1);
     suitGroups[card.suit].push(val);
   }

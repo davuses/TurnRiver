@@ -102,7 +102,7 @@ const DRAW_SCENARIOS: {
     name: 'Flush Draw + Overcard on Turn',
     hero: ['Ah', '5h'],
     villain: ['Qs', 'Js'],
-    board: ['Qh', '9h', '4c', '2d'],
+    board: ['Qh', '9h', '4c', '7d'],
     potBb: 20,
     betBb: 15,
   },
@@ -167,7 +167,8 @@ export function generateMathQuestion(
     const isFlop = board.length === 3;
     const streetName = isFlop ? 'Flop' : 'Turn';
     const unknownCardsCount = 52 - hero.length - villain.length - board.length;
-    const equityMethod: 'exact_enum' | 'monte_carlo' = isFlop ? 'monte_carlo' : 'exact_enum';
+    const equityMethod: 'exact_enum' | 'monte_carlo' =
+      eq.method === 'exact' ? 'exact_enum' : 'monte_carlo';
     const potBeforeCall = Number((base.potBb + base.betBb).toFixed(1));
     const reqEq = requiredEquityPct(potBeforeCall, base.betBb);
     const betPotPct = Math.round((base.betBb / Math.max(0.1, base.potBb)) * 100);
@@ -187,7 +188,7 @@ export function generateMathQuestion(
       categoryLabel: 'Outs & Hand Equity',
       scenarioId: base.id,
       prompt: isFlop
-        ? `On the ${streetName} (${base.name}), estimate your showdown equity (%) against Villain's revealed hand (evaluated via ${eq.samples}-run Monte Carlo simulation, including ties).`
+        ? `On the ${streetName} (${base.name}), estimate your showdown equity (%) against Villain's revealed hand (evaluated via exact enumeration of all ${eq.samples} turn+river runouts, including ties).`
         : `On the ${streetName} (${base.name}), calculate your showdown equity (%) against Villain's revealed hand (evaluated via exact enumeration of all ${unknownCardsCount} unknown river cards, including ties).`,
       contextLine: `6-Max · ${streetName} · ${draw.cleanOuts} direct outs (${unknownCardsCount} unknown cards) · Break-even equity vs ${base.betBb}bb bet: ${reqEq}%`,
       unit: '%',
@@ -216,7 +217,7 @@ export function generateMathQuestion(
       formulaSteps: [
         `Direct improving outs on next card: ${draw.cleanOuts} / ${unknownCardsCount} = ${draw.nextCardEquityPct}% chance to take the lead on the next card`,
         isFlop
-          ? `Rule of 4 shortcut: ${draw.cleanOuts} × 4 ≈ ${Math.min(72, draw.cleanOuts * 4)}% · Showdown equity (${eq.samples}-run Monte Carlo simulation): ${eq.heroEquityPct}%${tieDetail}`
+          ? `Rule of 4 shortcut: ${draw.cleanOuts} × 4 ≈ ${Math.min(72, draw.cleanOuts * 4)}% · Exact showdown equity (all ${eq.samples} turn+river runouts): ${eq.heroEquityPct}%${tieDetail}`
           : `Showdown equity via exact enumeration of all ${eq.samples} river cards: ${eq.heroEquityPct}%${tieDetail}`,
         `Compare vs break-even pot odds (${reqEq}%): ${compareNote}`,
       ],

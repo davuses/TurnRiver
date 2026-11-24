@@ -28,6 +28,30 @@ export function resolveInitialLocale(search: string, stored: string | null): Loc
   return 'en';
 }
 
+export function buildLocaleSyncUrl(href: string, nextLocale: Locale): string | null {
+  try {
+    const url = new URL(href);
+    if (!url.searchParams.has('lang')) return null;
+    if (url.searchParams.get('lang') === nextLocale) return null;
+    url.searchParams.set('lang', nextLocale);
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+function syncLocaleQueryParam(nextLocale: Locale): void {
+  if (typeof window === 'undefined' || !window.history?.replaceState) return;
+  try {
+    const nextUrl = buildLocaleSyncUrl(window.location.href, nextLocale);
+    if (nextUrl) {
+      window.history.replaceState(window.history.state, '', nextUrl);
+    }
+  } catch {
+    // Ignore restricted history environments (e.g. sandboxed iframes)
+  }
+}
+
 function detectInitialLocale(): Locale {
   if (typeof window === 'undefined') return 'en';
   let stored: string | null = null;
@@ -56,11 +80,12 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);
+    syncLocaleQueryParam(next);
   }, []);
 
   const toggleLocale = useCallback(() => {
-    setLocaleState((prev) => (prev === 'en' ? 'zh-CN' : 'en'));
-  }, []);
+    setLocale(locale === 'en' ? 'zh-CN' : 'en');
+  }, [locale, setLocale]);
 
   const t = useCallback(
     (key: TranslationKey) => translateKey(locale, key),

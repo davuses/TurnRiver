@@ -37,10 +37,12 @@ import {
   buildPresetConfig,
   buildSidePots,
   chooseBotAction,
+  computeEffectivePotOdds,
   computeHudDisplay,
   createInitialTable,
   createTableFromConfig,
   DEFAULT_ARENA_CONFIG,
+  detectDrawBonus,
   getLegalActions,
   rebuyHeroTo100,
   resolveShowdown,
@@ -681,4 +683,306 @@ test('Hand Reading counts exact board-blocked combos across all 4 spots', () => 
     );
     assert.equal(res.overlapPct, 100);
   }
+});
+
+test('P2-3: Flop equity uses exact 990-pair enumeration (deterministic) and preflop keeps Monte Carlo', () => {
+  // combo_draw_flop: 9d 8d vs As Kc on Kd 7d 6c -> exact 562/990 = 56.77% (56.8% at 1dp)
+  const hero = parseCards(['9d', '8d']) as [any, any];
+  const villain = parseCards(['As', 'Kc']) as [any, any];
+  const flop = parseCards(['Kd', '7d', '6c']);
+
+  const eqA = computeHandVsHandEquity(hero, villain, flop, 1400, () => 0.01);
+  const eqB = computeHandVsHandEquity(hero, villain, flop, 1400, () => 0.99);
+  assert.equal(eqA.method, 'exact');
+  assert.equal(eqA.samples, 990);
+  assert.equal(eqA.heroEquityPct, 56.8);
+  assert.deepEqual(eqA, eqB, 'Exact flop enumeration must be 100% deterministic regardless of RNG');
+
+  // Preflop (cardsNeeded = 5) falls back to Monte Carlo
+  let preSeed = 42;
+  const preRng = () => {
+    preSeed = (preSeed * 1664525 + 1013904223) % 4294967296;
+    return preSeed / 4294967296;
+  };
+  const preEq = computeHandVsHandEquity(hero, villain, [], 250, preRng);
+  assert.equal(preEq.method, 'monte_carlo');
+  assert.equal(preEq.samples, 250);
+
+  // Math drill flop question reports exact_enum with 990 samples (no Monte Carlo wording)
+  const flopDrill = generateMathQuestion('OUTS_EQUITY', () => 0.51); // combo_draw_flop
+  assert.equal(flopDrill.scenarioId, 'combo_draw_flop');
+  assert.equal(flopDrill.equityMethod, 'exact_enum');
+  assert.equal(flopDrill.equitySamples, 990);
+  assert.equal(flopDrill.exactAnswer, 56.8);
+  assert.ok(!flopDrill.prompt.includes('Monte Carlo'));
+});
+
+test('P3-15: fd_overcard_turn has exact 12 clean outs (9 flush + 3 Ace overcards, 27.3%) with no hidden wheel gutshot', () => {
+  const q = generateMathQuestion('OUTS_EQUITY', () => 0.76); // fd_overcard_turn (index 3 of 4)
+  assert.equal(q.scenarioId, 'fd_overcard_turn');
+  assert.equal(q.cleanOuts, 12);
+  assert.equal(q.exactAnswer, 27.3);
+  assert.equal(q.equityMethod, 'exact_enum');
+  assert.equal(q.equitySamples, 44);
+
+  const draw = analyzeDrawsAndOuts(q.heroCards!, q.board!, q.villainCards!);
+  assert.equal(draw.flushDraw, true);
+  assert.equal(draw.openEndedStraightDraw, false);
+  assert.equal(draw.gutshotStraightDraw, false);
+  assert.equal(draw.overcards, 1);
+  assert.equal(draw.cleanOuts, 12);
+});
+
+test('P2-1: Uncontested fold awards pot immediately without dealing unused community cards', () => {
+  // Preflop uncontested fold in Heads-Up keeps board.length === 0
+  let hu = createTableFromConfig({ ...DEFAULT_ARENA_CONFIG, tableSize: 2, botArchetypes: ['Balanced Reg'] });
+  hu = startNewHand(hu, () => 0.3);
+  assert.equal(hu.phase, 'PREFLOP');
+  assert.equal(hu.board.length, 0);
+  const firstActor = hu.actingSeatIndex!;
+  const afterFold = applyPlayerAction(hu, firstActor, 'fold');
+  assert.equal(afterFold.phase, 'SHOWDOWN');
+  assert.equal(afterFold.board.length, 0, 'Preflop uncontested fold must not deal community cards');
+  assert.equal(afterFold.winnerSpec?.type, 'uncontested');
+
+  // Flop uncontested fold keeps board.length === 3
+  let flopTable = startNewHand(
+    createTableFromConfig({ ...DEFAULT_ARENA_CONFIG, tableSize: 2, botArchetypes: ['Balanced Reg'] }),
+    () => 0.4
+  );
+  flopTable = {
+    ...flopTable,
+    phase: 'FLOP',
+    board: parseCards(['As', 'Kd', '7c']),
+    potBb: 10,
+    currentBetBb: 5,
+    minRaiseBb: 10,
+    actingSeatIndex: 0,
+    seats: flopTable.seats.map((s, idx) => ({
+      ...s,
+      cards: (idx === 0 ? parseCards(['Qh', 'Jc']) : parseCards(['Ts', '9s'])) as [any, any],
+      streetBetBb: idx === 1 ? 5 : 0,
+      folded: false,
+      allIn: false,
+      actedThisStreet: idx === 1,
+    })),
+  };
+  const afterFlopFold = applyPlayerAction(flopTable, 0, 'fold');
+  assert.equal(afterFlopFold.phase, 'SHOWDOWN');
+  assert.equal(afterFlopFold.board.length, 3, 'Flop uncontested fold must not deal turn/river');
+});
+
+test('P2-2: applyPlayerAction enforces legality guards for check, 0bb call normalization, and raise floor', () => {
+  let table = startNewHand(
+    createTableFromConfig({ ...DEFAULT_ARENA_CONFIG, tableSize: 2, botArchetypes: ['Balanced Reg'] }),
+    () => 0.5
+  );
+  // Facing a 10bb bet on flop: checking must be rejected (state returned unchanged)
+  const facingBet: PokerTableState = {
+    ...table,
+    phase: 'FLOP',
+    board: parseCards(['Kh', '9c', '4d']),
+    potBb: 16,
+    currentBetBb: 10,
+    minRaiseBb: 20,
+    actingSeatIndex: 0,
+    seats: table.seats.map((s, idx) => ({
+      ...s,
+      stackBb: idx === 0 ? 50 : 90,
+      streetBetBb: idx === 1 ? 10 : 0,
+      folded: false,
+      allIn: false,
+      actedThisStreet: idx === 1,
+      stats: { ...s.stats, vpipHands: 0, postflopCalls: 0 },
+      didVpipThisHand: false,
+    })),
+  };
+
+  const illegalCheck = applyPlayerAction(facingBet, 0, 'check');
+  assert.equal(illegalCheck, facingBet, 'Check facing a bet must return state unchanged');
+
+  // Calling 0bb when checked to must normalize to check (no Calls 0bb, no postflopCalls / VPIP inflation)
+  const checkedTo: PokerTableState = {
+    ...facingBet,
+    currentBetBb: 0,
+    minRaiseBb: 1,
+    seats: facingBet.seats.map((s) => ({ ...s, streetBetBb: 0, actedThisStreet: false })),
+  };
+  const zeroCall = applyPlayerAction(checkedTo, 0, 'call');
+  const lastLog = zeroCall.actionLog[zeroCall.actionLog.length - 1];
+  assert.equal(lastLog.text, 'Checks', '0bb call must normalize to Checks');
+  assert.equal(lastLog.actionSpec?.kind, 'check');
+  assert.equal(zeroCall.seats[0].stats.postflopCalls, 0, '0bb call must not inflate postflopCalls');
+
+  // Invalid raise amounts (below currentBetBb, NaN, or short-stack raise) must never reduce currentBetBb
+  const lowRaise = applyPlayerAction(facingBet, 0, 'raise', 3);
+  assert.ok(lowRaise.currentBetBb >= facingBet.currentBetBb, 'Low raise must never reduce currentBetBb');
+
+  const nanRaise = applyPlayerAction(facingBet, 0, 'raise', Number.NaN);
+  assert.ok(
+    Number.isFinite(nanRaise.currentBetBb) && nanRaise.currentBetBb >= facingBet.currentBetBb,
+    'NaN raise must never corrupt or reduce currentBetBb'
+  );
+
+  const shortStackFacingBet: PokerTableState = {
+    ...facingBet,
+    currentBetBb: 50,
+    minRaiseBb: 100,
+    seats: facingBet.seats.map((s, idx) => ({
+      ...s,
+      cards: (idx === 0 ? parseCards(['Qh', 'Jc']) : parseCards(['Ts', '9s'])) as [any, any],
+      stackBb: idx === 0 ? 20 : 50,
+      streetBetBb: idx === 1 ? 50 : 0,
+    })),
+  };
+  const shortRaise = applyPlayerAction(shortStackFacingBet, 0, 'raise', 20);
+  // Short-stack 'raise' normalizes to an all-in call (completing the street to SHOWDOWN) without lowering currentBetBb mid-street
+  assert.equal(shortRaise.seats[0].allIn, true, 'Short-stack raise below currentBetBb must normalize to all-in call');
+  assert.equal(shortRaise.phase, 'SHOWDOWN', 'All-in call against acted opponent advances cleanly to SHOWDOWN');
+});
+
+test('P2-4: Effective pot-odds capping excludes uncallable overbet excess for Hero audits and bots', () => {
+  const base = startNewHand(
+    createTableFromConfig({ ...DEFAULT_ARENA_CONFIG, tableSize: 2, botArchetypes: ['Balanced Reg'] }),
+    () => 0.25
+  );
+  // Prior pot = 10bb; Villain shoves 100bb -> state.potBb = 110bb; Hero has 20bb stack (0 streetBet)
+  // Callable portion is 20bb -> effectivePotBb = 10 + 20 = 30bb, effectiveToCall = 20bb -> reqEq = 20/50 = 40.0%
+  const shortStackSpot: PokerTableState = {
+    ...base,
+    phase: 'FLOP',
+    board: parseCards(['As', 'Kd', 'Qh']),
+    potBb: 110,
+    currentBetBb: 100,
+    minRaiseBb: 200,
+    actingSeatIndex: 0,
+    seats: base.seats.map((s, idx) => ({
+      ...s,
+      cards: (idx === 0 ? parseCards(['7c', '2d']) : parseCards(['Ac', 'Ks'])) as [any, any],
+      stackBb: idx === 0 ? 20 : 0,
+      streetBetBb: idx === 1 ? 100 : 0,
+      totalInvestedBb: idx === 1 ? 105 : 5,
+      folded: false,
+      allIn: idx === 1,
+      actedThisStreet: idx === 1,
+    })),
+  };
+
+  const eff = computeEffectivePotOdds(shortStackSpot, shortStackSpot.seats[0]);
+  assert.equal(eff.effectiveToCall, 20);
+  assert.equal(eff.effectivePotBb, 30);
+  assert.equal(eff.reqEqPct, 40);
+
+  // Hero calling logs Call 20bb (NOT Call 100bb) and 40% required equity
+  const afterHeroCall = applyPlayerAction(shortStackSpot, 0, 'call');
+  const audit = afterHeroCall.heroAudits[0];
+  assert.equal(audit.chosenAction, 'Call 20bb');
+  assert.equal(audit.noteSpec?.toCallBb, 20);
+  assert.equal(audit.noteSpec?.reqEqPct, 40);
+
+  // Bot holding 72o on As Kd Qh with 20bb facing 100bb shove must fold (not call thinking pot odds are 15.4%)
+  const botShortSpot: PokerTableState = {
+    ...shortStackSpot,
+    actingSeatIndex: 1,
+    seats: shortStackSpot.seats.map((s, idx) => ({
+      ...s,
+      cards: (idx === 1 ? parseCards(['7c', '2d']) : parseCards(['Ac', 'Ks'])) as [any, any],
+      stackBb: idx === 1 ? 20 : 0,
+      streetBetBb: idx === 0 ? 100 : 0,
+      allIn: idx === 0,
+      actedThisStreet: idx === 0,
+    })),
+  };
+  const botMove = chooseBotAction(botShortSpot, 1, () => 0.5);
+  assert.equal(botMove.type, 'fold', 'Short-stack bot with 72o must fold facing 100bb shove (40% effective pot odds)');
+});
+
+test('P2-7: Duplicate-card guards throw clear errors in evaluateHand, computeHandVsHandEquity, and analyzeDrawsAndOuts', () => {
+  assert.throws(
+    () => evaluateHand(parseCards(['As', 'As', 'Kd', 'Qh', 'Jc'])),
+    /Duplicate card As/
+  );
+  assert.throws(
+    () =>
+      computeHandVsHandEquity(
+        parseCards(['As', 'Kh']) as [any, any],
+        parseCards(['As', 'Qd']) as [any, any],
+        parseCards(['7c', '8d', '9s'])
+      ),
+    /Duplicate card As/
+  );
+  assert.throws(
+    () =>
+      analyzeDrawsAndOuts(
+        parseCards(['As', 'Kh']) as [any, any],
+        parseCards(['Kh', '8d', '9s'])
+      ),
+    /Duplicate card Kh/
+  );
+});
+
+test('P3-16: Board-only 4-straight and already-made straight are not counted as Hero straight draws', () => {
+  // 4-straight on board (5-6-7-8) with unrelated Hero hole cards Kh 2c -> NOT a Hero straight draw
+  const heroBlank = parseCards(['Kh', '2c']) as [any, any];
+  const boardFourStraight = parseCards(['5s', '6d', '7c', '8h']);
+  const drawBlank = analyzeDrawsAndOuts(heroBlank, boardFourStraight);
+  assert.equal(drawBlank.openEndedStraightDraw, false);
+  assert.equal(drawBlank.gutshotStraightDraw, false);
+  assert.equal(detectDrawBonus(heroBlank, boardFourStraight).straightDraw, false);
+
+  // Hero holds Ts 2c on 5s 6d 7c 8h -> 9 makes a Ten-high straight beating board's 9-high (genuine gutshot)
+  const heroHigherGutshot = parseCards(['Ts', '2c']) as [any, any];
+  const drawHigher = analyzeDrawsAndOuts(heroHigherGutshot, boardFourStraight);
+  assert.equal(drawHigher.gutshotStraightDraw, true);
+  assert.equal(drawHigher.openEndedStraightDraw, false);
+  assert.equal(detectDrawBonus(heroHigherGutshot, boardFourStraight).straightDraw, true);
+
+  // Already-made straight (Jh Th on 9d 8s 7c) must NOT be tagged as a straight draw
+  const heroMade = parseCards(['Jh', 'Th']) as [any, any];
+  const flopStraight = parseCards(['9d', '8s', '7c']);
+  const drawMade = analyzeDrawsAndOuts(heroMade, flopStraight);
+  assert.equal(drawMade.openEndedStraightDraw, false);
+  assert.equal(drawMade.gutshotStraightDraw, false);
+  assert.equal(detectDrawBonus(heroMade, flopStraight).straightDraw, false);
+
+  // Board-only 4-flush (Ks 7s 4s 2s) when Hero holds no spades must NOT be a Hero flush draw
+  const heroNoSpade = parseCards(['Ah', 'Qd']) as [any, any];
+  const fourFlushBoard = parseCards(['Ks', '7s', '4s', '2s']);
+  assert.equal(analyzeDrawsAndOuts(heroNoSpade, fourFlushBoard).flushDraw, false);
+  assert.equal(detectDrawBonus(heroNoSpade, fourFlushBoard).flushDraw, false);
+});
+
+test('P2-6: FACING_3BET drills only sample hands from Hero plausible RFI opening range (never trash like 72o/83o)', () => {
+  let seed = 2026;
+  const rng = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+
+  const rfiByPos = new Map(
+    PREFLOP_TEMPLATES.filter((t) => t.scenarioType === 'RFI').map((t) => [t.heroPos, t])
+  );
+  const trashHands = new Set(['72o', '83o', '92o', 'J3o', 'T2o', '42o', '82o']);
+  let foldSamples = 0;
+  let continueSamples = 0;
+
+  for (let i = 0; i < 400; i++) {
+    const spot = generatePreflopSpot('FACING_3BET', 'ALL', rng);
+    assert.ok(
+      !trashHands.has(spot.handKey),
+      `FACING_3BET (${spot.template.id}) sampled impossible trash hand ${spot.handKey}`
+    );
+    const rfi = rfiByPos.get(spot.template.heroPos)!;
+    const rfiCell = rfi.matrix[spot.handKey];
+    const cell = spot.template.matrix[spot.handKey];
+    assert.ok(
+      (rfiCell?.raise ?? 0) > 0 || cell.raise > 0 || cell.call > 0,
+      `FACING_3BET (${spot.template.id}) sampled ${spot.handKey} outside ${spot.template.heroPos} RFI range`
+    );
+    if (cell.fold === 100) foldSamples++;
+    else continueSamples++;
+  }
+
+  assert.ok(foldSamples > 0, 'FACING_3BET should still sample realistic fold-to-3bet hands from RFI range');
+  assert.ok(continueSamples > 0, 'FACING_3BET should sample continuing hands');
 });

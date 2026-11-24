@@ -53,7 +53,7 @@ export function Studio3DTable({
   isTheater = false,
   onToggleTheater,
 }: Studio3DTableProps) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const mountRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<PokerScene3D | null>(null);
   const didMountHandRef = useRef(false);
@@ -68,7 +68,8 @@ export function Studio3DTable({
   const [showProps, setShowProps] = useState<boolean>(true);
   const [localSoundEnabled, setLocalSoundEnabled] = useState<boolean>(true);
   const [dockVisible, setDockVisible] = useState(true);
-  const [webglError, setWebglError] = useState<string | null>(null);
+  const [hasWebglError, setHasWebglError] = useState(false);
+  const [webglErrorDetail, setWebglErrorDetail] = useState<string | null>(null);
 
   const effectiveSoundEnabled =
     typeof soundEnabledProp === 'boolean' ? soundEnabledProp : localSoundEnabled;
@@ -100,9 +101,11 @@ export function Studio3DTable({
         soundEnabled: effectiveSoundEnabled,
       });
       sceneRef.current = controller;
-      setWebglError(null);
+      setHasWebglError(false);
+      setWebglErrorDetail(null);
     } catch (err) {
-      setWebglError(err instanceof Error ? err.message : t('studio3d.webglErrorFallback'));
+      setHasWebglError(true);
+      setWebglErrorDetail(err instanceof Error && err.message ? err.message : null);
     }
 
     return () => {
@@ -229,11 +232,15 @@ export function Studio3DTable({
         className="w-full h-full cursor-grab active:cursor-grabbing"
       />
 
-      {webglError && (
+      {hasWebglError && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#090D14] p-6 text-center">
           <div className="max-w-md space-y-2">
             <p className="text-sm font-semibold text-rose-400">{t('studio3d.webglErrorTitle')}</p>
-            <p className="text-xs text-slate-400">{webglError}</p>
+            <p className="text-xs text-slate-400">
+              {locale === 'zh-CN'
+                ? t('studio3d.webglErrorFallback')
+                : webglErrorDetail || t('studio3d.webglErrorFallback')}
+            </p>
           </div>
         </div>
       )}

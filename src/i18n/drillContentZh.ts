@@ -321,14 +321,16 @@ const POSTFLOP_ZH: Record<string, PostflopZhCopy> = {
   },
 };
 
-function localizePostflopLogLine(locale: Locale, line: string): string {
+export function localizePostflopLogLine(locale: Locale, line: string): string {
   if (locale === 'en') return line;
   return translateActionText(locale, line)
     .replace(/,/g, '，')
     .replace(/:/g, '：')
     .replace(/\(/g, '（')
     .replace(/\)/g, '）')
-    .replace(/轮到\s*([A-Z]{2,3})/g, '轮到 $1 行动');
+    .replace(/轮到\s*([A-Z]{2,3})/g, '轮到 $1 行动')
+    .replace(/\s*([，：（）])\s*/g, '$1')
+    .trim();
 }
 
 export function localizePostflopSpot(
@@ -385,7 +387,7 @@ const HAND_READING_ZH: Record<string, HandReadingZhCopy> = {
     promptQuestion: '请勾选 UTG 在 K♠ 8♦ 3♣ 2♥ 转牌后位过牌后，可能持有的手牌范围。',
     explanation:
       '当 UTG 在 K-8-3 翻牌持续下注、并在白板 2♥ 转牌选择在后位过牌时，最强的一批价值成牌（AA、KK、88、AK、KQ）通常会继续下注。因此 UTG 的过牌范围明显封顶在中等口袋对（QQ–99、77–66）、偏弱的 Kx（KJs、KTs）以及 A 高摊牌牌型。',
-    keyCombosNote: '实战提示：若河牌继续发白板，由于 UTG 范围里大多缺少 AA／KK／AK，面对大尺度两极探针下注会承受较大压力。',
+    keyCombosNote: '实战提示：若河牌继续发白板，由于 UTG 范围里大多缺少 AA／KK／AK，面对大尺度两极化领先下注会承受较大压力。',
   },
   'hr-bb-xr-low-board': {
     title: 'BB 在 8♠ 7♠ 3♦ 低张相连两同花牌面的过牌加注范围',
@@ -520,7 +522,7 @@ export function localizeMathQuestion(
     const reqEq = q.breakEvenPct ?? 0;
     const heroEq = q.heroEquityPct ?? q.exactAnswer;
     const tiePct = q.tiePct ?? 0;
-    const samples = q.equitySamples ?? (isFlop ? 1400 : unknownCards);
+    const samples = q.equitySamples ?? (isFlop ? 990 : unknownCards);
     const isExactEnum = q.equityMethod === 'exact_enum' || (!isFlop && q.equityMethod !== 'monte_carlo');
 
     const tieSuffix = tiePct > 0 ? `（含 ${tiePct}% 平局分池）` : '（当前无平局分池）';
@@ -531,17 +533,21 @@ export function localizeMathQuestion(
           ? `恰好等于盈亏平衡所需最低权益（${reqEq}%），仅按直接底池赔率跟注为 0 EV（盈亏平衡）`
           : `低于盈亏平衡所需最低权益（${reqEq}%），仅看直接赔率跟注为负 EV，需结合隐含赔率评估`;
 
+    const exactUnitZh = isFlop ? `全部 ${samples} 种未知转牌与河牌组合` : `全部 ${samples} 张未知河牌`;
+
     return {
       ...q,
       categoryLabel: translateMathCategory(locale, q.categoryLabel),
       prompt: isExactEnum
-        ? `当前处于${streetZh}（${scenarioZh}），对抗对手亮出的底牌，请计算你的摊牌权益（%，计入平局分池，参考解由全部 ${samples} 张未知河牌精确枚举得出）。`
-        : `当前处于${streetZh}（${scenarioZh}），对抗对手亮出的底牌，请估算你的摊牌权益（%，计入平局分池，参考解由 ${samples} 次蒙特卡洛模拟估算得出）。`,
+        ? `当前处于${streetZh}（${scenarioZh}），对抗对手亮出的底牌，请计算你的摊牌权益（%，计入平局分池，参考解由${exactUnitZh}精确枚举得出）。`
+        : `当前处于${streetZh}（${scenarioZh}），对抗对手亮出的底牌，请估算你的摊牌权益（%，计入平局分池，参考解由 ${samples} 次随机发牌模拟估算得出）。`,
       contextLine: `6人桌 · ${streetZh} · 直接反超补牌 ${cleanOuts} 张（未知牌 ${unknownCards} 张）· 面对 ${q.betBb}bb 下注盈亏平衡需 ${reqEq}% 权益`,
       formulaSteps: [
         `下一张牌直接反超的补牌概率：${cleanOuts} ÷ ${unknownCards} = ${nextCardOutPct}%（${cleanOuts} 张直接补牌）`,
         isExactEnum
-          ? `精确枚举（全部 ${samples} 张未知河牌）所得摊牌权益：${heroEq}%${tieSuffix}`
+          ? isFlop
+            ? `4 倍心算参考：${cleanOuts} × 4 ≈ ${Math.min(72, cleanOuts * 4)}% · 精确枚举（${exactUnitZh}）摊牌权益：${heroEq}%${tieSuffix}`
+            : `精确枚举（${exactUnitZh}）所得摊牌权益：${heroEq}%${tieSuffix}`
           : `4 倍心算参考：${cleanOuts} × 4 ≈ ${Math.min(72, cleanOuts * 4)}% · 模拟估算（${samples} 次随机发牌）摊牌权益：${heroEq}%${tieSuffix}`,
         `对照底池赔率（最低需 ${reqEq}%）：${compareText}`,
       ],

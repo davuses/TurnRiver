@@ -681,15 +681,35 @@ export function generatePreflopSpot(
   if (pool.length === 0) pool = PREFLOP_TEMPLATES;
 
   const template = pool[Math.floor(rng() * pool.length)];
-  const allHands = Object.values(template.matrix);
+  let candidateHands = Object.values(template.matrix);
+
+  // For FACING_3BET spots, restrict sampling to hands Hero could plausibly have opened
+  // from that seat (its RFI opening range plus any continuing hands in the 3-bet matrix).
+  if (template.scenarioType === 'FACING_3BET') {
+    const rfiTemplate = PREFLOP_TEMPLATES.find(
+      (t) => t.scenarioType === 'RFI' && t.heroPos === template.heroPos
+    );
+    if (rfiTemplate) {
+      candidateHands = candidateHands.filter(
+        (h) =>
+          h.raise > 0 ||
+          h.call > 0 ||
+          (rfiTemplate.matrix[h.hand]?.raise ?? 0) > 0
+      );
+    } else {
+      candidateHands = candidateHands.filter(
+        (h) => h.raise > 0 || h.call > 0 || h.borderlineRank > 0.58
+      );
+    }
+  }
 
   // Weight interesting hands (mixed, raises, calls, and borderline folds) higher
   // while still including ~20% clear folds to test discipline.
-  const interesting = allHands.filter((h) => h.raise > 0 || h.call > 0);
-  const borderlineFolds = allHands.filter(
+  const interesting = candidateHands.filter((h) => h.raise > 0 || h.call > 0);
+  const borderlineFolds = candidateHands.filter(
     (h) => h.fold === 100 && h.borderlineRank > 0.58
   );
-  const clearFolds = allHands.filter((h) => h.fold === 100 && h.borderlineRank <= 0.58);
+  const clearFolds = candidateHands.filter((h) => h.fold === 100 && h.borderlineRank <= 0.58);
 
   const roll = rng();
   let chosenCell: PreflopCellStrategy;
@@ -698,7 +718,12 @@ export function generatePreflopSpot(
   } else if (roll < 0.86 && borderlineFolds.length > 0) {
     chosenCell = borderlineFolds[Math.floor(rng() * borderlineFolds.length)];
   } else {
-    const fallback = clearFolds.length > 0 ? clearFolds : allHands;
+    const fallback =
+      clearFolds.length > 0
+        ? clearFolds
+        : borderlineFolds.length > 0
+          ? borderlineFolds
+          : candidateHands;
     chosenCell = fallback[Math.floor(rng() * fallback.length)];
   }
 

@@ -4,6 +4,7 @@ import {
   canonicalHandKey,
   createDeck,
   evaluateHand,
+  HandCategory,
   handStrengthScore,
   RANK_VALUE,
   shuffleDeck,
@@ -682,10 +683,67 @@ export function getLegalActions(state: PokerTableState, seatIndex: number): Lega
   };
 }
 
+function highestStraightRank(ranks: Set<number>): number {
+  for (let high = 14; high >= 5; high--) {
+    let ok = true;
+    for (let offset = 0; offset < 5; offset++) {
+      const needed = high - offset === 1 ? 14 : high - offset;
+      if (!ranks.has(needed)) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return high;
+  }
+  return 0;
+}
+
+/**
+ * Computes effective call amount and effective pot size by capping against the seat's
+ * remaining stack and excluding uncallable opponent excess above `streetBetBb + stackBb`.
+ */
+export function computeEffectivePotOdds(
+  state: PokerTableState,
+  seat: TableSeat
+): {
+  effectiveToCall: number;
+  effectivePotBb: number;
+  reqEqPct: number;
+  reqEq: number;
+} {
+  const rawToCall = Math.max(0, roundBb(state.currentBetBb - seat.streetBetBb));
+  const effectiveToCall = Math.min(rawToCall, seat.stackBb);
+  if (effectiveToCall <= 0) {
+    return {
+      effectiveToCall: 0,
+      effectivePotBb: state.potBb,
+      reqEqPct: 0,
+      reqEq: 0,
+    };
+  }
+  const maxCommitThisStreet = roundBb(seat.streetBetBb + seat.stackBb);
+  const seatExcess = roundBb(
+    state.seats.reduce((sum, other) => {
+      if (other.seatIndex === seat.seatIndex) return sum;
+      return sum + Math.max(0, roundBb(other.streetBetBb - maxCommitThisStreet));
+    }, 0)
+  );
+  const minBettorExcess = Math.max(0, roundBb(state.currentBetBb - maxCommitThisStreet));
+  const uncallableExcessBb = Math.max(seatExcess, minBettorExcess);
+  const effectivePotBb = Math.max(effectiveToCall, roundBb(state.potBb - uncallableExcessBb));
+  const reqEqPct = requiredEquityPct(effectivePotBb, effectiveToCall);
+  return {
+    effectiveToCall,
+    effectivePotBb,
+    reqEqPct,
+    reqEq: reqEqPct / 100,
+  };
+}
+
 /**
  * Fast draw & board-texture detector for smarter postflop bot strategy & EV audits.
  */
-function detectDrawBonus(hole: [Card, Card], board: Card[]): {
+export function detectDrawBonus(hole: [Card, Card], board: Card[]): {
   flushDraw: boolean;
   straightDraw: boolean;
   bonus: number;
@@ -697,18 +755,27 @@ function detectDrawBonus(hole: [Card, Card], board: Card[]): {
   const suitCounts: Record<string, number> = { s: 0, h: 0, d: 0, c: 0 };
   for (const c of all) suitCounts[c.suit]++;
   const flushDraw =
-    (suitCounts[hole[0].suit] === 4 || suitCounts[hole[1].suit] === 4) &&
-    (board.filter((b) => b.suit === hole[0].suit).length >= 2 ||
-      board.filter((b) => b.suit === hole[1].suit).length >= 2);
+    (suitCounts[hole[0].suit] === 4 && board.filter((b) => b.suit === hole[0].suit).length >= 2) ||
+    (suitCounts[hole[1].suit] === 4 && board.filter((b) => b.suit === hole[1].suit).length >= 2);
 
-  // Open-ended or strong straight draw check (4 distinct ranks within a 5-card span)
-  const vals = Array.from(new Set(all.map((c) => RANK_VALUE[c.rank]))).sort((a, b) => a - b);
-  if (vals.includes(14)) vals.unshift(1); // Ace low
+  // Straight draw check: ignore already-made straights (or better) and board-only 4-straights
+  const allRanks = new Set(all.map((c) => RANK_VALUE[c.rank]));
+  const boardRanks = new Set(board.map((c) => RANK_VALUE[c.rank]));
   let straightDraw = false;
-  for (let i = 0; i <= vals.length - 4; i++) {
-    if (vals[i + 3] - vals[i] <= 4) {
-      straightDraw = true;
-      break;
+  if (
+    evaluateHand(all).category < HandCategory.Straight &&
+    highestStraightRank(allRanks) === 0
+  ) {
+    for (let r = 2; r <= 14; r++) {
+      if (allRanks.has(r)) continue;
+      const heroStraight = highestStraightRank(new Set([...allRanks, r]));
+      if (heroStraight === 0) continue;
+      const boardStraight =
+        board.length >= 4 ? highestStraightRank(new Set([...boardRanks, r])) : 0;
+      if (heroStraight > boardStraight) {
+        straightDraw = true;
+        break;
+      }
     }
   }
 
@@ -824,14 +891,13 @@ function evaluateHeroActionForAudit(
   const baseStrength = handStrengthScore(cards, state.board);
   const drawInfo = detectDrawBonus(cards, state.board);
   const strength = Math.min(1, baseStrength + drawInfo.bonus * 0.65);
-  const toCall = Math.max(0, roundBb(state.currentBetBb - seat.streetBetBb));
-  const reqEq = toCall > 0 ? requiredEquityPct(state.potBb, toCall) / 100 : 0;
-  const reqEqPct = Math.round(reqEq * 100);
+  const { effectiveToCall, reqEq, reqEqPct: rawReqEqPct } = computeEffectivePotOdds(state, seat);
+  const reqEqPct = Math.round(rawReqEqPct);
   const villain = getPrimaryVillain(state);
 
   // Subtle exploitative threshold shifts vs extreme bot archetypes
   let villainCallAdjust = 0;
-  if (villain?.archetype === 'Tight Nit' && toCall > 2) villainCallAdjust = 0.08;
+  if (villain?.archetype === 'Tight Nit' && effectiveToCall > 2) villainCallAdjust = 0.08;
   if (villain?.archetype === 'Maniac' || villain?.archetype === 'Loose-Aggressive') {
     villainCallAdjust = -0.05;
   }
@@ -840,7 +906,7 @@ function evaluateHeroActionForAudit(
   let note = '';
   let reason: AuditBaseReason = 'pot_control';
 
-  if (toCall === 0) {
+  if (effectiveToCall === 0) {
     if (strength >= 0.62) {
       recommended = 'raise';
       reason = 'strong_value';
@@ -868,7 +934,7 @@ function evaluateHeroActionForAudit(
     } else if (strength >= openThreshold - 0.10 && seat.position === 'SB') {
       recommended = 'call';
       reason = 'pot_odds_call';
-      note = `Facing ${toCall}bb from SB requires ${reqEqPct}% equity; completing is playable.`;
+      note = `Facing ${effectiveToCall}bb from SB requires ${reqEqPct}% equity; completing is playable.`;
     } else {
       recommended = 'fold';
       reason = 'pot_odds_fold';
@@ -882,11 +948,11 @@ function evaluateHeroActionForAudit(
     } else if (strength >= reqEq - 0.04 + villainCallAdjust) {
       recommended = 'call';
       reason = 'pot_odds_call';
-      note = `Facing ${toCall}bb requires ${reqEqPct}% equity; this holding is strong enough to continue with a call.`;
+      note = `Facing ${effectiveToCall}bb requires ${reqEqPct}% equity; this holding is strong enough to continue with a call.`;
     } else {
       recommended = 'fold';
       reason = 'pot_odds_fold';
-      note = `Facing ${toCall}bb requires ${reqEqPct}% equity; folding preserves stack.`;
+      note = `Facing ${effectiveToCall}bb requires ${reqEqPct}% equity; folding preserves stack.`;
     }
   }
 
@@ -909,9 +975,9 @@ function evaluateHeroActionForAudit(
       grade = 'Blunder';
     } else if (actionType === 'call' && strength < reqEq - 0.14) {
       grade = 'Mistake';
-    } else if (actionType === 'raise' && strength < 0.32 && (chosenAmount >= 15 || toCall > 2)) {
+    } else if (actionType === 'raise' && strength < 0.32 && (chosenAmount >= 15 || effectiveToCall > 2)) {
       grade = 'Blunder';
-    } else if (actionType === 'raise' && strength < 0.42 && (chosenAmount >= 8 || toCall > 2)) {
+    } else if (actionType === 'raise' && strength < 0.42 && (chosenAmount >= 8 || effectiveToCall > 2)) {
       grade = 'Mistake';
     } else {
       grade = 'Inaccuracy';
@@ -923,7 +989,7 @@ function evaluateHeroActionForAudit(
       : actionType === 'check'
         ? 'Check'
         : actionType === 'call'
-          ? `Call ${toCall}bb`
+          ? `Call ${effectiveToCall}bb`
           : `${state.currentBetBb === 0 ? 'Bet' : 'Raise'} ${chosenAmount}bb`;
 
   const chosenActionSpec: TableActionSpec =
@@ -932,7 +998,7 @@ function evaluateHeroActionForAudit(
       : actionType === 'check'
         ? { kind: 'check' }
         : actionType === 'call'
-          ? { kind: 'call', amountBb: toCall }
+          ? { kind: 'call', amountBb: effectiveToCall }
           : { kind: state.currentBetBb === 0 ? 'bet' : 'raise', amountBb: chosenAmount };
 
   const recLabel =
@@ -941,7 +1007,7 @@ function evaluateHeroActionForAudit(
       : recommended === 'check'
         ? 'Check'
         : recommended === 'call'
-          ? `Call ${toCall}bb`
+          ? `Call ${effectiveToCall}bb`
           : state.currentBetBb === 0
             ? 'Bet'
             : 'Raise';
@@ -952,7 +1018,7 @@ function evaluateHeroActionForAudit(
       : recommended === 'check'
         ? { kind: 'check' }
         : recommended === 'call'
-          ? { kind: 'call', amountBb: toCall }
+          ? { kind: 'call', amountBb: effectiveToCall }
           : { kind: state.currentBetBb === 0 ? 'bet' : 'raise' };
 
   const villainArchetype = villain && villain.archetype !== 'Hero' ? villain.archetype : undefined;
@@ -970,7 +1036,7 @@ function evaluateHeroActionForAudit(
       reason,
       street,
       handKey,
-      toCallBb: toCall,
+      toCallBb: effectiveToCall,
       reqEqPct,
       exploitTip: exploitTipKind,
       villainName: villain?.name,
@@ -1255,6 +1321,9 @@ export function resolveShowdown(state: PokerTableState): PokerTableState {
 }
 
 function advanceStreet(state: PokerTableState): PokerTableState {
+  if (activeSeats(state.seats).length <= 1) {
+    return resolveShowdown(state);
+  }
   const deck = [...state.deck];
   const board = [...state.board];
   let nextPhase: TablePhase = state.phase;
@@ -1327,6 +1396,37 @@ export function applyPlayerAction(
   const seats = state.seats.map((s) => ({ ...s, stats: { ...s.stats } }));
   const actor = seats[seatIndex];
   const legal = getLegalActions(state, seatIndex);
+
+  // Legality guard: never allow checking when facing a bet
+  if (actionType === 'check' && !legal.canCheck) {
+    return state;
+  }
+
+  // Enforce call-only restriction after an incomplete short all-in, and normalize 0bb calls to check
+  let effectiveActionType: 'fold' | 'check' | 'call' | 'raise' = actionType;
+  if (effectiveActionType === 'raise' && !legal.canBetOrRaise) {
+    effectiveActionType = legal.canCheck ? 'check' : 'call';
+  }
+  if (effectiveActionType === 'call' && legal.callAmountBb === 0) {
+    effectiveActionType = 'check';
+  }
+
+  let resolvedRaiseTarget: number | undefined;
+  if (effectiveActionType === 'raise') {
+    const requestedRaise =
+      typeof raiseToBb === 'number' && Number.isFinite(raiseToBb)
+        ? raiseToBb
+        : legal.minTotalBetBb;
+    const clamped = roundBb(
+      Math.max(legal.minTotalBetBb, Math.min(legal.maxTotalBetBb, requestedRaise))
+    );
+    const putInCheck = roundBb(clamped - actor.streetBetBb);
+    if (clamped <= state.currentBetBb || putInCheck <= 0) {
+      return state;
+    }
+    resolvedRaiseTarget = clamped;
+  }
+
   const currentStreet: Street =
     state.phase === 'PREFLOP'
       ? 'preflop'
@@ -1338,7 +1438,9 @@ export function applyPlayerAction(
 
   const heroAudits = [...state.heroAudits];
   if (actor.isHero && actor.cards) {
-    heroAudits.push(evaluateHeroActionForAudit(state, actor, actionType, raiseToBb));
+    heroAudits.push(
+      evaluateHeroActionForAudit(state, actor, effectiveActionType, resolvedRaiseTarget)
+    );
   }
 
   let potBb = state.potBb;
@@ -1350,14 +1452,6 @@ export function applyPlayerAction(
   let preflopRaiseCount = state.preflopRaiseCount;
   let actionText = '';
   let actionSpec: TableActionSpec = { kind: 'check' };
-
-  // Enforce call-only restriction after an incomplete short all-in
-  const effectiveActionType: 'fold' | 'check' | 'call' | 'raise' =
-    actionType === 'raise' && !legal.canBetOrRaise
-      ? legal.canCheck
-        ? 'check'
-        : 'call'
-      : actionType;
 
   // Record 3-bet opportunity when facing a single open raise preflop
   if (currentStreet === 'preflop' && preflopRaiseCount === 1 && !actor.hadThreeBetOppThisHand) {
@@ -1406,9 +1500,7 @@ export function applyPlayerAction(
       actionSpec = { kind: 'call', amountBb: putIn };
     }
   } else {
-    const clampedTarget = roundBb(
-      Math.max(legal.minTotalBetBb, Math.min(legal.maxTotalBetBb, raiseToBb ?? legal.minTotalBetBb))
-    );
+    const clampedTarget = resolvedRaiseTarget!;
     const putIn = roundBb(clampedTarget - actor.streetBetBb);
     const raiseDelta = roundBb(clampedTarget - currentBetBb);
     const wasBet = currentBetBb === 0;
@@ -1426,7 +1518,7 @@ export function applyPlayerAction(
       // Short all-in: preserve lastFullRaiseIncrementBb and do NOT reopen betting for prior actors
       minRaiseBb = roundBb(clampedTarget + lastFullRaiseIncrementBb);
     }
-    currentBetBb = clampedTarget;
+    currentBetBb = Math.max(currentBetBb, clampedTarget);
 
     if (currentStreet === 'preflop') {
       preflopRaiseCount += 1;
@@ -1573,8 +1665,7 @@ export function chooseBotAction(
   const contenders = activeSeats(state.seats).length;
   const isMultiway = contenders >= 3;
   const hasInitiative = state.preflopAggressorSeatIndex === seatIndex;
-  const toCall = legal.callAmountBb;
-  const potOdds = toCall > 0 ? requiredEquityPct(state.potBb, toCall) / 100 : 0;
+  const { reqEq: potOdds } = computeEffectivePotOdds(state, seat);
 
   // Archetype parameters: [loosenessShift, aggressionBoost, bluffFreq, callStickiness]
   const profile: Record<BotArchetype, [number, number, number, number]> = {

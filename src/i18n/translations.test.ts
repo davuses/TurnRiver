@@ -12,7 +12,7 @@ import {
   translateStreetLabel,
   type TranslationKey,
 } from './translations.ts';
-import { resolveInitialLocale } from './LocaleContext.tsx';
+import { buildLocaleSyncUrl, resolveInitialLocale } from './LocaleContext.tsx';
 import {
   formatArenaAction,
   formatArenaAuditNote,
@@ -21,6 +21,7 @@ import {
   localizeArenaNote,
   localizeHandReadingSpot,
   localizeMathQuestion,
+  localizePostflopLogLine,
   localizePostflopSpot,
   localizePreflopTemplate,
   localizeSpotLabel,
@@ -281,7 +282,7 @@ describe('TurnRiver i18n EN / zh-CN locale support', () => {
       }
     }
 
-    // Verify all 4 draw scenarios read structured cleanOuts (no 9-out fallback) and exact_enum vs monte_carlo
+    // Verify all 4 draw scenarios read structured cleanOuts and use exact_enum (990 flop runouts / 44 river cards)
     const scenarioSeeds = [0.0, 0.26, 0.51, 0.76];
     const seenScenarios = new Set<string>();
     for (const s of scenarioSeeds) {
@@ -293,11 +294,17 @@ describe('TurnRiver i18n EN / zh-CN locale support', () => {
         zh.contextLine.includes(`直接反超补牌 ${q.cleanOuts} 张`),
         `Expected ${q.cleanOuts} outs in contextLine, got: ${zh.contextLine}`
       );
-      if (q.equityMethod === 'exact_enum') {
-        assert.ok(zh.prompt.includes('精确枚举') || zh.formulaSteps.some((st) => st.includes('精确枚举')));
-        assert.ok(!zh.prompt.includes('模拟估算'));
+      assert.equal(q.equityMethod, 'exact_enum', `Expected exact_enum for ${q.scenarioId}`);
+      assert.ok(zh.prompt.includes('精确枚举') && zh.formulaSteps.some((st) => st.includes('精确枚举')));
+      assert.ok(!zh.prompt.includes('模拟估算') && !zh.prompt.includes('蒙特卡洛'));
+      if (q.board?.length === 3) {
+        assert.ok(zh.prompt.includes('种未知转牌与河牌组合'), `Flop prompt should reference 2-card runouts: ${zh.prompt}`);
+        assert.ok(!zh.prompt.includes('张未知河牌'), `Flop prompt must not say river cards only: ${zh.prompt}`);
       } else {
-        assert.ok(zh.prompt.includes('模拟估算') || zh.formulaSteps.some((st) => st.includes('模拟估算')));
+        assert.ok(zh.prompt.includes('张未知河牌'), `Turn prompt should reference unknown river cards: ${zh.prompt}`);
+      }
+      if (q.scenarioId === 'fd_overcard_turn') {
+        assert.equal(q.cleanOuts, 12, 'fd_overcard_turn should have exactly 12 clean outs');
       }
     }
     assert.equal(seenScenarios.size, 4, 'Should cover all 4 structured draw scenarios');
@@ -534,5 +541,110 @@ describe('TurnRiver i18n EN / zh-CN locale support', () => {
     assert.equal(localizeArenaNote('zh-CN', unknownText), unknownText);
     assert.equal(localizeWinnerSummary('zh-CN', unknownText), unknownText);
     assert.equal(localizeSpotLabel('zh-CN', unknownText), unknownText);
+  });
+
+  it('enforces clean CJK punctuation spacing, zero orphaned keys, URL lang sync, and exact flop copy', () => {
+    // 1. localizePostflopLogLine collapses stray ASCII spaces around full-width CJK punctuation
+    assert.equal(
+      localizePostflopLogLine('zh-CN', 'Flop: BB checks, BTN bets 1.8bb (33%)'),
+      '翻牌：BB 过牌，BTN 下注 1.8bb（33%）'
+    );
+    assert.equal(
+      localizePostflopLogLine('zh-CN', 'Flop Qd 8s 5c: SB bets 2.0bb, BB calls (Pot 10.0bb)'),
+      '翻牌 Qd 8s 5c：SB 下注 2.0bb，BB 跟注（底池 10.0bb）'
+    );
+    assert.equal(
+      localizePostflopLogLine('zh-CN', 'Flop: Action on SB'),
+      '翻牌：轮到 SB 行动'
+    );
+    for (const bp of POSTFLOP_BLUEPRINTS) {
+      const spot = generatePostflopSpotById(bp.id, { preserveSuits: true })!;
+      const zh = localizePostflopSpot('zh-CN', spot);
+      for (const line of zh.actionLog) {
+        assert.doesNotMatch(
+          line,
+          /\s[，：（）]|[，：（）]\s/,
+          `Found stray ASCII space adjacent to CJK punctuation in ${bp.id}: "${line}"`
+        );
+      }
+    }
+
+    // 2. Postflop checklist SPR formatting has no nested parens or stray spaces before CJK punctuation
+    const zhSprLine = `${TRANSLATIONS['zh-CN']['postflop.check3Prefix']} 17.7${TRANSLATIONS['zh-CN']['postflop.check3Suffix']}`;
+    assert.ok(zhSprLine.includes('（SPR 17.7，'), `Unexpected zh SPR checklist line: ${zhSprLine}`);
+    assert.doesNotMatch(zhSprLine, /\s[，：（）]|[，：（）]\s/);
+    assert.ok(!zhSprLine.includes('(17.7)'), `Must not nest ASCII parens inside full-width parens: ${zhSprLine}`);
+
+    // 3. Zero orphaned Voice Coach or dead keys; common.close retained
+    const allKeys = Object.keys(TRANSLATIONS.en);
+    assert.ok(!allKeys.includes('nav.voiceCoach'), 'Orphaned nav.voiceCoach key should be removed');
+    assert.equal(
+      allKeys.filter((k) => k.startsWith('voice.')).length,
+      0,
+      'Orphaned voice.* keys should be removed'
+    );
+    assert.ok(!allKeys.includes('overview.repSingular'));
+    assert.ok(!allKeys.includes('overview.repPlural'));
+    assert.ok(!allKeys.includes('studio3d.resetCam'));
+    assert.ok(!allKeys.includes('metric.avgScore'));
+    assert.ok(allKeys.includes('common.close'), 'common.close is actively used and must be retained');
+
+    // 4. ?lang= URL query sync updates stale query param without mutating clean URLs
+    assert.equal(
+      buildLocaleSyncUrl('https://davuses.github.io/TurnRiver/?lang=zh-CN', 'en'),
+      '/TurnRiver/?lang=en'
+    );
+    assert.equal(
+      buildLocaleSyncUrl('https://davuses.github.io/TurnRiver/?lang=en&tab=math#top', 'zh-CN'),
+      '/TurnRiver/?lang=zh-CN&tab=math#top'
+    );
+    assert.equal(
+      buildLocaleSyncUrl('https://davuses.github.io/TurnRiver/', 'zh-CN'),
+      null
+    );
+    assert.equal(
+      buildLocaleSyncUrl('https://davuses.github.io/TurnRiver/?lang=zh-CN', 'zh-CN'),
+      null
+    );
+
+    // 5. Exact flop enumeration in zh-CN describes 2-card runout combinations (not river-only cards)
+    const exactFlopQ: MathDrillQuestion = {
+      id: 'math-flop-exact-test',
+      category: 'OUTS_EQUITY',
+      categoryLabel: 'Outs & Hand Equity',
+      scenarioId: 'combo_draw_flop',
+      prompt: 'test',
+      contextLine: 'test',
+      unit: '%',
+      exactAnswer: 56.8,
+      toleranceExact: 3,
+      toleranceClose: 6,
+      minVal: 5,
+      maxVal: 80,
+      step: 1,
+      defaultVal: 32,
+      potBb: 14,
+      betBb: 10.5,
+      potBeforeCallBb: 24.5,
+      heroEquityPct: 56.8,
+      breakEvenPct: 30,
+      cleanOuts: 15,
+      unknownCardsCount: 45,
+      nextCardOutPct: 33.3,
+      tiePct: 0,
+      equityMethod: 'exact_enum',
+      equitySamples: 990,
+      board: [
+        { rank: 'K', suit: 'd' },
+        { rank: '7', suit: 'd' },
+        { rank: '6', suit: 'c' },
+      ],
+      formulaSteps: [],
+      takeaway: '',
+    };
+    const zhExactFlop = localizeMathQuestion('zh-CN', exactFlopQ);
+    assert.ok(zhExactFlop.prompt.includes('990 种未知转牌与河牌组合精确枚举'), zhExactFlop.prompt);
+    assert.ok(!zhExactFlop.prompt.includes('未知河牌'), zhExactFlop.prompt);
+    assert.ok(zhExactFlop.formulaSteps[1].includes('990 种未知转牌与河牌组合'), zhExactFlop.formulaSteps[1]);
   });
 });

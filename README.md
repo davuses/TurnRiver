@@ -10,7 +10,7 @@
 
 - **Preflop Range & Position Lab** — 6-max 100bb RFI, 3-bet, and 4-bet defense drills with an interactive 169-hand mixed-strategy reference matrix and frequency-based grading.
 - **Postflop Live-Table Trainer** — Flop, turn, and river single-raised and 3-bet pot spots with spoiler-free prompts, a decisive-detail step, a paired river bet-size comparison drill (33% vs 125% pot), and hand-number breakdowns.
-- **Pot Odds, Equity & EV Math Lab** — Pot odds (graded in percentage points), exact turn equity enumeration / flop outs, Call EV in big blinds, bluff break-even %, and Minimum Defense Frequency (MDF) drills.
+- **Pot Odds, Equity & EV Math Lab** — Pot odds (graded in percentage points), exact flop & turn equity enumeration, Call EV in big blinds, bluff break-even %, and Minimum Defense Frequency (MDF) drills.
 - **Hand Reading & Range Narrowing** — Paint Villain's surviving range onto a 13×13 matrix street-by-street and score range overlap (%), precision, and recall.
 - **Configurable Multi-Bot Practice Arena** — Play complete cash hands against up to 6 distinct bot archetypes (*Balanced Reg, TAG, LAG, Calling Station, Nit, Maniac*) with customizable table size (Heads-Up to 6-Max), stack depths, main & side-pot showdown payouts, Hero position lock, live HUD stats, Blind Read mode, Fast-Fold, street-by-street pot-odds reviews, and **Theater / Fullscreen Mode**.
 - **Interactive 3D High-Stakes Poker Studio** — Custom Three.js PBR casino table featuring mahogany racetrack trim, stitched leather rail, switchable speed-cloth felt themes, studio/daylight/lounge lighting presets, animated card dealing & chip-tossing physics, toggleable lounge props, and 5 camera angles (*Hero POV, Broadcast, Top-Down, Pot Close-Up, Rail Shot*).
