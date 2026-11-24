@@ -866,8 +866,8 @@ export class PokerScene3D {
         animateInitialEntrance ||
         (this.initializedHandOnce && (isFreshBoard || i >= this.prevBoardKeys.length));
       if (isNewlyDealt) {
-        const baseBoardDelay = animateInitialEntrance ? 0.28 : isNewHoleDeal ? 0.34 : 0.02;
-        const delay = baseBoardDelay + boardAnimOrder * (this.isSoftwareGl ? 0.025 : 0.095);
+        const baseBoardDelay = animateInitialEntrance ? 0.34 : isNewHoleDeal ? 0.42 : 0.08;
+        const delay = baseBoardDelay + boardAnimOrder * (this.isSoftwareGl ? 0.025 : 0.14);
         const startRot = new THREE.Euler(-0.14, 0.56 + Math.PI * 0.25, Math.PI);
         cardGrp.position.copy(deckOrigin);
         cardGrp.rotation.copy(startRot);
@@ -885,7 +885,7 @@ export class PokerScene3D {
           flipCard: true,
           delay,
           elapsed: 0,
-          duration: this.isSoftwareGl ? 0.22 : isSingleStreetPeel ? 0.48 : 0.38,
+          duration: this.isSoftwareGl ? 0.22 : isSingleStreetPeel ? 0.62 : 0.48,
           initialHidden: true,
         });
         if (!animateInitialEntrance) {
@@ -943,13 +943,13 @@ export class PokerScene3D {
         winnerPos = new THREE.Vector3(chipBaseX, FELT_Y + 0.04, chipBaseZ);
       }
 
-      // Seat plaque mounted flush atop the padded leather bolster crown
+      // Seat plaque mounted flush atop the padded leather bolster crown, gently angled toward Hero for effortless reading
       const plaque = createSeatPlaqueMesh(seat);
       plaque.position.set(anchor.x * 1.1, FELT_Y + 0.212, anchor.z * 1.1);
-      plaque.lookAt(0, FELT_Y + 0.212, 0);
+      plaque.lookAt(0, FELT_Y + 0.212, isSideSeat ? 1.55 : 0);
       if (seat.isHero) {
-        plaque.position.set(1.05, FELT_Y + 0.212, 1.9);
-        plaque.rotation.set(0, -0.26, 0);
+        plaque.position.set(1.12, FELT_Y + 0.212, 1.9);
+        plaque.rotation.set(0, -0.2, 0);
       }
       this.dynamicGroup.add(plaque);
 
@@ -1012,7 +1012,7 @@ export class PokerScene3D {
             betColor,
             flyCount,
             0.25,
-            this.isSoftwareGl ? 0.22 : 0.34
+            this.isSoftwareGl ? 0.22 : 0.44
           );
           tossedChipsCount += flyCount;
         }
@@ -1028,7 +1028,7 @@ export class PokerScene3D {
       // Hole cards (round-robin casino deal: pass 1 then pass 2; Hero cards lift cleanly & support hover-peek!)
       if (seat.cards && !seat.folded) {
         const reveal = Boolean(seat.isHero || seat.revealCards);
-        const cardScale = seat.isHero ? 1.16 : 0.88;
+        const cardScale = seat.isHero ? 1.18 : 0.96;
         const c1 = createPlayingCardGroup(
           seat.cards[0],
           reveal,
@@ -1078,8 +1078,8 @@ export class PokerScene3D {
         this.dynamicGroup.add(c1, c2);
 
         if (isNewHoleDeal || animateInitialEntrance) {
-          const dealDur = this.isSoftwareGl ? 0.22 : 0.34;
-          const stagger = this.isSoftwareGl ? 0.02 : 0.048;
+          const dealDur = this.isSoftwareGl ? 0.22 : 0.46;
+          const stagger = this.isSoftwareGl ? 0.02 : 0.075;
           // Authentic round-robin order: pass 1 across seats, then pass 2
           const delay1 = i * stagger;
           const delay2 = (activeSeatsCount + i) * stagger;

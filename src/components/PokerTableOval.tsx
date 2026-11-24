@@ -239,7 +239,7 @@ export function PokerTableOval({
 
                 {/* Seat Plate */}
                 <div
-                  className={`min-w-[112px] sm:min-w-[122px] px-2.5 py-1.5 rounded-lg border transition-colors ${
+                  className={`min-w-[138px] sm:min-w-[156px] px-3 py-2 rounded-xl border shadow-md transition-colors ${
                     isWin
                       ? 'bg-[#132620] border-emerald-400'
                       : isTurn
@@ -249,34 +249,34 @@ export function PokerTableOval({
                           : 'bg-[#111722]/95 border-[#263245]'
                   } ${seat.folded ? 'opacity-45' : ''}`}
                 >
-                  <div className="flex items-center justify-between gap-2 text-[11px]">
-                    <span className="font-semibold text-slate-200 truncate max-w-[74px]">
+                  <div className="flex items-center justify-between gap-2 text-xs sm:text-[13px]">
+                    <span className="font-semibold text-slate-100 truncate max-w-[92px]">
                       {seat.label}
                     </span>
-                    <span className="font-mono font-bold text-emerald-300 shrink-0">
+                    <span className="font-mono font-bold text-emerald-300 bg-emerald-500/15 px-1.5 py-0.5 rounded text-xs shrink-0">
                       {seat.position}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-2 text-[11px] font-mono tabular-nums mt-0.5">
-                    <span className="text-slate-400">{seat.stackBb.toFixed(1)}bb</span>
+                  <div className="flex items-center justify-between gap-2 text-xs sm:text-[13px] font-mono tabular-nums mt-1">
+                    <span className="text-white font-bold">{seat.stackBb.toFixed(1)} bb</span>
                     {seat.isDealer && (
                       <span
                         aria-label={t('common.dealerButton')}
-                        className="w-4 h-4 rounded-full bg-amber-300 text-slate-950 font-bold text-[10px] inline-flex items-center justify-center"
+                        className="w-5 h-5 rounded-full bg-amber-300 text-slate-950 font-bold text-[11px] inline-flex items-center justify-center"
                       >
                         D
                       </span>
                     )}
                   </div>
                   {seat.sublabel && (
-                    <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                    <div className="text-[11px] text-slate-300/80 truncate mt-0.5">
                       {seat.sublabel}
                     </div>
                   )}
                 </div>
 
                 {(seat.actionSpec || seat.actionText) && (
-                  <div className="text-[11px] font-mono tabular-nums text-amber-200 bg-[#0B1017]/90 border border-[#263245] px-2 py-0.5 rounded whitespace-nowrap">
+                  <div className="text-xs font-mono font-semibold tabular-nums text-amber-200 bg-[#0B1017]/95 border border-[#2D3B52] px-2.5 py-0.5 rounded-md shadow whitespace-nowrap">
                     {formatArenaAction(locale, seat.actionSpec, seat.actionText)}
                   </div>
                 )}

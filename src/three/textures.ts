@@ -1000,18 +1000,18 @@ export function createSeatPlaqueTexture(
   winnerLabel?: string,
   isAggressiveAction?: boolean
 ): THREE.CanvasTexture {
-  const w = 320;
-  const h = 136;
+  const w = 512;
+  const h = 220;
   const [canvas, ctx] = makeCanvas(w, h);
 
   // Luxury dark espresso-obsidian casino nameplate
   ctx.fillStyle = folded
     ? '#0a0c10'
     : isWinner
-      ? '#211909'
+      ? '#241a09'
       : isHero
-        ? '#0c1e18'
-        : '#10141c';
+        ? '#0c211a'
+        : '#101621';
   ctx.fillRect(0, 0, w, h);
 
   // Brushed brass/emerald border + fine inner pinstripe
@@ -1020,41 +1020,58 @@ export function createSeatPlaqueTexture(
     : isActive
       ? '#34d399'
       : isHero
-        ? '#c9a24b'
-        : '#4b3f2b';
-  ctx.lineWidth = isActive || isWinner ? 8 : 5;
-  ctx.strokeRect(4, 4, w - 8, h - 8);
+        ? '#d4aa4f'
+        : '#5a4b32';
+  ctx.lineWidth = isActive || isWinner ? 12 : 7;
+  ctx.strokeRect(6, 6, w - 12, h - 12);
 
-  ctx.strokeStyle = 'rgba(212, 175, 95, 0.25)';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(11, 11, w - 22, h - 22);
+  ctx.strokeStyle = 'rgba(212, 175, 95, 0.28)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(16, 16, w - 32, h - 32);
 
-  // Position badge text
+  // High-contrast position pill (top-left)
+  const posPillBg = folded
+    ? 'rgba(100, 116, 139, 0.16)'
+    : isWinner
+      ? 'rgba(251, 191, 36, 0.22)'
+      : 'rgba(52, 211, 153, 0.2)';
+  ctx.fillStyle = posPillBg;
+  ctx.fillRect(26, 24, 128, 60);
   ctx.fillStyle = folded ? '#64748b' : isWinner ? '#fbbf24' : '#34d399';
-  ctx.font = 'bold 34px "JetBrains Mono", monospace';
+  ctx.font = 'bold 46px "JetBrains Mono", monospace';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillText(position, 90, 55);
+
+  // Player label (top-right)
+  ctx.fillStyle = folded ? '#64748b' : '#f8f5ee';
+  ctx.font = '700 34px Inter, system-ui, sans-serif';
   ctx.textBaseline = 'top';
-  ctx.textAlign = 'left';
-  ctx.fillText(position, 20, 16);
-
-  // Player label
-  ctx.fillStyle = folded ? '#64748b' : '#f4efe6';
-  ctx.font = '600 24px Inter, sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText(label.slice(0, 12), w - 20, 19);
+  ctx.fillText(label.slice(0, 12), w - 28, 26);
 
-  // Middle style/HUD metadata
+  // Middle style/HUD metadata (right-aligned under name)
   if (styleTag) {
     ctx.textAlign = 'right';
-    ctx.fillStyle = folded ? '#475569' : '#c9b896';
-    ctx.font = '600 18px "JetBrains Mono", monospace';
-    ctx.fillText(styleTag.slice(0, 16), w - 20, 52);
+    ctx.fillStyle = folded ? '#475569' : '#d6c49e';
+    ctx.font = '600 25px "JetBrains Mono", monospace';
+    ctx.fillText(styleTag.slice(0, 16), w - 28, 72);
   }
 
-  // Bottom-left stack bb
+  // Subtle horizontal divider separating identity from live stack/action
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.09)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(26, 118);
+  ctx.lineTo(w - 26, 118);
+  ctx.stroke();
+
+  // Bottom-left stack bb (large, unmistakable tabular numerals)
   ctx.textAlign = 'left';
-  ctx.fillStyle = folded ? '#475569' : '#fdfaf3';
-  ctx.font = 'bold 28px "JetBrains Mono", monospace';
-  ctx.fillText(`${stackBb.toFixed(1)} bb`, 20, 86);
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = folded ? '#64748b' : '#ffffff';
+  ctx.font = 'bold 44px "JetBrains Mono", monospace';
+  ctx.fillText(`${stackBb.toFixed(1)} bb`, 28, 164);
 
   // Bottom-right live action tag or winner badge
   const badgeText = isWinner
@@ -1071,20 +1088,37 @@ export function createSeatPlaqueTexture(
         badgeText.includes('加注') ||
         badgeText.includes('下注') ||
         badgeText.includes('全下'));
+    ctx.font = 'bold 28px "JetBrains Mono", Inter, system-ui, sans-serif';
+    const textW = Math.min(220, ctx.measureText(badgeText).width);
+    const padX = 14;
+    const pillW = textW + padX * 2;
+    const pillH = 48;
+    const pillX = w - 26 - pillW;
+    const pillY = 140;
+
+    ctx.fillStyle = isWinner
+      ? 'rgba(245, 158, 11, 0.24)'
+      : folded
+        ? 'rgba(100, 116, 139, 0.16)'
+        : isAgg
+          ? 'rgba(52, 211, 153, 0.2)'
+          : 'rgba(56, 189, 248, 0.18)';
+    ctx.fillRect(pillX, pillY, pillW, pillH);
+
     ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
     ctx.fillStyle = isWinner
       ? '#fbbf24'
       : folded
-        ? '#64748b'
+        ? '#94a3b8'
         : isAgg
           ? '#34d399'
           : '#38bdf8';
-    ctx.font = 'bold 20px "JetBrains Mono", Inter, system-ui, sans-serif';
-    ctx.fillText(badgeText, w - 20, 92);
+    ctx.fillText(badgeText, w - 26 - padX, 165);
   }
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
   return tex;
 }

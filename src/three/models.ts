@@ -1509,8 +1509,8 @@ export function createSeatPlaqueMesh(seat: Seat3DSpec): THREE.Group {
     metalness: 0.78,
     envMapIntensity: 0.55,
   });
-  const base = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.022, 0.06), standMat);
-  base.position.y = 0.011;
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.026, 0.08), standMat);
+  base.position.y = 0.013;
   group.add(base);
 
   // Anti-glare double-sided obsidian face plate so Broadcast & Rail angles never see blank dark backs
@@ -1526,9 +1526,9 @@ export function createSeatPlaqueMesh(seat: Seat3DSpec): THREE.Group {
     metalness: 0.25,
     envMapIntensity: 0.28,
   });
-  const plateGeo = new THREE.BoxGeometry(0.68, 0.28, 0.024);
+  const plateGeo = new THREE.BoxGeometry(0.98, 0.42, 0.028);
   const plate = new THREE.Mesh(plateGeo, [backMat, backMat, backMat, backMat, faceMat, faceMat]);
-  plate.position.set(0, 0.155, 0);
+  plate.position.set(0, 0.228, 0);
   plate.rotation.x = -0.14;
   group.add(plate);
 

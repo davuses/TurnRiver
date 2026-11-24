@@ -159,8 +159,9 @@ export function PlayTableView({
     table.phase !== 'SHOWDOWN' &&
     table.actingSeatIndex === 0;
   const legal = getLegalActions(table, 0);
-  const botDelayMs = table.config.speed === 'fast' ? 220 : 480;
+  const isFastSpeed = table.config.speed === 'fast';
   const is3DActive = viewMode === '3d' || theaterMode;
+  const prevStreetKeyRef = useRef<string>('');
 
   // Sync default raise sizing whenever it becomes Hero's turn
   useEffect(() => {
@@ -188,8 +189,12 @@ export function PlayTableView({
     legal.maxTotalBetBb,
   ]);
 
-  // Automatic strategic bot turn loop with clean timeout teardown
+  // Automatic strategic bot turn loop with realistic live-table pacing & street-deal breathing room
   useEffect(() => {
+    const streetKey = `${table.handNumber}:${table.phase}`;
+    const isFreshStreetOrDeal = prevStreetKeyRef.current !== streetKey;
+    prevStreetKeyRef.current = streetKey;
+
     if (
       table.phase === 'IDLE' ||
       table.phase === 'SHOWDOWN' ||
@@ -199,13 +204,29 @@ export function PlayTableView({
       return;
     }
 
-    // Fast-fold: if Hero folded and fastFold is enabled, settle the hand cleanly before dealing next
+    // Fast-fold: if Hero folded and fastFold is enabled, pause briefly so fold registers then deal next
     if (heroSeat.folded && table.config.fastFold) {
       const fastTimer = window.setTimeout(() => {
         setTable((curr) => settleAndStartNewHand(curr));
-      }, 360);
+      }, isFastSpeed ? 450 : 750);
       return () => window.clearTimeout(fastTimer);
     }
+
+    // Human-like think time: natural variance + extra pause after fresh deal/flop/turn/river & big decisions
+    const jitter = Math.random();
+    const isLateStreet = table.phase === 'TURN' || table.phase === 'RIVER';
+    const isBigSpot = table.currentBetBb >= 4 || table.potBb >= 16;
+    const baseMs = isFastSpeed
+      ? 480 + Math.round(jitter * 240)
+      : 1050 + Math.round(jitter * 550);
+    const dealBeatMs = isFreshStreetOrDeal ? (isFastSpeed ? 360 : 820) : 0;
+    const decisionBeatMs =
+      isBigSpot || isLateStreet
+        ? isFastSpeed
+          ? 140
+          : 320 + Math.round(Math.random() * 360)
+        : 0;
+    const thinkDelayMs = baseMs + dealBeatMs + decisionBeatMs;
 
     const botIndex = table.actingSeatIndex;
     const timer = window.setTimeout(() => {
@@ -217,16 +238,19 @@ export function PlayTableView({
         }
         return applyPlayerAction(curr, botIndex, move.type, move.raiseToBb);
       });
-    }, botDelayMs);
+    }, thinkDelayMs);
 
     return () => window.clearTimeout(timer);
   }, [
+    table.handNumber,
     table.actingSeatIndex,
     table.phase,
+    table.currentBetBb,
+    table.potBb,
     table.actionLog.length,
     table.config.fastFold,
     heroSeat.folded,
-    botDelayMs,
+    isFastSpeed,
     is3DActive,
     prefs.soundEnabled,
   ]);
