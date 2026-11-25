@@ -506,6 +506,155 @@ export const POSTFLOP_BLUEPRINTS: PostflopSpotBlueprint[] = [
         'Against large river overbets on flush-and-overcard runouts, fold weak pairs without key blockers and defend with stronger hands.',
     },
   },
+  {
+    id: 'pf-srp-bb-btn-turn-xr-semibluff',
+    neutralTitle: 'Turn · BB vs BTN · Facing 50% turn bet',
+    title: 'Turn Check-Raise Semi-Bluff with Nut Flush Draw + Gutshot',
+    street: 'turn',
+    potType: 'SRP',
+    heroPos: 'BB',
+    villainPos: 'BTN',
+    heroInPosition: false,
+    potBb: 13.6,
+    effectiveStackBb: 91.2,
+    toCallBb: 4.5,
+    heroCards: ['Ah', 'Kh'],
+    board: ['Jh', '6h', '3c', 'Ts'],
+    actionLog: [
+      'BTN opens 2.5bb, BB calls',
+      'Flop Jh 6h 3c: BB checks, BTN bets 1.8bb, BB calls',
+      'Turn Ts: BB checks, BTN bets 4.5bb (50%)',
+    ],
+    actions: [
+      { action: 'raise_xr', label: 'Check-Raise 14.0bb', frequency: 62, kind: 'raise' },
+      { action: 'call', label: 'Call 4.5bb', frequency: 38, kind: 'call' },
+      { action: 'fold', label: 'Fold', frequency: 0, kind: 'fold' },
+    ],
+    decisiveDetail: 'draws_implied_odds',
+    numbersBreakdown:
+      'Calling 4.5bb into 13.6bb needs only 4.5 ÷ (13.6 + 4.5) = 24.9% equity. You hold 9 nut flush outs plus 3 non-flush Queens for Broadway = 12 live outs (12 ÷ 46 = 26.1%). A raise to 14.0bb works as a pure bluff if BTN folds 14.0 ÷ (13.6 + 14.0) = 50.7% of the time, and your 12 outs cushion every call.',
+    takeaways: {
+      boardTexture:
+        'Two-tone connected turn where BTN’s wide, small flop bet range contains many weak pairs and floats that cannot continue against a raise.',
+      rangeAdvantage:
+        'BB’s flop check-call range includes sets, two pairs, and strong draws, so a turn check-raise is credible and keeps BTN’s medium pairs under pressure.',
+      blockerNote:
+        'The nut flush draw blocks the strongest flush draws BTN could continue with, and the extra gutshot adds clean outs when called.',
+      coreRule:
+        'Turn check-raise your strongest combo draws: fold equity plus a dozen outs makes the semi-bluff profitable even when called.',
+    },
+  },
+  {
+    id: 'pf-3bp-btn-bb-flop-low-connected',
+    neutralTitle: 'Flop · 3-Bet Pot · BTN vs BB · Low connected rainbow',
+    title: 'Check Back Overcards in 3-Bet Pot on Low Connected Flop',
+    street: 'flop',
+    potType: '3BP',
+    heroPos: 'BTN',
+    villainPos: 'BB',
+    heroInPosition: true,
+    potBb: 20.5,
+    effectiveStackBb: 90.0,
+    toCallBb: 0,
+    heroCards: ['As', 'Ks'],
+    board: ['7s', '6d', '5c'],
+    actionLog: ['BTN opens 2.5bb', 'BB 3-bets 10bb', 'BTN calls', 'Flop: BB checks'],
+    actions: [
+      { action: 'check', label: 'Check', frequency: 71, kind: 'check' },
+      { action: 'bet_33', label: 'Bet 33% (6.8bb)', frequency: 25, kind: 'bet' },
+      { action: 'bet_75', label: 'Bet 75% (15.4bb)', frequency: 4, kind: 'bet' },
+    ],
+    decisiveDetail: 'board_range_advantage',
+    numbersBreakdown:
+      'Pot is 20.5bb with 90.0bb behind (SPR 4.4). A 6.8bb bet needs BB to fold 6.8 ÷ (20.5 + 6.8) = 24.9% just to break even, yet BB’s 3-bet range is full of overpairs (AA–88) that never fold and would happily raise, leaving AK with only overcards and a backdoor flush draw.',
+    takeaways: {
+      boardTexture:
+        'Low connected rainbow flop where overpairs, straights, and combo draws dominate the strong end of both ranges.',
+      rangeAdvantage:
+        'BB’s 3-bet range keeps all the overpairs, while BTN’s calling range holds more connected hands; neither side owns a clear edge, so checking back is common.',
+      blockerNote:
+        'Ace-King has two overcards and a backdoor flush draw, but folds out nothing it beats and plays better when it realizes equity for free.',
+      coreRule:
+        'With unpaired overcards on a low connected flop in a 3-bet pot, check back in position and let your equity run instead of building a pot you cannot defend.',
+    },
+  },
+  {
+    id: 'pf-srp-co-bb-river-thin-value',
+    neutralTitle: 'River · CO vs BB · Checked to you on dry river',
+    title: 'Thin Value Bet with Strong Top Pair vs Capped Range',
+    street: 'river',
+    potType: 'SRP',
+    heroPos: 'CO',
+    villainPos: 'BB',
+    heroInPosition: true,
+    potBb: 22.1,
+    effectiveStackBb: 89.2,
+    toCallBb: 0,
+    heroCards: ['Ad', 'Kc'],
+    board: ['Ks', '7d', '4c', '2h', '9c'],
+    actionLog: [
+      'CO opens 2.5bb, BB calls',
+      'Flop Ks 7d 4c: BB checks, CO bets 2.8bb, BB calls',
+      'Turn 2h: BB checks, CO bets 5.5bb, BB calls',
+      'River 9c: BB checks',
+    ],
+    actions: [
+      { action: 'bet_50', label: 'Bet 50% (11.1bb)', frequency: 58, kind: 'bet' },
+      { action: 'bet_33', label: 'Bet 33% (7.3bb)', frequency: 34, kind: 'bet' },
+      { action: 'check', label: 'Check', frequency: 8, kind: 'check' },
+    ],
+    decisiveDetail: 'board_range_advantage',
+    numbersBreakdown:
+      'Pot is 22.1bb with 89.2bb behind. A 50% bet (11.1bb) gives BB 11.1 ÷ (22.1 + 11.1 + 11.1) = 25.1% pot odds, so Kx with weaker kickers and pocket pairs like TT or 88 keep calling, while the hands BB would have raised earlier are mostly absent from its checking range.',
+    takeaways: {
+      boardTexture:
+        'Dry, mostly rainbow river where no flush or straight is likely and the board barely changed from the flop.',
+      rangeAdvantage:
+        'BB check-called two streets and checks again, so the strongest hands (sets, two pairs) usually raised earlier; the checking range is capped around one pair.',
+      blockerNote:
+        'Holding the top pair with the Ace kicker dominates every other King and blocks AK-type value that BB could use to trap.',
+      coreRule:
+        'When an opponent’s range is capped at one pair and you hold top pair with a strong kicker, bet about half pot on the river to get paid by worse pairs.',
+    },
+  },
+  {
+    id: 'pf-srp-btn-bb-turn-overbet-barrel',
+    neutralTitle: 'Turn · BTN vs BB · Checked to you on A-high rainbow board',
+    title: 'Polarized 125% Turn Overbet Barrel with a Set',
+    street: 'turn',
+    potType: 'SRP',
+    heroPos: 'BTN',
+    villainPos: 'BB',
+    heroInPosition: true,
+    potBb: 9.1,
+    effectiveStackBb: 95.7,
+    toCallBb: 0,
+    heroCards: ['7h', '7d'],
+    board: ['Ac', '7s', '2d', '9h'],
+    actionLog: [
+      'BTN opens 2.5bb, BB calls',
+      'Flop Ac 7s 2d: BB checks, BTN bets 1.8bb, BB calls',
+      'Turn 9h: BB checks',
+    ],
+    actions: [
+      { action: 'bet_125', label: 'Overbet 125% (11.4bb)', frequency: 52, kind: 'bet' },
+      { action: 'bet_75', label: 'Bet 75% (6.8bb)', frequency: 38, kind: 'bet' },
+      { action: 'check', label: 'Check', frequency: 10, kind: 'check' },
+    ],
+    decisiveDetail: 'bet_size_pot_odds',
+    numbersBreakdown:
+      'Pot is 9.1bb with 95.7bb behind (SPR 10.5). An 11.4bb overbet (125% pot) gives BB 11.4 ÷ (9.1 + 11.4 + 11.4) = 35.7% pot odds and cuts its defense (MDF) to 9.1 ÷ (9.1 + 11.4) = 44.4%, forcing out Ax and pocket pairs that would call a small bet while still leaving 84.3bb for a river shove.',
+    takeaways: {
+      boardTexture:
+        'Ace-high rainbow board where the brick turn changes little, so BB’s Ax one-pair hands remain stuck calling one more bet.',
+      rangeAdvantage:
+        'BTN holds the nut sets and two pairs plus many air bluffs, while BB’s flop check-call range is capped at one pair and weak draws, which supports a polarized overbet.',
+      blockerNote:
+        'A set blocks the pairs BB could use to continue and leaves BTN with the strongest hands in the polarized range.',
+      coreRule:
+        'When your range is polarized and your opponent is capped, size up to 125% pot on a brick turn with your nutted hands and balance with bluffs.',
+    },
+  },
   // --- PAIRED RIVER BET-SIZE EXERCISE (Identical cards, board, pot; ONLY bet size changes!) ---
   {
     id: PAIRED_RIVER_SMALL_ID,

@@ -1587,3 +1587,23 @@ export function createSeatPlaqueMesh(seat: Seat3DSpec): THREE.Group {
 
   return group;
 }
+
+/**
+ * Compact angled badge plane hovering just above the felt, tilted toward the Hero camera.
+ */
+export function createFeltBadgeMesh(tex: THREE.Texture): THREE.Mesh {
+  const aspect = 320 / 112;
+  const height = 0.13;
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(height * aspect, height), mat);
+  mesh.rotation.x = -1.0;
+  mesh.position.y = FELT_Y + 0.045;
+  mesh.renderOrder = 6;
+  mesh.name = 'FeltBadge';
+  return mesh;
+}

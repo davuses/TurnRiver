@@ -8,6 +8,7 @@ import {
   createCasinoSalonBackdropGroup,
   createChandelierDustMotes,
   createCheckRippleMesh,
+  createFeltBadgeMesh,
   createChipStacksGroup,
   createDealerPuckGroup,
   createPlayingCardGroup,
@@ -29,7 +30,9 @@ import {
   createChipTopTexture,
   createContactShadowTexture,
   createDealerPuckTexture,
+  createFeltBadgeTexture,
   createStudioFloorTexture,
+  disposeFeltBadgeTextures,
   type FeltThemeId,
 } from './textures';
 
@@ -89,6 +92,24 @@ interface HeroCardPeekTarget {
   baseRot: THREE.Euler;
   peekAmount: number;
   sideOffset: number;
+}
+
+interface BoardCardEntry {
+  group: THREE.Group;
+}
+
+interface SeatCardEntry {
+  sig: string;
+  spot: boolean;
+  c1: THREE.Group;
+  c2: THREE.Group;
+  targets: HeroCardPeekTarget[];
+}
+
+interface BetChipEntry {
+  seatIndex: number;
+  spec: ChipStackSpec;
+  fullChips: number;
 }
 
 const CAMERA_PRESETS: Record<
@@ -237,6 +258,14 @@ export class PokerScene3D {
   private ambientPropsGroup: THREE.Group;
   private dustMotes: THREE.Points;
   private dynamicGroup: THREE.Group;
+  private cardsGroup: THREE.Group;
+  private chipsGroup: THREE.Object3D | null = null;
+  private chipBaseSpecs: ChipStackSpec[] = [];
+  private betChipEntries: BetChipEntry[] = [];
+  private pendingBetChips = new Map<number, { chips: number; token: number }>();
+  private betTokenSeq = 0;
+  private boardCardMap = new Map<string, BoardCardEntry>();
+  private seatCardMap = new Map<number, SeatCardEntry>();
   private fxGroup: THREE.Group;
   private contactShadowTex: THREE.CanvasTexture;
   private cardBackTex: THREE.CanvasTexture;
@@ -475,6 +504,11 @@ export class PokerScene3D {
       this.dynamicGroup.name = 'DynamicHandLayer';
       this.scene.add(this.dynamicGroup);
 
+      // Persistent card layer: board + hole cards survive hand-layer rebuilds (keeps in-flight tweens & hero peek intact)
+      this.cardsGroup = new THREE.Group();
+      this.cardsGroup.name = 'PersistentCardsLayer';
+      this.scene.add(this.cardsGroup);
+
       // Transient animation FX layer (individual staggered tossed bet chips & pot-sweep streams)
       this.fxGroup = new THREE.Group();
       this.fxGroup.name = 'AnimationFxLayer';
@@ -705,6 +739,14 @@ export class PokerScene3D {
     }
   }
 
+  /** Mobile orbit lock/unlock: when disabled, single-finger vertical swipes scroll the page instead of orbiting. */
+  public setOrbitEnabled(enabled: boolean) {
+    if (this.disposed) return;
+    this.controls.enabled = enabled;
+    this.renderer.domElement.style.touchAction = enabled ? 'none' : 'pan-y';
+    if (!enabled) this.handlePointerLeave();
+  }
+
   public setSoundEnabled(enabled: boolean) {
     this.soundEngine.enabled = enabled;
   }
@@ -823,7 +865,8 @@ export class PokerScene3D {
     arcHeight: number,
     duration: number,
     baseDelay = 0,
-    onLandFirst?: () => void
+    onLandFirst?: () => void,
+    onLandLast?: () => void
   ) {
     const chipRadius = 0.095;
     const chipHeight = 0.023;
@@ -886,7 +929,13 @@ export class PokerScene3D {
         duration: duration + c * 0.018,
         disposeOnEnd: true,
         initialHidden: true,
-        onLand: c === 0 ? onLandFirst : undefined,
+        onLand:
+          c === 0 || c === count - 1
+            ? () => {
+                if (c === 0) onLandFirst?.();
+                if (c === count - 1) onLandLast?.();
+              }
+            : undefined,
       });
     }
   }
@@ -965,37 +1014,93 @@ export class PokerScene3D {
     });
   }
 
+  private disposeTree(root: THREE.Object3D) {
+    root.traverse((obj) => {
+      if ((obj as THREE.InstancedMesh).isInstancedMesh) {
+        (obj as THREE.InstancedMesh).dispose();
+      }
+      if ((obj as THREE.Mesh).isMesh) {
+        const mesh = obj as THREE.Mesh;
+        mesh.geometry?.dispose();
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        const uniqueMats = new Set(mats);
+        for (const m of uniqueMats) {
+          if (!m) continue;
+          const std = m as THREE.MeshStandardMaterial;
+          if (std.map && !this.isSharedTexture(std.map)) {
+            std.map.dispose();
+          }
+          m.dispose();
+        }
+      }
+    });
+  }
+
+  private disposeCardGroup(obj: THREE.Object3D) {
+    this.activeTweens = this.activeTweens.filter((tw) => tw.obj !== obj);
+    this.cardsGroup.remove(obj);
+    this.disposeTree(obj);
+  }
+
+  private disposeSeatEntry(entry: SeatCardEntry) {
+    this.disposeCardGroup(entry.c1);
+    this.disposeCardGroup(entry.c2);
+  }
+
+  /** Re-aim a persistent card: retarget its running tween, or snap if it is idle. */
+  private retargetCard(obj: THREE.Object3D, pos: THREE.Vector3, rot: THREE.Euler) {
+    const tw = this.activeTweens.find((t) => t.obj === obj);
+    if (tw) {
+      tw.toPos.copy(pos);
+      tw.toRot.copy(rot);
+    } else {
+      obj.position.copy(pos);
+      obj.rotation.copy(rot);
+    }
+  }
+
+  private refreshChipsMesh() {
+    if (this.chipsGroup) {
+      this.dynamicGroup.remove(this.chipsGroup);
+      this.disposeTree(this.chipsGroup);
+      this.chipsGroup = null;
+    }
+    const specs: ChipStackSpec[] = [...this.chipBaseSpecs];
+    for (const entry of this.betChipEntries) {
+      const pending = this.pendingBetChips.get(entry.seatIndex);
+      const chips = pending ? pending.chips : entry.fullChips;
+      if (chips > 0) specs.push({ ...entry.spec, chips });
+    }
+    this.chipsGroup = createChipStacksGroup(
+      specs,
+      this.contactShadowTex,
+      this.chipSideTex,
+      this.chipTopTex
+    );
+    this.dynamicGroup.add(this.chipsGroup);
+  }
+
+  private addFeltBadge(text: string, variant: 'pot' | 'bet', x: number, z: number) {
+    const badge = createFeltBadgeMesh(createFeltBadgeTexture(text, variant));
+    badge.position.x = x;
+    badge.position.z = z;
+    this.dynamicGroup.add(badge);
+  }
+
   private rebuildHandLayer(data: Pick<Scene3DHandData, 'board' | 'potBb' | 'seats' | 'fourColorDeck'>) {
-    // Drop non-FX card tweens belonging to the previous dynamic layer (keep flying chip/muck FX running!)
-    this.activeTweens = this.activeTweens.filter((tw) => tw.disposeOnEnd);
+    // Keep FX tweens and persistent card tweens running; only drop tweens of meshes about to be disposed
+    this.activeTweens = this.activeTweens.filter(
+      (tw) => tw.disposeOnEnd || tw.obj.parent === this.cardsGroup
+    );
     this.activeHaloMats = [];
     this.seatPlaquePlates = [];
-    this.heroCardTargets = [];
-    this.hoveredHeroCardIdx = -1;
+    this.chipsGroup = null;
 
     // Cleanly dispose previous dynamic meshes & per-plaque textures (preserve shared & cached textures)
     while (this.dynamicGroup.children.length > 0) {
       const child = this.dynamicGroup.children[0];
       this.dynamicGroup.remove(child);
-      child.traverse((obj) => {
-        if ((obj as THREE.InstancedMesh).isInstancedMesh) {
-          (obj as THREE.InstancedMesh).dispose();
-        }
-        if ((obj as THREE.Mesh).isMesh) {
-          const mesh = obj as THREE.Mesh;
-          mesh.geometry?.dispose();
-          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-          const uniqueMats = new Set(mats);
-          for (const m of uniqueMats) {
-            if (!m) continue;
-            const std = m as THREE.MeshStandardMaterial;
-            if (std.map && !this.isSharedTexture(std.map)) {
-              std.map.dispose();
-            }
-            m.dispose();
-          }
-        }
-      });
+      this.disposeTree(child);
     }
 
     const deckOrigin = new THREE.Vector3(
@@ -1016,6 +1121,15 @@ export class PokerScene3D {
     const isNewHoleDeal =
       this.initializedHandOnce && nextHeroCardsSig !== '' && nextHeroCardsSig !== this.prevHeroCardsSig;
 
+    if (isFreshBoard) {
+      for (const entry of this.boardCardMap.values()) this.disposeCardGroup(entry.group);
+      this.boardCardMap.clear();
+    }
+    if (isNewHoleDeal) {
+      for (const entry of this.seatCardMap.values()) this.disposeSeatEntry(entry);
+      this.seatCardMap.clear();
+    }
+
     // On real GPUs, animate the very first hand deal smoothly so the studio comes alive on open
     const animateInitialEntrance = !this.initializedHandOnce && !this.isSoftwareGl;
 
@@ -1029,7 +1143,17 @@ export class PokerScene3D {
     ).length;
     const isSingleStreetPeel = newlyDealtCount === 1 && boardCount >= 4;
 
+    const seenBoardKeys = new Set<string>();
     for (let i = 0; i < boardCount; i++) {
+      const boardKey = `${i}|${nextBoardKeys[i]}|${data.fourColorDeck ? 4 : 2}`;
+      seenBoardKeys.add(boardKey);
+      const targetPos = new THREE.Vector3(startX + i * cardSpacing, FELT_Y + 0.002, -0.08);
+      const targetRot = new THREE.Euler(0, (i - (boardCount - 1) / 2) * 0.018, 0);
+      const existingBoard = this.boardCardMap.get(boardKey);
+      if (existingBoard) {
+        this.retargetCard(existingBoard.group, targetPos, targetRot);
+        continue;
+      }
       const cardGrp = createPlayingCardGroup(
         data.board[i],
         true,
@@ -1039,11 +1163,10 @@ export class PokerScene3D {
         1.05,
         this.getCardFaceTexture(data.board[i], data.fourColorDeck)
       );
-      const targetPos = new THREE.Vector3(startX + i * cardSpacing, FELT_Y + 0.002, -0.08);
-      const targetRot = new THREE.Euler(0, (i - (boardCount - 1) / 2) * 0.018, 0);
       cardGrp.position.copy(targetPos);
       cardGrp.rotation.copy(targetRot);
-      this.dynamicGroup.add(cardGrp);
+      this.cardsGroup.add(cardGrp);
+      this.boardCardMap.set(boardKey, { group: cardGrp });
 
       const isNewlyDealt =
         animateInitialEntrance ||
@@ -1085,8 +1208,18 @@ export class PokerScene3D {
       }
     }
 
+    for (const [key, entry] of this.boardCardMap) {
+      if (!seenBoardKeys.has(key)) {
+        this.disposeCardGroup(entry.group);
+        this.boardCardMap.delete(key);
+      }
+    }
+
     // 2. Center Pot Clay Chip Stacks ($25 emerald, $100 charcoal, $500 purple, $1000 gold)
     const chipSpecs: ChipStackSpec[] = [];
+    const betEntries: BetChipEntry[] = [];
+    const nextHeroTargets: HeroCardPeekTarget[] = [];
+    const seenSeatCards = new Set<number>();
     const potChipsTotal = Math.max(4, Math.min(28, Math.round(data.potBb * 0.7)));
     const stackColors = [0x0d7a55, 0x1d2432, 0xd97706, 0x6d28d9];
     const potStackCount = Math.min(4, Math.max(2, Math.ceil(potChipsTotal / 7)));
@@ -1243,6 +1376,26 @@ export class PokerScene3D {
         isAllInNow &&
         !this.prevAllInSeats.has(seat.seatIndex);
 
+      const prevSeatBet = this.prevStreetBets.get(seat.seatIndex)?.bet ?? 0;
+      const betIncreased = this.initializedHandOnce && streetBet > prevSeatBet + 0.05;
+      let releaseBetChips: (() => void) | undefined;
+      if (betIncreased) {
+        // Hold back newly added destination chips until the flying chips actually land
+        const prevChips = prevSeatBet > 0 ? Math.max(1, Math.min(8, Math.ceil(prevSeatBet / 1.8))) : 0;
+        const token = ++this.betTokenSeq;
+        this.pendingBetChips.set(seat.seatIndex, { chips: prevChips, token });
+        releaseBetChips = () => {
+          if (this.disposed) return;
+          if (this.pendingBetChips.get(seat.seatIndex)?.token !== token) return;
+          this.pendingBetChips.delete(seat.seatIndex);
+          this.refreshChipsMesh();
+          this.renderer.shadowMap.needsUpdate = true;
+          this.requestRender();
+        };
+      } else if (streetBet <= 0) {
+        this.pendingBetChips.delete(seat.seatIndex);
+      }
+
       if (newlyAllIn) {
         const allInPan = this.panForX(betX);
         this.spawnFlyingChips(
@@ -1253,7 +1406,8 @@ export class PokerScene3D {
           0.32,
           this.isSoftwareGl ? 0.24 : 0.48,
           0,
-          () => this.soundEngine.playChipClink(4, 0, allInPan)
+          () => this.soundEngine.playChipClink(4, 0, allInPan),
+          releaseBetChips
         );
         this.soundEngine.playAllInSting(allInPan);
       }
@@ -1263,16 +1417,15 @@ export class PokerScene3D {
         nextStreetBets.set(seat.seatIndex, { bet: streetBet, x: betX, z: betZ });
         const betChips = Math.max(1, Math.min(8, Math.ceil(streetBet / 1.8)));
         const betColor = streetBet >= 8 ? 0xd97706 : 0x6d28d9;
-        chipSpecs.push({
-          x: betX,
-          z: betZ,
-          chips: betChips,
-          colorHex: betColor,
+        betEntries.push({
+          seatIndex: seat.seatIndex,
+          fullChips: betChips,
+          spec: { x: betX, z: betZ, chips: betChips, colorHex: betColor },
         });
+        this.addFeltBadge(`${Number(streetBet.toFixed(1))}bb`, 'bet', betX + (betX < 0 ? -0.3 : 0.3), betZ);
 
         // Staggered curved chip-toss arcs whenever this seat adds chips to the betting line
-        const prevSeatBet = this.prevStreetBets.get(seat.seatIndex)?.bet ?? 0;
-        if (!newlyAllIn && this.initializedHandOnce && streetBet > prevSeatBet + 0.05) {
+        if (!newlyAllIn && betIncreased) {
           const flyCount = Math.min(4, Math.max(1, Math.ceil((streetBet - prevSeatBet) / 2.2)));
           const betPan = this.panForX(betX);
           this.spawnFlyingChips(
@@ -1283,7 +1436,8 @@ export class PokerScene3D {
             0.25,
             this.isSoftwareGl ? 0.22 : 0.44,
             0,
-            () => this.soundEngine.playChipClink(Math.min(4, flyCount), 0, betPan)
+            () => this.soundEngine.playChipClink(Math.min(4, flyCount), 0, betPan),
+            releaseBetChips
           );
         }
       }
@@ -1328,6 +1482,67 @@ export class PokerScene3D {
           nextRevealedSeats.add(seat.seatIndex);
         }
         const cardScale = seat.isHero ? 1.18 : 0.96;
+        const cardSig = `${seat.cards[0].rank}${seat.cards[0].suit}-${seat.cards[1].rank}${seat.cards[1].suit}|${reveal ? 1 : 0}|${data.fourColorDeck ? 4 : 2}|${seat.isHero ? 1 : 0}`;
+        // Showdown winner spotlight: revealed winning hand rises slightly and tilts toward the camera
+        const spot = Boolean(seat.isWinner && reveal);
+        const liftY = spot ? 0.035 : 0;
+        const liftRot = spot ? 0.1 : 0;
+
+        let pos1: THREE.Vector3;
+        let rot1: THREE.Euler;
+        let pos2: THREE.Vector3;
+        let rot2: THREE.Euler;
+
+        if (seat.isHero) {
+          pos1 = new THREE.Vector3(-0.24, FELT_Y + 0.115 + liftY, 1.24);
+          rot1 = new THREE.Euler(0.22 + liftRot, 0.09, 0);
+          pos2 = new THREE.Vector3(0.24, FELT_Y + 0.115 + liftY, 1.24);
+          rot2 = new THREE.Euler(0.22 + liftRot, -0.09, 0);
+        } else {
+          const cx = sideHoleX;
+          const cz = sideHoleZ;
+          pos1 = new THREE.Vector3(cx - 0.14, FELT_Y + 0.004 + liftY, cz);
+          rot1 = new THREE.Euler(liftRot, anchor.rotY + 0.12, 0);
+          pos2 = new THREE.Vector3(cx + 0.14, FELT_Y + 0.006 + liftY, cz + 0.02);
+          rot2 = new THREE.Euler(liftRot, anchor.rotY - 0.12, 0);
+        }
+
+        const existingSeat = this.seatCardMap.get(seat.seatIndex);
+        if (existingSeat && existingSeat.sig === cardSig) {
+          // Unchanged hole cards stay mounted: running deal tweens and hero peek state are preserved
+          seenSeatCards.add(seat.seatIndex);
+          if (existingSeat.spot !== spot) {
+            existingSeat.spot = spot;
+            this.retargetCard(existingSeat.c1, pos1, rot1);
+            this.retargetCard(existingSeat.c2, pos2, rot2);
+            existingSeat.targets.forEach((target, idx) => {
+              target.basePos.copy(idx === 0 ? pos1 : pos2);
+              target.baseRot.copy(idx === 0 ? rot1 : rot2);
+              if (
+                (target.peekAmount !== 0 || target.sideOffset !== 0) &&
+                !this.activeTweens.some((tw) => tw.obj === target.group)
+              ) {
+                target.group.position.set(
+                  target.basePos.x + target.sideOffset * 0.045,
+                  target.basePos.y + target.peekAmount * 0.125,
+                  target.basePos.z + target.peekAmount * 0.065
+                );
+                target.group.rotation.set(
+                  target.baseRot.x + target.peekAmount * 0.26,
+                  target.baseRot.y - target.sideOffset * 0.04,
+                  target.baseRot.z
+                );
+              }
+            });
+          }
+          if (seat.isHero) nextHeroTargets.push(...existingSeat.targets);
+          continue;
+        }
+        if (existingSeat) {
+          this.disposeSeatEntry(existingSeat);
+          this.seatCardMap.delete(seat.seatIndex);
+        }
+
         const c1 = createPlayingCardGroup(
           seat.cards[0],
           reveal,
@@ -1347,34 +1562,22 @@ export class PokerScene3D {
           reveal ? this.getCardFaceTexture(seat.cards[1], data.fourColorDeck) : undefined
         );
 
-        let pos1: THREE.Vector3;
-        let rot1: THREE.Euler;
-        let pos2: THREE.Vector3;
-        let rot2: THREE.Euler;
-
+        const targets: HeroCardPeekTarget[] = [];
         if (seat.isHero) {
-          pos1 = new THREE.Vector3(-0.24, FELT_Y + 0.115, 1.24);
-          rot1 = new THREE.Euler(0.22, 0.09, 0);
-          pos2 = new THREE.Vector3(0.24, FELT_Y + 0.115, 1.24);
-          rot2 = new THREE.Euler(0.22, -0.09, 0);
-          this.heroCardTargets.push(
+          targets.push(
             { group: c1, basePos: pos1.clone(), baseRot: rot1.clone(), peekAmount: 0, sideOffset: 0 },
             { group: c2, basePos: pos2.clone(), baseRot: rot2.clone(), peekAmount: 0, sideOffset: 0 }
           );
-        } else {
-          const cx = sideHoleX;
-          const cz = sideHoleZ;
-          pos1 = new THREE.Vector3(cx - 0.14, FELT_Y + 0.004, cz);
-          rot1 = new THREE.Euler(0, anchor.rotY + 0.12, 0);
-          pos2 = new THREE.Vector3(cx + 0.14, FELT_Y + 0.006, cz + 0.02);
-          rot2 = new THREE.Euler(0, anchor.rotY - 0.12, 0);
+          nextHeroTargets.push(...targets);
         }
 
         c1.position.copy(pos1);
         c1.rotation.copy(rot1);
         c2.position.copy(pos2);
         c2.rotation.copy(rot2);
-        this.dynamicGroup.add(c1, c2);
+        this.cardsGroup.add(c1, c2);
+        this.seatCardMap.set(seat.seatIndex, { sig: cardSig, spot, c1, c2, targets });
+        seenSeatCards.add(seat.seatIndex);
 
         const newlyRevealedOpponent =
           this.initializedHandOnce &&
@@ -1504,6 +1707,18 @@ export class PokerScene3D {
       }
     }
 
+    // Seats that folded / lost their cards: drop their persistent hole cards
+    for (const [seatIdx, entry] of this.seatCardMap) {
+      if (!seenSeatCards.has(seatIdx)) {
+        this.disposeSeatEntry(entry);
+        this.seatCardMap.delete(seatIdx);
+      }
+    }
+    if (nextHeroTargets.length !== this.heroCardTargets.length) {
+      this.hoveredHeroCardIdx = -1;
+    }
+    this.heroCardTargets = nextHeroTargets;
+
     // Hero turn attention ping when Hero's turn begins
     if (this.initializedHandOnce && isHeroTurnNow && !this.prevHeroTurn) {
       this.soundEngine.playHeroTurnPing();
@@ -1582,14 +1797,15 @@ export class PokerScene3D {
     stubDeck.receiveShadow = true;
     this.dynamicGroup.add(stubDeck);
 
-    // Build all chips via single InstancedMesh group reusing shared procedural textures
-    const chipsGroup = createChipStacksGroup(
-      chipSpecs,
-      this.contactShadowTex,
-      this.chipSideTex,
-      this.chipTopTex
-    );
-    this.dynamicGroup.add(chipsGroup);
+    // Center pot amount badge floating just in front of the pot chips
+    if (data.potBb > 0) {
+      this.addFeltBadge(`Pot ${data.potBb.toFixed(1)} bb`, 'pot', 0, -0.44);
+    }
+
+    // Build all chips via single InstancedMesh group (bet chips lag behind until flying chips land)
+    this.chipBaseSpecs = chipSpecs;
+    this.betChipEntries = betEntries;
+    this.refreshChipsMesh();
 
     // Ensure freshly created seat plaques match the current camera pitch immediately
     this.updatePlaqueTilt(true);
@@ -1847,6 +2063,9 @@ export class PokerScene3D {
     this.seatPlaquePlates = [];
     this.chandelierFadeEntries = [];
     this.heroCardTargets = [];
+    this.boardCardMap.clear();
+    this.seatCardMap.clear();
+    this.pendingBetChips.clear();
     this.resizeObserver.disconnect();
     this.controls.dispose();
     this.soundEngine.dispose();
@@ -1873,6 +2092,7 @@ export class PokerScene3D {
     }
     this.cardFaceTexCache.clear();
     this.cardFaceTexSet.clear();
+    disposeFeltBadgeTextures();
     this.envRenderTarget.dispose();
     this.pmrem.dispose();
     this.renderer.dispose();

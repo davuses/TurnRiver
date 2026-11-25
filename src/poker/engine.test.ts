@@ -680,6 +680,8 @@ test('Hand Reading counts exact board-blocked combos across all 4 spots', () => 
     'hr-bb-xr-low-board': 58,
     'hr-btn-3bet-double-barrel': 67,
     'hr-co-river-overbet': 63,
+    'hr-3bp-btn-turn-delayed-cbet': 43,
+    'hr-sb-bb-river-xr-value-polar': 39,
   };
   for (const spot of HAND_READING_SPOTS) {
     const res = evaluateHandReading(spot, new Set(spot.targetHands));

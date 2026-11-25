@@ -1141,3 +1141,61 @@ export function createSeatPlaqueTexture(
   tex.anisotropy = 8;
   return tex;
 }
+
+const feltBadgeCache = new Map<string, THREE.CanvasTexture>();
+
+/**
+ * Crisp obsidian-emerald pill with brass/ivory numerals for on-felt pot & bet amounts.
+ * Cached by `variant:text`; cached textures are shared (flagged via userData.sharedFeltBadge) and must not be disposed per-mesh.
+ */
+export function createFeltBadgeTexture(text: string, variant: 'pot' | 'bet'): THREE.CanvasTexture {
+  const key = `${variant}:${text}`;
+  const cached = feltBadgeCache.get(key);
+  if (cached) return cached;
+
+  const w = 320;
+  const h = 112;
+  const [canvas, ctx] = makeCanvas(w, h);
+  ctx.clearRect(0, 0, w, h);
+
+  const r = h / 2 - 6;
+  const x0 = 6;
+  const y0 = 6;
+  const pw = w - 12;
+  const ph = h - 12;
+  ctx.beginPath();
+  ctx.moveTo(x0 + r, y0);
+  ctx.lineTo(x0 + pw - r, y0);
+  ctx.arc(x0 + pw - r, y0 + r, r, -Math.PI / 2, Math.PI / 2);
+  ctx.lineTo(x0 + r, y0 + ph);
+  ctx.arc(x0 + r, y0 + r, r, Math.PI / 2, (Math.PI * 3) / 2);
+  ctx.closePath();
+  ctx.fillStyle = variant === 'pot' ? '#06140f' : '#0a1812';
+  ctx.fill();
+  ctx.lineWidth = variant === 'pot' ? 6 : 5;
+  ctx.strokeStyle = variant === 'pot' ? '#d4aa4f' : '#2f9e78';
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = variant === 'pot' ? '#f6e3b0' : '#f8f5ee';
+  let fontSize = variant === 'pot' ? 50 : 56;
+  ctx.font = `bold ${fontSize}px "JetBrains Mono", monospace`;
+  while (fontSize > 24 && ctx.measureText(text).width > w - 56) {
+    fontSize -= 2;
+    ctx.font = `bold ${fontSize}px "JetBrains Mono", monospace`;
+  }
+  ctx.fillText(text, w / 2, h / 2 + 2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  tex.userData.sharedFeltBadge = true;
+  feltBadgeCache.set(key, tex);
+  return tex;
+}
+
+export function disposeFeltBadgeTextures() {
+  for (const tex of feltBadgeCache.values()) tex.dispose();
+  feltBadgeCache.clear();
+}

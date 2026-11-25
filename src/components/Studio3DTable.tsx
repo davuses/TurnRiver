@@ -5,6 +5,7 @@ import {
   EyeOff,
   Maximize2,
   Minimize2,
+  Move3d,
   Palette,
   RefreshCw,
   Sun,
@@ -68,6 +69,15 @@ export function Studio3DTable({
   const [showProps, setShowProps] = useState<boolean>(true);
   const [localSoundEnabled, setLocalSoundEnabled] = useState<boolean>(true);
   const [dockVisible, setDockVisible] = useState(true);
+  const [isNarrow, setIsNarrow] = useState<boolean>(
+    () => typeof window !== 'undefined' && window.innerWidth < 640
+  );
+  // Embedded mobile tables default to orbit-locked so one-finger vertical swipes keep scrolling the page
+  const [orbitEnabled, setOrbitEnabled] = useState<boolean>(
+    () => !(typeof window !== 'undefined' && window.innerWidth < 640 && !fullViewport && !isTheater)
+  );
+  const orbitLockable = isNarrow && !fullViewport && !isTheater;
+  const effectiveOrbit = !orbitLockable || orbitEnabled;
   const [hasWebglError, setHasWebglError] = useState(false);
   const [webglErrorDetail, setWebglErrorDetail] = useState<string | null>(null);
 
@@ -120,6 +130,16 @@ export function Studio3DTable({
     // Intentionally mount/dispose once per component lifecycle; updates flow through dedicated effects below
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    sceneRef.current?.setOrbitEnabled(effectiveOrbit);
+  }, [effectiveOrbit, hasWebglError]);
 
   // Rebuild dynamic hand layer ONLY when hand state / deck color changes (skip redundant initial mount!)
   useEffect(() => {
@@ -229,7 +249,7 @@ export function Studio3DTable({
       <div
         ref={mountRef}
         data-testid="threejs-poker-canvas"
-        className="w-full h-full cursor-grab active:cursor-grabbing"
+        className={`w-full h-full ${effectiveOrbit ? 'cursor-grab active:cursor-grabbing' : ''}`}
       />
 
       {hasWebglError && (
@@ -257,6 +277,27 @@ export function Studio3DTable({
 
       {/* Top-Right Compact Theater + Hide/Show Dock Toggles */}
       <div className="absolute top-2 right-2 sm:top-3 sm:right-3 flex items-center gap-1.5 sm:gap-2">
+        {orbitLockable && (
+          <button
+            type="button"
+            data-testid="studio3d-orbit-toggle"
+            aria-pressed={orbitEnabled}
+            onClick={() => setOrbitEnabled((v) => !v)}
+            aria-label={
+              orbitEnabled
+                ? locale === 'zh-CN' ? '锁定旋转，恢复页面滚动' : 'Lock orbit and scroll page'
+                : locale === 'zh-CN' ? '解锁旋转视角' : 'Unlock 3D orbit'
+            }
+            className={`px-2 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer ${
+              orbitEnabled
+                ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200'
+                : 'bg-[#0A100E]/92 border-[#21322C] text-slate-300 hover:text-white'
+            }`}
+          >
+            <Move3d className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>{locale === 'zh-CN' ? (orbitEnabled ? '旋转' : '已锁定') : orbitEnabled ? 'Orbit' : 'Locked'}</span>
+          </button>
+        )}
         {onToggleTheater && (
           <button
             type="button"

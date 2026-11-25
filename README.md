@@ -1,4 +1,4 @@
-# TurnRiver — 6-Max Texas Hold'em Training Studio
+﻿# TurnRiver — 6-Max Texas Hold'em Training Studio
 
 [Open TurnRiver](https://davuses.github.io/TurnRiver/)
 
@@ -9,11 +9,14 @@
 ## Core Features
 
 - **Preflop Range & Position Lab** — 6-max 100bb RFI, 3-bet, and 4-bet defense drills with an interactive 169-hand mixed-strategy reference matrix and frequency-based grading.
-- **Postflop Live-Table Trainer** — Flop, turn, and river single-raised and 3-bet pot spots with spoiler-free prompts, a decisive-detail step, a paired river bet-size comparison drill (33% vs 125% pot), and hand-number breakdowns.
+- **Postflop Live-Table Trainer** — 16 curated spots: Flop, turn, and river single-raised and 3-bet pot spots with spoiler-free prompts, a decisive-detail step, a paired river bet-size comparison drill (33% vs 125% pot), and hand-number breakdowns.
 - **Pot Odds, Equity & EV Math Lab** — Pot odds (graded in percentage points), exact flop & turn equity enumeration, Call EV in big blinds, bluff break-even %, and Minimum Defense Frequency (MDF) drills.
-- **Hand Reading & Range Narrowing** — Paint Villain's surviving range onto a 13×13 matrix street-by-street and score range overlap (%), precision, and recall.
+- **Hand Reading & Range Narrowing** — 6 multi-street spots: Paint Villain's surviving range onto a 13×13 matrix street-by-street and score range overlap (%), precision, and recall.
 - **Configurable Multi-Bot Practice Arena** — Play complete cash hands against up to 6 distinct bot archetypes (*Balanced Reg, TAG, LAG, Calling Station, Nit, Maniac*) with customizable table size (Heads-Up to 6-Max), stack depths, main & side-pot showdown payouts, Hero position lock, live HUD stats, Blind Read mode, Fast-Fold, street-by-street pot-odds reviews, and **Theater / Fullscreen Mode**.
-- **Interactive 3D High-Stakes Poker Studio** — Custom Three.js PBR casino table featuring mahogany racetrack trim, stitched leather rail, switchable speed-cloth felt themes, studio/daylight/lounge lighting presets, animated card dealing & chip-tossing physics, toggleable lounge props, and 5 camera angles (*Hero POV, Broadcast, Top-Down, Pot Close-Up, Rail Shot*).
+- **Zero-Flash 3D WebGL Poker Table** — Salon obsidian/baize UI around a custom Three.js PBR casino table: mahogany racetrack trim, stitched leather rail, speed-cloth felt themes, lighting presets, animated dealing and chip tossing, fold mucking, check ripples, felt-printed bet/pot labels, toggleable lounge props, and 5 camera angles (*Hero POV, Broadcast, Top-Down, Pot Close-Up, Rail Shot*).
+- **Spatial Casino Audio** — Positional WebAudio SFX for cards, chips, checks, and folds (mute with M).
+- **Hand History Replay** — Step back through completed Bot Arena hands street by street.
+- **Dynamic Sizing Presets** — Context-aware preflop and postflop bet/raise size presets in the Arena.
 - **Training Review & Leak Tracker** — Aggregates accuracy, average score (`/ 100`), streaks, and per-drill native metrics across all modules with automatic local browser persistence (`localStorage`).
 - **Bilingual Support** — Instant toggle between **English (`en`)** and **Simplified Chinese (`zh-CN`)**.
 
@@ -30,7 +33,7 @@
 ## Local Development
 
 ### Prerequisites
-- Node.js 20+ (Node 22 recommended)
+- Node.js 22.12+ (Node 24 recommended; matches CI)
 
 ### Commands
 
@@ -89,7 +92,7 @@ This repository includes `.github/workflows/deploy-pages.yml`.
 | `M` | Mute / unmute 3D table audio SFX |
 | `Esc` | Exit Bot Arena Theater Mode or close the Arena setup modal |
 
-### Preflop Range & Position Lab
+### Preflop Lab & Bot Arena actions
 
 | Key | Action |
 | :--- | :--- |

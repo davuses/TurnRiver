@@ -319,6 +319,61 @@ const POSTFLOP_ZH: Record<string, PostflopZhCopy> = {
       coreRule: '同一手牌、同一张牌面，只要对手下注尺度从 33% 变成 125%，你的所需胜率和防守比例就会翻天覆地——看牌先看尺度和底池赔率。',
     },
   },
+  'pf-srp-bb-btn-turn-xr-semibluff': {
+    neutralTitle: '转牌决策：BB 面对 BTN 50% 底池的转牌下注',
+    title: '转牌用坚果同花听牌加卡顺做过牌加注半诈唬',
+    numbersBreakdown:
+      '跟注 4.5bb 进入 13.6bb 的底池，只需要 4.5 ÷ (13.6 + 4.5) = 24.9% 的胜率。你有 9 张坚果同花补牌，再加 3 张非红心 Q 凑成最大顺子，共 12 张有效补牌（12 ÷ 46 = 26.1%）。加注到 14.0bb 时，只要 BTN 弃牌超过 14.0 ÷ (13.6 + 14.0) = 50.7%，纯诈唬也能盈利，而 12 张补牌为被跟注的情况提供了充足的底气。',
+    takeaways: {
+      boardTexture:
+        '两同花的连张转牌，BTN 翻牌小尺度下注的宽范围里有大量弱对子和空气牌，面对加注难以继续。',
+      rangeAdvantage:
+        'BB 在翻牌过牌跟注的范围包含暗三条、两对和强听牌，因此转牌过牌加注可信，并持续压迫 BTN 的中等对子。',
+      blockerNote:
+        '坚果同花听牌挡住了 BTN 能继续的最强同花听牌，额外的卡顺为被跟注后增加了干净的补牌。',
+      coreRule:
+        '转牌用最强的组合听牌做过牌加注：弃牌收益加上十几张补牌，即使被跟注，这样的半诈唬依然盈利。',
+    },
+  },
+  'pf-3bp-btn-bb-flop-low-connected': {
+    neutralTitle: '翻牌决策：3-Bet 底池 BTN 有位置面对 BB（低张相连彩虹面）',
+    title: '3-Bet 底池低张相连翻牌，用两张高张在后位过牌控池',
+    numbersBreakdown:
+      '底池 20.5bb，有效筹码 90.0bb（SPR 4.4）。下注 6.8bb 时，BB 至少要弃牌 6.8 ÷ (20.5 + 6.8) = 24.9% 才能保本，但 BB 的 3-Bet 范围里满是永不弃牌的超对（AA–88），还会乐于加注，让 AK 只剩两张高张和后门同花听牌。',
+    takeaways: {
+      boardTexture: '低张相连的彩虹翻牌，超对、顺子和组合听牌占据了双方范围的强牌端。',
+      rangeAdvantage:
+        'BB 的 3-Bet 范围保留了全部超对，而 BTN 的跟注范围里相连牌更多，双方都没有明显优势，因此在后位过牌很常见。',
+      blockerNote: '同花 AK 有两张高张和后门同花听牌，但打不跑任何比它差的牌，免费看牌更能兑现权益。',
+      coreRule: '3-Bet 底池在低张相连翻牌上只有未成对的高张时，应在后位过牌，让权益自然兑现，而不是打大一个守不住的底池。',
+    },
+  },
+  'pf-srp-co-bb-river-thin-value': {
+    neutralTitle: '河牌决策：CO 有位置面对 BB 在干燥河牌过牌',
+    title: '强顶对面对封顶范围，河牌打薄价值',
+    numbersBreakdown:
+      '底池 22.1bb，有效筹码 89.2bb。下注 50%（11.1bb）时，BB 的赔率为 11.1 ÷ (22.1 + 11.1 + 11.1) = 25.1%，因此踢脚较弱的 Kx 以及 TT、88 这类口袋对仍会继续跟注，而 BB 本应更早加注的强牌基本已不在它的过牌范围里。',
+    takeaways: {
+      boardTexture: '干燥且基本是彩虹的河牌，不太可能有同花或顺子，牌面与翻牌相比几乎没变。',
+      rangeAdvantage:
+        'BB 连续两条街过牌跟注后再次过牌，最强的成牌（暗三条、两对）通常早就加注了，所以它的过牌范围封顶在一对左右。',
+      blockerNote: '带 A 踢脚的顶对压制了其他所有 K，并挡住了 BB 可能用来埋伏的 AK 类强牌。',
+      coreRule: '当对手范围封顶在一对、而你持有踢脚很强的顶对时，河牌下注约半个底池，让更差的对子付钱。',
+    },
+  },
+  'pf-srp-btn-bb-turn-overbet-barrel': {
+    neutralTitle: '转牌决策：BTN 有位置面对 BB 在 A 高彩虹面过牌',
+    title: '持有暗三条，转牌用 125% 底池超池下注打两极化',
+    numbersBreakdown:
+      '底池 9.1bb，有效筹码 95.7bb（SPR 10.5）。11.4bb 的超池下注（125% 底池）让 BB 面对 11.4 ÷ (9.1 + 11.4 + 11.4) = 35.7% 的赔率，并把它的最小防守频率（MDF）压到 9.1 ÷ (9.1 + 11.4) = 44.4%，逼走会跟小注的 Ax 和口袋对，同时还剩 84.3bb 可以在河牌全下。',
+    takeaways: {
+      boardTexture: 'A 高彩虹牌面，白板转牌几乎没有改变局面，BB 的 Ax 一对只能被迫再跟一次大注。',
+      rangeAdvantage:
+        'BTN 拥有坚果暗三条和两对，并混入大量空气牌诈唬，而 BB 翻牌过牌跟注的范围封顶在一对与弱听牌，这支持两极化超池下注。',
+      blockerNote: '暗三条挡住了 BB 可以用来继续的口袋对，也让 BTN 握有两极化范围里最强的价值牌。',
+      coreRule: '当你的范围两极化而对手范围封顶时，在白板转牌上用坚果牌做 125% 底池超池下注，并搭配诈唬保持平衡。',
+    },
+  },
 };
 
 export function localizePostflopLogLine(locale: Locale, line: string): string {
@@ -458,6 +513,56 @@ const HAND_READING_ZH: Record<string, HandReadingZhCopy> = {
     explanation:
       '河牌 120% 底池超池下注需要高度两极化：CO 会用中等顶对（AT、A9、A8）在后位过牌摊牌，用两对以上、暗三条和 AK 做价值下注，并以错失的 KQ／KT／QT 顺子听牌及黑桃听牌（T9s、98s、87s、75s）作为平衡诈唬。',
     keyCombosNote: '留意矩阵中段（QQ、KK、Jx、弱 Ax）在两极化河牌超池下注范围中几乎被抽空的结构特征。',
+  },
+  'hr-3bp-btn-turn-delayed-cbet': {
+    title: 'BTN 在翻牌后位过牌后，于 9♠ 6♦ 2♣ K♥ 转牌的延迟下注范围',
+    streetLabel: '转牌 · 3-Bet 底池 · 100bb',
+    timeline: [
+      {
+        street: '翻前',
+        detail: 'CO 开池加注到 2.5bb，BTN 3-Bet 到 7.5bb，CO 跟注。',
+        narrowingHint: 'BTN 的 3-Bet 范围由强价值（JJ+、AK、AQs、KQs）与同花阻挡牌（A5s–A3s、KJs、QJs、JTs）构成。',
+      },
+      {
+        street: '翻牌 9♠ 6♦ 2♣',
+        detail: 'CO 过牌，BTN 在后位过牌。',
+        narrowingHint: '在干燥低张翻牌后位过牌，会去掉大部分一对价值牌和暗三条；BTN 保留未成对高张、慢打的超对和落空的听牌。',
+      },
+      {
+        street: '转牌 K♥',
+        detail: 'CO 过牌，BTN 下注 12.4bb（75% 底池）。',
+        narrowingHint: 'K 让 BTN 的高张变强：AK、KQs、KJs 现在是价值下注，KK 和慢打的 AA 打大注，QJs／JTs 以卡顺听牌加 A5s–A4s 的阻挡牌作为诈唬。',
+      },
+    ],
+    promptQuestion: '请勾选 BTN 在 9♠ 6♦ 2♣ K♥ 转牌延迟下注时可能持有的手牌范围。',
+    explanation:
+      'BTN 在翻牌后位过牌后，转牌 K 是非常适合打大注的牌：它把 AK、KQs、KJs 这类高张变成顶对，让慢打的 KK／AA 成为明确的价值牌，也让 QJs、JTs 这类卡顺听牌以及 A5s、A4s 这类小 A 阻挡牌有了可信的故事线。TT–JJ 这类中等对子更倾向继续过牌摊牌。',
+    keyCombosNote: '实战提示：翻牌过牌后的转牌延迟下注是两极化的，CO 应当用强 Kx 和较好的对子跟注，面对大尺度下注则放弃纯抓诈唬牌。',
+  },
+  'hr-sb-bb-river-xr-value-polar': {
+    title: 'BB 在 9♥ 9♣ 4♥ 6♦ 2♥ 对子同花牌面的河牌过牌加注范围',
+    streetLabel: '河牌 · 单次加注底池 · 100bb',
+    timeline: [
+      {
+        street: '翻前',
+        detail: 'SB 开池加注到 3.0bb，BB 跟注。',
+        narrowingHint: 'BB 面对 SB 开池会宽范围防守，保留对子、同花连张、同花 A 和同花 K。',
+      },
+      {
+        street: '翻牌 9♥ 9♣ 4♥ → 转牌 6♦',
+        detail: 'BB 过牌，SB 下注 2.0bb，BB 跟注；转牌 BB 过牌，SB 下注 5.0bb，BB 跟注。',
+        narrowingHint: 'BB 用口袋对、同花听牌、三条和顺子听牌连续两条街过牌跟注，范围依然很宽。',
+      },
+      {
+        street: '河牌 2♥',
+        detail: 'BB 过牌，SB 下注 10.0bb，BB 过牌加注到 32.0bb。',
+        narrowingHint: '河牌 2♥ 补成同花并让牌面成对；BB 用同花、葫芦和三条做价值加注，并以落空的顺子听牌作为诈唬。',
+      },
+    ],
+    promptQuestion: '请勾选 BB 在 9♥ 9♣ 4♥ 6♦ 2♥ 河牌两极化过牌加注时可能持有的手牌范围。',
+    explanation:
+      '在成对且补成同花的牌面上，BB 的过牌加注由葫芦（66、44、22）、三条（A9s）和成牌同花（AKs、AQs、AJs、KQs）构成价值端，并用落空的顺子听牌（87s、75s、T8s）作为无法在摊牌获胜的诈唬来平衡。KK 或 AA 这类牌处于中间地带，更倾向跟注。',
+    keyCombosNote: '留意范围中间（超对、弱 Ax、一对）几乎为空：河牌过牌加注是两极化线路，SB 应放弃弱一对，只用强三条或更好的牌继续。',
   },
 };
 

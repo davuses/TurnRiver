@@ -243,6 +243,91 @@ export const HAND_READING_SPOTS: HandReadingSpot[] = [
       'A 120% pot river overbet requires true polarity. CO checks back medium top pairs (AT, A9, A8) for showdown and overbets two-pair+ / sets / AK for value, balanced by bricked KQ/KT/QT straight draws and missed spade draws (T9s, 98s, 87s, 75s).',
     keyCombosNote: 'Notice how completely empty the middle of the matrix (QQ, KK, Jx, weak Ax) becomes on a polarized river overbet.',
   },
+  {
+    id: 'hr-3bp-btn-turn-delayed-cbet',
+    title: 'BTN Delayed Turn Barrel Range After Flop Check-Back on 9♠ 6♦ 2♣ K♥',
+    villainPos: 'BTN',
+    heroPos: 'CO',
+    streetLabel: 'Turn · 3-Bet Pot · 100bb',
+    potBb: 28.9,
+    board: parseCards(['9s', '6d', '2c', 'Kh']),
+    timeline: [
+      {
+        street: 'Preflop',
+        detail: 'CO opens 2.5bb, BTN 3-bets 7.5bb, CO calls.',
+        narrowingHint: 'BTN 3-bets for value (JJ+, AK, AQs, KQs) and with suited blockers (A5s–A3s, KJs, QJs, JTs).',
+      },
+      {
+        street: 'Flop 9♠ 6♦ 2♣',
+        detail: 'CO checks, BTN checks back.',
+        narrowingHint: 'Checking back a dry low flop removes most one-pair value and sets; BTN keeps unpaired overcards, slowplayed overpairs, and missed draws.',
+      },
+      {
+        street: 'Turn K♥',
+        detail: 'CO checks, BTN bets 12.4bb (75% pot).',
+        narrowingHint: 'The King improves BTN’s overcards: AK, KQs, and KJs now bet for value, KK and slowplayed AA bet big, and QJs/JTs bet as gutshot bluffs with A5s–A4s blockers.',
+      },
+    ],
+    promptQuestion: 'Select BTN’s delayed Turn barrel range on 9♠ 6♦ 2♣ K♥.',
+    targetHands: expandTokens([
+      'AA',
+      'KK',
+      'AKs',
+      'AKo',
+      'KQs',
+      'KJs',
+      'QJs',
+      'JTs',
+      'A5s',
+      'A4s',
+    ]),
+    explanation:
+      'After BTN checks back the flop, the turn King is a perfect card to bet big: it improves overcards (AK, KQs, KJs) to top pair, turns slowplayed KK/AA into obvious value, and gives gutshot bluffs (QJs, JTs) and wheel-Ace blockers (A5s, A4s) a credible story. Medium pairs like TT–JJ prefer to keep checking for showdown.',
+    keyCombosNote: 'Key takeaway: A delayed turn bet after a flop check is polar. CO should call with strong Kx and the better pairs while releasing pure bluff-catchers against big sizes.',
+  },
+  {
+    id: 'hr-sb-bb-river-xr-value-polar',
+    title: 'BB River Check-Raise Range on Paired Flush Board 9♥ 9♣ 4♥ 6♦ 2♥',
+    villainPos: 'BB',
+    heroPos: 'SB',
+    streetLabel: 'River · SRP · 100bb',
+    potBb: 62.0,
+    board: parseCards(['9h', '9c', '4h', '6d', '2h']),
+    timeline: [
+      {
+        street: 'Preflop',
+        detail: 'SB opens 3.0bb, BB calls.',
+        narrowingHint: 'BB defends wide against the SB open, keeping pairs, suited connectors, suited Aces, and suited Kings.',
+      },
+      {
+        street: 'Flop 9♥ 9♣ 4♥ → Turn 6♦',
+        detail: 'BB checks, SB bets 2.0bb, BB calls; turn: BB checks, SB bets 5.0bb, BB calls.',
+        narrowingHint: 'BB check-calls twice with pocket pairs, flush draws, trips, and straight draws, keeping its range wide.',
+      },
+      {
+        street: 'River 2♥',
+        detail: 'BB checks, SB bets 10.0bb, BB check-raises to 32.0bb.',
+        narrowingHint: 'The River 2♥ completes the flush and pairs the board; BB check-raises with flushes, full houses, and trips for value plus missed straight draws as bluffs.',
+      },
+    ],
+    promptQuestion: 'Map BB’s polar River check-raise range on 9♥ 9♣ 4♥ 6♦ 2♥.',
+    targetHands: expandTokens([
+      '66',
+      '44',
+      '22',
+      'A9s',
+      'AKs',
+      'AQs',
+      'AJs',
+      'KQs',
+      '87s',
+      '75s',
+      'T8s',
+    ]),
+    explanation:
+      'On a paired board that also completes the flush, BB’s check-raise is built from full houses (66, 44, 22), trips (A9s), and made flushes (AKs, AQs, AJs, KQs), balanced by missed straight draws (87s, 75s, T8s) that cannot win at showdown. Hands like KK or AA stay in the middle and prefer to call.',
+    keyCombosNote: 'Notice how the middle of the range (overpairs, weak Ax, one pair) is empty: a river check-raise is a polar line, so SB should fold weak one-pair hands and call with strong trips or better.',
+  },
 ];
 
 export interface HandReadingResult {
