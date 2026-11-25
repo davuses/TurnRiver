@@ -36,7 +36,7 @@ export function RangeMatrix13x13(props: RangeMatrixProps) {
   return (
     <div className="w-full overflow-x-auto select-none">
       <div
-        className="flex flex-col gap-[2px] bg-[#0B1017] p-1.5 rounded-lg border border-[#222D3D] min-w-[364px] sm:min-w-0"
+        className="flex flex-col gap-[2px] bg-[#0A100E] p-1.5 rounded-lg border border-[#1F2D28] min-w-[364px] sm:min-w-0"
         role="grid"
         aria-label={t('matrix.ariaGrid')}
       >
@@ -54,11 +54,11 @@ export function RangeMatrix13x13(props: RangeMatrixProps) {
                 // Stacked horizontal bar inside cell: Emerald (Raise), Sky (Call), Obsidian (Fold)
                 const bgStyle =
                   raisePct === 0 && callPct === 0
-                    ? { backgroundColor: '#131A26' }
+                    ? { backgroundColor: '#111917' }
                     : {
                         backgroundImage: `linear-gradient(90deg, #10B981 0%, #10B981 ${raisePct}%, #38BDF8 ${raisePct}%, #38BDF8 ${
                           raisePct + callPct
-                        }%, #131A26 ${raisePct + callPct}%, #131A26 100%)`,
+                        }%, #111917 ${raisePct + callPct}%, #111917 100%)`,
                       };
 
                 const isActive = raisePct + callPct >= 45;
@@ -96,7 +96,7 @@ export function RangeMatrix13x13(props: RangeMatrixProps) {
               const isTarget = props.targetHands?.has(hand) ?? false;
               const view = props.viewMode ?? 'mine';
 
-              let cellClasses = 'bg-[#131A26] text-slate-400 hover:bg-[#1D283A] hover:text-slate-200';
+              let cellClasses = 'bg-[#111917] text-slate-400 hover:bg-[#192823] hover:text-slate-200';
               if (!props.showDiff) {
                 if (isSelected) {
                   cellClasses = 'bg-emerald-500 text-slate-950 font-bold';

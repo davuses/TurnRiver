@@ -116,7 +116,7 @@ export function LeakTrackerView({
   return (
     <div className="space-y-8 pb-12">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#222D3D] pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#1F2D28] pb-5">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-white">{t('leaks.title')}</h1>
           <p className="text-xs text-slate-400">{t('leaks.subtitle')}</p>
@@ -128,7 +128,7 @@ export function LeakTrackerView({
               type="button"
               onClick={() => setConfirmReset(true)}
               disabled={summary.totalDecisions === 0}
-              className="min-h-[40px] px-3.5 py-2 text-xs font-medium rounded-lg bg-[#111722] border border-[#222D3D] text-slate-300 hover:text-rose-300 hover:border-rose-500/40 disabled:opacity-40 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              className="min-h-[40px] px-3.5 py-2 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:text-rose-300 hover:border-rose-500/40 disabled:opacity-40 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
               <span>{t('leaks.resetStats')}</span>
@@ -159,26 +159,26 @@ export function LeakTrackerView({
       </div>
 
       {/* Headline Metrics */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[#222D3D] border border-[#222D3D] rounded-xl overflow-hidden">
-        <div className="bg-[#111722] p-5 space-y-1">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[#1F2D28] border border-[#1F2D28] rounded-xl overflow-hidden">
+        <div className="bg-[#0E1513] p-5 space-y-1">
           <span className="text-xs text-slate-400 block">{t('leaks.totalDecisions')}</span>
           <span className="text-2xl font-mono tabular-nums font-semibold text-white">
             {summary.totalDecisions}
           </span>
         </div>
-        <div className="bg-[#111722] p-5 space-y-1">
+        <div className="bg-[#0E1513] p-5 space-y-1">
           <span className="text-xs text-slate-400 block">{t('leaks.optAcceptable')}</span>
           <span className="text-2xl font-mono tabular-nums font-semibold text-emerald-400">
             {optimalRate}%
           </span>
         </div>
-        <div className="bg-[#111722] p-5 space-y-1">
+        <div className="bg-[#0E1513] p-5 space-y-1">
           <span className="text-xs text-slate-400 block">{t('leaks.cumEvLoss')}</span>
           <span className="text-2xl font-mono tabular-nums font-semibold text-amber-300">
             {summary.totalDecisions > 0 ? `${avgScore} / 100` : '—'}
           </span>
         </div>
-        <div className="bg-[#111722] p-5 space-y-1">
+        <div className="bg-[#0E1513] p-5 space-y-1">
           <span className="text-xs text-slate-400 block">{t('leaks.leakRate')}</span>
           <span className="text-2xl font-mono tabular-nums font-semibold text-rose-400">
             {leaksCount}
@@ -188,9 +188,9 @@ export function LeakTrackerView({
 
       {/* Module + Positional Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <section className="lg:col-span-6 bg-[#111722] border border-[#222D3D] rounded-xl p-5 sm:p-6 space-y-4">
+        <section className="lg:col-span-6 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-5 sm:p-6 space-y-4">
           <h2 className="text-base font-semibold text-white">{t('leaks.byModule')}</h2>
-          <div className="divide-y divide-[#1E293B]">
+          <div className="divide-y divide-[#1B2823]">
             {moduleBreakdown.map((row) => (
               <div
                 key={row.module}
@@ -234,13 +234,13 @@ export function LeakTrackerView({
           </div>
         </section>
 
-        <section className="lg:col-span-6 bg-[#111722] border border-[#222D3D] rounded-xl p-5 sm:p-6 space-y-4">
+        <section className="lg:col-span-6 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-5 sm:p-6 space-y-4">
           <h2 className="text-base font-semibold text-white">{t('leaks.heatmapTitle')}</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {positionBreakdown.map((seat) => {
               const tone =
                 seat.accuracyPct === null
-                  ? 'border-[#222D3D] bg-[#0B1017]'
+                  ? 'border-[#1F2D28] bg-[#0A100E]'
                   : seat.accuracyPct >= 75
                     ? 'border-emerald-500/40 bg-[#0D1E18]'
                     : seat.accuracyPct >= 50
@@ -271,20 +271,20 @@ export function LeakTrackerView({
       </div>
 
       {/* Filterable Decision Log */}
-      <section className="bg-[#111722] border border-[#222D3D] rounded-xl p-5 sm:p-6 space-y-4">
+      <section className="bg-[#0E1513] border border-[#1F2D28] rounded-xl p-5 sm:p-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-white">{t('leaks.recentTitle')}</h2>
           <div className="flex flex-wrap items-center gap-2">
             <div
               role="group"
               aria-label={t('leaks.ariaGradeFilter')}
-              className="flex items-center gap-1 p-1 bg-[#0B1017] border border-[#222D3D] rounded-lg"
+              className="flex items-center gap-1 p-1 bg-[#0A100E] border border-[#1F2D28] rounded-lg"
             >
               <button
                 type="button"
                 onClick={() => setGradeFilter('all')}
                 className={`px-3 py-1 text-xs font-medium rounded cursor-pointer whitespace-nowrap ${
-                  gradeFilter === 'all' ? 'bg-[#222E40] text-white' : 'text-slate-400'
+                  gradeFilter === 'all' ? 'bg-[#1E2E28] text-white' : 'text-slate-400'
                 }`}
               >
                 {t('leaks.filterAll')} ({attempts.length})
@@ -293,7 +293,7 @@ export function LeakTrackerView({
                 type="button"
                 onClick={() => setGradeFilter('leaks')}
                 className={`px-3 py-1 text-xs font-medium rounded cursor-pointer whitespace-nowrap ${
-                  gradeFilter === 'leaks' ? 'bg-[#222E40] text-white' : 'text-slate-400'
+                  gradeFilter === 'leaks' ? 'bg-[#1E2E28] text-white' : 'text-slate-400'
                 }`}
               >
                 {t('leaks.filterLeaks')}
@@ -304,7 +304,7 @@ export function LeakTrackerView({
               aria-label={t('leaks.ariaModuleFilter')}
               value={moduleFilter}
               onChange={(e) => setModuleFilter(e.target.value as DrillModule | 'all')}
-              className="bg-[#0B1017] border border-[#222D3D] rounded-lg px-3 py-1.5 text-xs text-slate-200 cursor-pointer"
+              className="bg-[#0A100E] border border-[#1F2D28] rounded-lg px-3 py-1.5 text-xs text-slate-200 cursor-pointer"
             >
               <option value="all">{t('leaks.allDrills')}</option>
               <option value="preflop">{t('nav.preflop')}</option>
@@ -317,7 +317,7 @@ export function LeakTrackerView({
         </div>
 
         {filteredAttempts.length === 0 ? (
-          <div className="text-center py-10 space-y-3 border border-dashed border-[#263245] rounded-lg">
+          <div className="text-center py-10 space-y-3 border border-dashed border-[#23342E] rounded-lg">
             <p className="text-sm font-medium text-slate-200">
               {attempts.length === 0 ? t('leaks.emptyNone') : t('leaks.emptyFilter')}
             </p>
@@ -336,7 +336,7 @@ export function LeakTrackerView({
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
-                <tr className="border-b border-[#222D3D] text-slate-400">
+                <tr className="border-b border-[#1F2D28] text-slate-400">
                   <th className="py-2.5 pr-4 font-medium">{t('leaks.colSpot')}</th>
                   <th className="py-2.5 px-3 font-medium">{t('leaks.colModule')}</th>
                   <th className="py-2.5 px-3 font-medium">{t('leaks.colSeat')}</th>
@@ -345,9 +345,9 @@ export function LeakTrackerView({
                   <th className="py-2.5 pl-3 font-medium text-right">{t('leaks.colGrade')}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#1A2332]">
+              <tbody className="divide-y divide-[#17221E]">
                 {filteredAttempts.slice(0, 40).map((att) => (
-                  <tr key={att.id} className="hover:bg-[#151D2B]/60 transition-colors">
+                  <tr key={att.id} className="hover:bg-[#121B18]/60 transition-colors">
                     <td className="py-3 pr-4 font-medium text-slate-200 max-w-[240px] truncate">
                       {localizeSpotLabel(locale, att.spotLabel)}
                     </td>

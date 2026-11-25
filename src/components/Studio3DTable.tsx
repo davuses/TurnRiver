@@ -220,8 +220,8 @@ export function Studio3DTable({
       : 'h-[430px] sm:h-[480px]';
 
   const frameClass = fillParent
-    ? 'relative w-full h-full bg-[#090D14] select-none overflow-hidden'
-    : `relative w-full ${containerHeightClass} rounded-xl overflow-hidden border border-[#222D3D] bg-[#090D14] select-none`;
+    ? 'relative w-full h-full bg-[#070B0A] select-none overflow-hidden'
+    : `relative w-full ${containerHeightClass} rounded-xl overflow-hidden border border-[#1F2D28] bg-[#070B0A] select-none`;
 
   return (
     <div className={frameClass}>
@@ -233,7 +233,7 @@ export function Studio3DTable({
       />
 
       {hasWebglError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#090D14] p-6 text-center">
+        <div className="absolute inset-0 flex items-center justify-center bg-[#070B0A] p-6 text-center">
           <div className="max-w-md space-y-2">
             <p className="text-sm font-semibold text-rose-400">{t('studio3d.webglErrorTitle')}</p>
             <p className="text-xs text-slate-400">
@@ -246,7 +246,7 @@ export function Studio3DTable({
       )}
 
       {/* Minimal Top-Left Pot & Street Telemetry (solid opaque backing, NO backdrop-filter over WebGL) */}
-      <div className="pointer-events-none absolute top-2 left-2 sm:top-3 sm:left-3 flex items-center gap-2 sm:gap-2.5 bg-[#0B1017]/92 border border-[#243144] rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs font-mono tabular-nums">
+      <div className="pointer-events-none absolute top-2 left-2 sm:top-3 sm:left-3 flex items-center gap-2 sm:gap-2.5 bg-[#0A100E]/92 border border-[#21322C] rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs font-mono tabular-nums">
         <span className="text-slate-400">{t('studio3d.streetLabel')}</span>
         <span className="text-emerald-400 font-semibold">{streetLabel}</span>
         <span className="text-slate-600">·</span>
@@ -264,7 +264,7 @@ export function Studio3DTable({
             aria-pressed={isTheater}
             onClick={onToggleTheater}
             aria-label={isTheater ? t('studio3d.exitTheater') : t('studio3d.theater')}
-            className="px-2 sm:px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0B1017]/92 border border-[#243144] text-emerald-300 hover:text-white hover:border-emerald-500/60 inline-flex items-center gap-1.5 cursor-pointer"
+            className="px-2 sm:px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0A100E]/92 border border-[#21322C] text-emerald-300 hover:text-white hover:border-emerald-500/60 inline-flex items-center gap-1.5 cursor-pointer"
           >
             {isTheater ? (
               <>
@@ -284,7 +284,7 @@ export function Studio3DTable({
           aria-pressed={dockVisible}
           onClick={() => setDockVisible((v) => !v)}
           aria-label={dockVisible ? t('studio3d.hideDock') : t('studio3d.showDock')}
-          className="px-2 sm:px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0B1017]/92 border border-[#243144] text-slate-200 hover:text-white hover:border-emerald-500/50 inline-flex items-center gap-1.5 cursor-pointer"
+          className="px-2 sm:px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0A100E]/92 border border-[#21322C] text-slate-200 hover:text-white hover:border-emerald-500/50 inline-flex items-center gap-1.5 cursor-pointer"
         >
           {dockVisible ? (
             <>
@@ -302,7 +302,7 @@ export function Studio3DTable({
 
       {/* Viewport-First Collapsible Bottom Dock (single-row scroll strip on <640px mobile, NO backdrop-filter) */}
       {dockVisible && (
-        <div className="absolute bottom-2 left-2 right-2 sm:bottom-3 sm:left-3 sm:right-3 flex flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible items-center justify-between gap-1.5 sm:gap-2.5 bg-[#0B1017]/94 border border-[#243144] rounded-xl px-2 py-1.5 sm:px-3.5 sm:py-2.5">
+        <div className="absolute bottom-2 left-2 right-2 sm:bottom-3 sm:left-3 sm:right-3 flex flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible items-center justify-between gap-1.5 sm:gap-2.5 bg-[#0A100E]/94 border border-[#21322C] rounded-xl px-2 py-1.5 sm:px-3.5 sm:py-2.5">
           {/* Camera Angle Selector */}
           <div className="flex flex-nowrap sm:flex-wrap shrink-0 items-center gap-1 sm:gap-1.5">
             <span className="text-[11px] font-medium text-slate-400 inline-flex items-center gap-1 mr-0.5 sm:mr-1 shrink-0">
@@ -326,7 +326,7 @@ export function Studio3DTable({
                 className={`px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   cameraPreset === cam.id
                     ? 'bg-emerald-500 text-slate-950 font-semibold'
-                    : 'bg-[#151E2C] text-slate-300 hover:text-white border border-[#253349]'
+                    : 'bg-[#131C19] text-slate-300 hover:text-white border border-[#23342E]'
                 }`}
               >
                 {cam.label}
@@ -340,7 +340,7 @@ export function Studio3DTable({
               aria-label={t('studio3d.feltLabel')}
               value={feltTheme}
               onChange={(e) => setFeltTheme(e.target.value as FeltThemeId)}
-              className="bg-[#151E2C] border border-[#253349] rounded-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs text-slate-200 cursor-pointer shrink-0"
+              className="bg-[#131C19] border border-[#23342E] rounded-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs text-slate-200 cursor-pointer shrink-0"
             >
               <option value="emerald">{t('studio3d.feltEmerald')}</option>
               <option value="navy">{t('studio3d.feltNavy')}</option>
@@ -353,7 +353,7 @@ export function Studio3DTable({
                 aria-label={t('studio3d.lightingLabel')}
                 value={lighting}
                 onChange={(e) => setLighting(e.target.value as LightingPresetId)}
-                className="bg-[#151E2C] border border-[#253349] rounded-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs text-slate-200 cursor-pointer"
+                className="bg-[#131C19] border border-[#23342E] rounded-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs text-slate-200 cursor-pointer"
               >
                 <option value="studio">{t('studio3d.lightStudio')}</option>
                 <option value="daylight">{t('studio3d.lightDaylight')}</option>
@@ -369,7 +369,7 @@ export function Studio3DTable({
               className={`px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md border inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0 ${
                 showProps
                   ? 'bg-amber-500/15 border-amber-400/45 text-amber-200'
-                  : 'bg-[#151E2C] border-[#253349] text-slate-400 hover:text-slate-200'
+                  : 'bg-[#131C19] border-[#23342E] text-slate-400 hover:text-slate-200'
               }`}
             >
               <Wine className="w-3.5 h-3.5" aria-hidden="true" />
@@ -384,7 +384,7 @@ export function Studio3DTable({
               className={`px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md border inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0 ${
                 effectiveSoundEnabled
                   ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200'
-                  : 'bg-[#151E2C] border-[#253349] text-slate-400 hover:text-slate-200'
+                  : 'bg-[#131C19] border-[#23342E] text-slate-400 hover:text-slate-200'
               }`}
             >
               {effectiveSoundEnabled ? (
@@ -403,7 +403,7 @@ export function Studio3DTable({
                 className={`px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md border inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0 ${
                   fourColorDeck
                     ? 'bg-[#162736] border-sky-500/40 text-sky-300'
-                    : 'bg-[#151E2C] border-[#253349] text-slate-300'
+                    : 'bg-[#131C19] border-[#23342E] text-slate-300'
                 }`}
               >
                 <Palette className="w-3.5 h-3.5" aria-hidden="true" />

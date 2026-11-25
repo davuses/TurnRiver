@@ -39,14 +39,14 @@ function ViewLoadingSkeleton() {
     >
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-2">
-          <div className="h-7 w-56 rounded-lg bg-[#17202E]" />
-          <div className="h-4 w-80 max-w-full rounded bg-[#111722]" />
+          <div className="h-7 w-56 rounded-lg bg-[#141E1B]" />
+          <div className="h-4 w-80 max-w-full rounded bg-[#0E1513]" />
         </div>
-        <div className="h-9 w-28 rounded-lg bg-[#17202E]" />
+        <div className="h-9 w-28 rounded-lg bg-[#141E1B]" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-8 h-[420px] rounded-xl bg-[#111722] border border-[#222D3D]" />
-        <div className="lg:col-span-4 h-[420px] rounded-xl bg-[#111722] border border-[#222D3D]" />
+        <div className="lg:col-span-8 h-[420px] rounded-xl bg-[#0E1513] border border-[#1F2D28]" />
+        <div className="lg:col-span-4 h-[420px] rounded-xl bg-[#0E1513] border border-[#1F2D28]" />
       </div>
     </div>
   );
@@ -85,6 +85,7 @@ function getInitialView(): AppView {
 
 function TurnRiverShell() {
   const [activeView, setActiveView] = useState<AppView>(getInitialView);
+  const [scrolled, setScrolled] = useState(false);
   const store = useMasteryStore();
   const { locale, toggleLocale, t } = useLocale();
 
@@ -92,30 +93,54 @@ function TurnRiverShell() {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [activeView]);
 
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const isHeroView = activeView === 'overview';
+  const headerSurface =
+    isHeroView && !scrolled
+      ? 'bg-transparent border-transparent'
+      : 'bg-[#070B0A]/92 border-[#1F2D28] backdrop-blur-md';
+
   return (
-    <div className="min-h-screen bg-[#090D12] text-[#E6EDF5] flex flex-col">
+    <div className="min-h-screen bg-[#070B0A] text-[#F2F4F1] flex flex-col">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:rounded-lg focus:bg-emerald-500 focus:text-slate-950 focus:text-sm focus:font-semibold focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-white"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:rounded-lg focus:bg-emerald-500 focus:text-[#04110C] focus:text-sm focus:font-semibold focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-white"
       >
         {t('nav.skipToMain')}
       </a>
-      {/* Clean Single-Row Studio Top Bar */}
-      <header className="sticky top-0 z-40 bg-[#090D12]/95 border-b border-[#1E2837]">
+
+      {/* Single-Row Studio Header — borderless over Overview hero at y=0, crisp separation on scroll */}
+      <header
+        className={`sticky top-0 z-40 border-b transition-[background-color,border-color] duration-200 ease-out ${headerSurface}`}
+      >
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 lg:gap-8">
-          {/* Zone 1: Brand Wordmark */}
+          {/* Brand Wordmark */}
           <button
             type="button"
             onClick={() => setActiveView('overview')}
-            className="font-display text-xl font-bold tracking-tight text-white hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="inline-flex items-center gap-2 font-display text-[22px] font-bold tracking-[-0.03em] text-[#F2F4F1] hover:text-emerald-300 transition-colors duration-200 ease-out whitespace-nowrap shrink-0 cursor-pointer"
           >
-            TurnRiver
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="w-5 h-5 text-emerald-400 shrink-0"
+              fill="currentColor"
+            >
+              <path d="M12 2.5C7.6 8 3 11.4 3 15.6c0 2.9 2.2 5 5 5 1.6 0 2.9-.7 3.6-1.8-.2 1.8-.8 3.2-2.2 4.2h5.2c-1.4-1-2-2.4-2.2-4.2.7 1.1 2 1.8 3.6 1.8 2.8 0 5-2.1 5-5 0-4.2-4.6-7.6-9-13.1z" />
+            </svg>
+            <span>TurnRiver</span>
           </button>
 
-          {/* Zone 2: Primary Drill & 3D Navigation */}
+          {/* Primary Navigation */}
           <nav
             aria-label={t('nav.ariaPrimary')}
-            className="hidden lg:flex items-center gap-6 text-sm font-medium"
+            className="hidden lg:flex items-center gap-7 text-[14px] font-medium"
           >
             {NAV_LINKS.map((item) => {
               const isActive = activeView === item.id;
@@ -125,10 +150,10 @@ function TurnRiverShell() {
                   type="button"
                   onClick={() => setActiveView(item.id)}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`py-1 border-b-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  className={`py-1.5 border-b-2 transition-colors duration-200 ease-out whitespace-nowrap shrink-0 cursor-pointer ${
                     isActive
-                      ? 'text-white border-emerald-400'
-                      : 'text-slate-400 border-transparent hover:text-white'
+                      ? 'text-[#F2F4F1] border-emerald-400'
+                      : 'text-[#99A8A1] border-transparent hover:text-[#F2F4F1]'
                   }`}
                 >
                   {t(item.labelKey)}
@@ -137,14 +162,14 @@ function TurnRiverShell() {
             })}
           </nav>
 
-          {/* Zone 3: Locale Switcher & Leak Tracker */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Right Controls: Locale & Leak Tracker */}
+          <div className="flex items-center gap-2.5 shrink-0">
             <button
               type="button"
               onClick={toggleLocale}
               data-testid="locale-toggle"
               aria-label={locale === 'en' ? 'Switch language to Simplified Chinese' : '切换语言为英文'}
-              className="px-2.5 py-2 text-xs font-mono font-medium rounded-lg bg-[#111722] text-slate-200 border border-[#263347] hover:border-emerald-500/50 hover:text-white inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="px-3 py-1.5 text-[13px] font-medium rounded-lg bg-[#0E1513]/85 text-[#D8E2DD] border border-[#24352F] hover:border-emerald-400/50 hover:text-white inline-flex items-center gap-1.5 transition-colors duration-200 ease-out whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Globe className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
               <span>{locale === 'en' ? '中文' : 'EN'}</span>
@@ -154,10 +179,10 @@ function TurnRiverShell() {
               type="button"
               onClick={() => setActiveView('leaks')}
               aria-current={activeView === 'leaks' ? 'page' : undefined}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`px-3.5 py-1.5 text-[13px] font-semibold rounded-lg transition-colors duration-200 ease-out whitespace-nowrap shrink-0 cursor-pointer ${
                 activeView === 'leaks'
-                  ? 'bg-emerald-500 text-slate-950'
-                  : 'bg-[#17202E] text-white border border-[#2B394F] hover:bg-[#202D42]'
+                  ? 'bg-emerald-500 text-[#04110C]'
+                  : 'bg-[#141E1B]/90 text-[#F2F4F1] border border-[#283B34] hover:border-emerald-400/50 hover:bg-[#1A2824]'
               }`}
             >
               {t('nav.leaks')}
@@ -165,10 +190,14 @@ function TurnRiverShell() {
           </div>
         </div>
 
-        {/* Compact Mobile / Tablet Drill Strip */}
+        {/* Mobile / Tablet Drill Strip */}
         <nav
           aria-label={t('nav.ariaMobile')}
-          className="lg:hidden flex items-center gap-1 overflow-x-auto px-4 pb-2.5 border-t border-[#161E2B] pt-2"
+          className={`lg:hidden no-scrollbar flex items-center gap-1 overflow-x-auto px-4 pb-2.5 pt-2 border-t ${
+            isHeroView && !scrolled
+              ? 'border-white/10 bg-[#070B0A]/65 backdrop-blur-md'
+              : 'border-[#16211D]'
+          }`}
         >
           {NAV_LINKS.map((item) => {
             const isActive = activeView === item.id;
@@ -178,10 +207,10 @@ function TurnRiverShell() {
                 type="button"
                 onClick={() => setActiveView(item.id)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap shrink-0 cursor-pointer ${
+                className={`px-3 py-1.5 text-[13px] font-medium rounded-md whitespace-nowrap shrink-0 transition-colors duration-150 ease-out cursor-pointer ${
                   isActive
-                    ? 'bg-[#1D283A] text-emerald-300'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-[#182621] text-emerald-300'
+                    : 'text-[#99A8A1] hover:text-[#F2F4F1]'
                 }`}
               >
                 {t(item.labelKey)}
@@ -192,75 +221,77 @@ function TurnRiverShell() {
       </header>
 
       {/* Main Content Stage */}
-      <main
-        id="main-content"
-        tabIndex={-1}
-        className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 focus:outline-none"
-      >
-        {activeView === 'overview' && (
+      {isHeroView ? (
+        <main id="main-content" tabIndex={-1} className="flex-1 w-full focus:outline-none">
           <OverviewView
             summary={store.summary}
             attempts={store.attempts}
             onNavigate={(view) => setActiveView(view)}
           />
-        )}
+        </main>
+      ) : (
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 focus:outline-none"
+        >
+          <Suspense fallback={<ViewLoadingSkeleton />}>
+            {activeView === 'preflop' && (
+              <PreflopLabView
+                prefs={store.prefs}
+                onUpdatePrefs={store.updatePrefs}
+                onRecordAttempt={store.recordAttempt}
+              />
+            )}
 
-        <Suspense fallback={<ViewLoadingSkeleton />}>
-          {activeView === 'preflop' && (
-            <PreflopLabView
-              prefs={store.prefs}
-              onUpdatePrefs={store.updatePrefs}
-              onRecordAttempt={store.recordAttempt}
-            />
-          )}
+            {activeView === 'postflop' && (
+              <PostflopTrainerView
+                prefs={store.prefs}
+                onUpdatePrefs={store.updatePrefs}
+                onRecordAttempt={store.recordAttempt}
+              />
+            )}
 
-          {activeView === 'postflop' && (
-            <PostflopTrainerView
-              prefs={store.prefs}
-              onUpdatePrefs={store.updatePrefs}
-              onRecordAttempt={store.recordAttempt}
-            />
-          )}
+            {activeView === 'math' && (
+              <MathLabView
+                prefs={store.prefs}
+                onRecordAttempt={store.recordAttempt}
+              />
+            )}
 
-          {activeView === 'math' && (
-            <MathLabView
-              prefs={store.prefs}
-              onRecordAttempt={store.recordAttempt}
-            />
-          )}
+            {activeView === 'reading' && (
+              <HandReadingView
+                prefs={store.prefs}
+                onRecordAttempt={store.recordAttempt}
+              />
+            )}
 
-          {activeView === 'reading' && (
-            <HandReadingView
-              prefs={store.prefs}
-              onRecordAttempt={store.recordAttempt}
-            />
-          )}
+            {activeView === 'table' && (
+              <PlayTableView
+                prefs={store.prefs}
+                onUpdatePrefs={store.updatePrefs}
+                onRecordAttempt={store.recordAttempt}
+              />
+            )}
 
-          {activeView === 'table' && (
-            <PlayTableView
-              prefs={store.prefs}
-              onUpdatePrefs={store.updatePrefs}
-              onRecordAttempt={store.recordAttempt}
-            />
-          )}
+            {activeView === 'studio3d' && (
+              <Studio3DView
+                prefs={store.prefs}
+                onUpdatePrefs={store.updatePrefs}
+              />
+            )}
 
-          {activeView === 'studio3d' && (
-            <Studio3DView
-              prefs={store.prefs}
-              onUpdatePrefs={store.updatePrefs}
-            />
-          )}
-
-          {activeView === 'leaks' && (
-            <LeakTrackerView
-              summary={store.summary}
-              attempts={store.attempts}
-              onResetProgress={store.resetProgress}
-              onNavigateDrill={(mod) => setActiveView(mod)}
-            />
-          )}
-        </Suspense>
-      </main>
+            {activeView === 'leaks' && (
+              <LeakTrackerView
+                summary={store.summary}
+                attempts={store.attempts}
+                onResetProgress={store.resetProgress}
+                onNavigateDrill={(mod) => setActiveView(mod)}
+              />
+            )}
+          </Suspense>
+        </main>
+      )}
     </div>
   );
 }

@@ -72,8 +72,8 @@ export function PokerTableOval({
                 key={`mob-${seat.seatIndex}`}
                 className={`flex-1 min-w-[140px] px-2.5 py-1 rounded-lg border text-[11px] flex items-center justify-between gap-2 ${
                   seat.isVillain
-                    ? 'bg-[#151D2B] border-sky-400/60'
-                    : 'bg-[#111722] border-[#263245]'
+                    ? 'bg-[#121B18] border-sky-400/60'
+                    : 'bg-[#0E1513] border-[#23342E]'
                 }`}
               >
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -103,10 +103,10 @@ export function PokerTableOval({
                   seat.isWinner
                     ? 'bg-[#132620] border-emerald-400'
                     : seat.isActiveTurn
-                      ? 'bg-[#192334] border-amber-400'
+                      ? 'bg-[#17231F] border-amber-400'
                       : seat.isVillain
-                        ? 'bg-[#151D2B] border-sky-400/60'
-                        : 'bg-[#111722] border-[#263245]'
+                        ? 'bg-[#121B18] border-sky-400/60'
+                        : 'bg-[#0E1513] border-[#23342E]'
                 } ${seat.folded ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-center justify-between gap-1">
@@ -141,7 +141,7 @@ export function PokerTableOval({
             mobileTight
               ? 'min-h-[208px] sm:min-h-[310px] rounded-[46px]'
               : 'min-h-[260px] sm:min-h-[340px] rounded-[72px]'
-          } sm:rounded-[160px] p-2 sm:p-4 flex items-center justify-center border border-[#2A3648]`}
+          } sm:rounded-[160px] p-2 sm:p-4 flex items-center justify-center border border-[#273932]`}
         >
           {/* Inner high-stakes dark emerald felt */}
           <div
@@ -243,10 +243,10 @@ export function PokerTableOval({
                     isWin
                       ? 'bg-[#132620] border-emerald-400'
                       : isTurn
-                        ? 'bg-[#192334] border-amber-400'
+                        ? 'bg-[#17231F] border-amber-400'
                         : seat.isVillain
-                          ? 'bg-[#151D2B] border-sky-400/60'
-                          : 'bg-[#111722]/95 border-[#263245]'
+                          ? 'bg-[#121B18] border-sky-400/60'
+                          : 'bg-[#0E1513]/95 border-[#23342E]'
                   } ${seat.folded ? 'opacity-45' : ''}`}
                 >
                   <div className="flex items-center justify-between gap-2 text-xs sm:text-[13px]">
@@ -276,7 +276,7 @@ export function PokerTableOval({
                 </div>
 
                 {(seat.actionSpec || seat.actionText) && (
-                  <div className="text-xs font-mono font-semibold tabular-nums text-amber-200 bg-[#0B1017]/95 border border-[#2D3B52] px-2.5 py-0.5 rounded-md shadow whitespace-nowrap">
+                  <div className="text-xs font-mono font-semibold tabular-nums text-amber-200 bg-[#0A100E]/95 border border-[#2D3B52] px-2.5 py-0.5 rounded-md shadow whitespace-nowrap">
                     {formatArenaAction(locale, seat.actionSpec, seat.actionText)}
                   </div>
                 )}
@@ -313,7 +313,7 @@ export function PokerTableOval({
                     ? 'bg-[#132620] border-emerald-400'
                     : heroSeat.isActiveTurn
                       ? 'bg-[#182436] border-emerald-400'
-                      : 'bg-[#111722] border-[#2C3B50]'
+                      : 'bg-[#0E1513] border-[#2C3B50]'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2 text-xs">

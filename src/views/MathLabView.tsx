@@ -90,7 +90,7 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
   return (
     <div className="space-y-6 pb-10">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#222D3D] pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#1F2D28] pb-4">
         <div className="space-y-1">
           <h1 className="text-xl sm:text-2xl font-semibold text-white">{t('math.title')}</h1>
           <p className="text-xs text-slate-400">{t('math.subtitle')}</p>
@@ -99,7 +99,7 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
         <div
           role="group"
           aria-label={t('math.ariaCategoryFilter')}
-          className="flex flex-wrap items-center gap-1 p-1 bg-[#111722] border border-[#222D3D] rounded-lg"
+          className="flex flex-wrap items-center gap-1 p-1 bg-[#0E1513] border border-[#1F2D28] rounded-lg"
         >
           {CATEGORIES.map((cat) => (
             <button
@@ -111,7 +111,7 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
               }}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                 category === cat.value
-                  ? 'bg-[#222E40] text-white'
+                  ? 'bg-[#1E2E28] text-white'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -124,7 +124,7 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
       {/* Two-Zone Sandbox */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         {/* Left Interactive Math Stage */}
-        <div className="xl:col-span-7 bg-[#111722] border border-[#222D3D] rounded-xl p-6 sm:p-7 space-y-6">
+        <div className="xl:col-span-7 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-6 sm:p-7 space-y-6">
           <div className="space-y-2">
             <p className="text-xs font-mono text-emerald-400">
               {translateMathCategory(locale, question.categoryLabel)}
@@ -181,20 +181,20 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-px bg-[#222D3D] border border-[#222D3D] rounded-lg overflow-hidden">
-              <div className="bg-[#0B1017] p-4">
+            <div className="grid grid-cols-3 gap-px bg-[#1F2D28] border border-[#1F2D28] rounded-lg overflow-hidden">
+              <div className="bg-[#0A100E] p-4">
                 <span className="text-xs text-slate-400 block">{t('math.startingPot')}</span>
                 <span className="text-xl font-mono tabular-nums font-semibold text-white">
                   {question.potBb} bb
                 </span>
               </div>
-              <div className="bg-[#0B1017] p-4">
+              <div className="bg-[#0A100E] p-4">
                 <span className="text-xs text-slate-400 block">{t('math.betSize')}</span>
                 <span className="text-xl font-mono tabular-nums font-semibold text-amber-300">
                   {question.betBb} bb
                 </span>
               </div>
-              <div className="bg-[#0B1017] p-4">
+              <div className="bg-[#0A100E] p-4">
                 <span className="text-xs text-slate-400 block">{t('math.betPotRatio')}</span>
                 <span className="text-xl font-mono tabular-nums font-semibold text-emerald-400">
                   {Math.round((question.betBb / Math.max(0.1, question.potBb)) * 100)}%
@@ -204,7 +204,7 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
           )}
 
           {/* Answer Form */}
-          <form onSubmit={handleSubmit} className="space-y-5 pt-2 border-t border-[#1F2A3A]">
+          <form onSubmit={handleSubmit} className="space-y-5 pt-2 border-t border-[#1C2A25]">
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs">
                 <label htmlFor="math-slider" className="font-medium text-slate-200">
@@ -261,7 +261,7 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
                     setAnswerInput(e.target.value);
                     setInputError(null);
                   }}
-                  className="w-full min-h-[44px] bg-[#0B1017] border border-[#2B394F] rounded-lg px-3.5 py-2 text-sm font-mono tabular-nums text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
+                  className="w-full min-h-[44px] bg-[#0A100E] border border-[#283B34] rounded-lg px-3.5 py-2 text-sm font-mono tabular-nums text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
                 />
               </div>
 
@@ -294,11 +294,11 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
         </div>
 
         {/* Right Formula & Solution Deck */}
-        <div className="xl:col-span-5 bg-[#111722] border border-[#222D3D] rounded-xl p-5 sm:p-6 space-y-5">
+        <div className="xl:col-span-5 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-5 sm:p-6 space-y-5">
           {!result ? (
             <div className="space-y-4">
               <h2 className="text-base font-semibold text-white">{t('math.quickFormulas')}</h2>
-              <div className="space-y-3 text-xs font-mono bg-[#0B1017] border border-[#1E293B] rounded-lg p-4 text-slate-300">
+              <div className="space-y-3 text-xs font-mono bg-[#0A100E] border border-[#1B2823] rounded-lg p-4 text-slate-300">
                 <div>
                   <span className="text-emerald-400 block font-sans font-semibold mb-0.5">
                     {t('math.potOddsTitle')}
@@ -307,7 +307,7 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
                     ? '跟注额 ÷（跟注前底池 + 跟注额）'
                     : 'Call ÷ (PotBeforeCall + Call)'}
                 </div>
-                <div className="border-t border-[#1E293B] pt-2.5">
+                <div className="border-t border-[#1B2823] pt-2.5">
                   <span className="text-sky-400 block font-sans font-semibold mb-0.5">
                     {t('math.callEvTitle')}
                   </span>
@@ -315,7 +315,7 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
                     ? 'EV =（摊牌权益 × 跟注前底池）−（（1 − 摊牌权益）× 跟注额）'
                     : 'EV = (Equity × PotBeforeCall) − ((1 − Equity) × Call)'}
                 </div>
-                <div className="border-t border-[#1E293B] pt-2.5">
+                <div className="border-t border-[#1B2823] pt-2.5">
                   <span className="text-amber-300 block font-sans font-semibold mb-0.5">
                     {t('math.mdfTitle')}
                   </span>
@@ -331,13 +331,13 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
                 </h3>
                 <table className="w-full text-xs font-mono tabular-nums">
                   <thead>
-                    <tr className="text-slate-400 border-b border-[#1E293B]">
+                    <tr className="text-slate-400 border-b border-[#1B2823]">
                       <th className="text-left py-1.5 font-normal">{t('math.colBetSize')}</th>
                       <th className="text-right py-1.5 font-normal">{t('math.colReqEq')}</th>
                       <th className="text-right py-1.5 font-normal">{t('math.colMdf')}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#1A2332] text-slate-300">
+                  <tbody className="divide-y divide-[#17221E] text-slate-300">
                     <tr>
                       <td className="py-1.5">33% {t('common.pot')}</td>
                       <td className="text-right">20.0%</td>
@@ -376,21 +376,21 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-xs font-mono tabular-nums">
-                <div className="bg-[#0B1017] border border-[#1E293B] rounded-lg p-3">
+                <div className="bg-[#0A100E] border border-[#1B2823] rounded-lg p-3">
                   <span className="text-slate-400 block font-sans">{t('math.yourAnswer')}</span>
                   <span className="text-base font-semibold text-white">
                     {result.userAnswer}
                     {question.unit}
                   </span>
                 </div>
-                <div className="bg-[#0B1017] border border-[#1E293B] rounded-lg p-3">
+                <div className="bg-[#0A100E] border border-[#1B2823] rounded-lg p-3">
                   <span className="text-slate-400 block font-sans">{t('math.exactAnswer')}</span>
                   <span className="text-base font-semibold text-emerald-400">
                     {result.exactAnswer}
                     {question.unit}
                   </span>
                 </div>
-                <div className="bg-[#0B1017] border border-[#1E293B] rounded-lg p-3">
+                <div className="bg-[#0A100E] border border-[#1B2823] rounded-lg p-3">
                   <span className="text-slate-400 block font-sans">{t('math.errorDelta')}</span>
                   <span className="text-base font-semibold text-amber-300">
                     ±{result.delta}{' '}
@@ -401,7 +401,7 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
 
               {/* Equity vs Break-Even Visual Bar */}
               {typeof question.breakEvenPct === 'number' && (
-                <div className="space-y-2 border-t border-[#1F2A3A] pt-4">
+                <div className="space-y-2 border-t border-[#1C2A25] pt-4">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-300 font-medium">{t('math.thresholdGauge')}</span>
                     <span className="font-mono tabular-nums text-slate-400">
@@ -411,7 +411,7 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
                         : ''}
                     </span>
                   </div>
-                  <div className="relative h-3 w-full rounded-full bg-[#192334] overflow-hidden">
+                  <div className="relative h-3 w-full rounded-full bg-[#17231F] overflow-hidden">
                     {typeof question.heroEquityPct === 'number' ? (
                       <div
                         className={`h-full rounded-full ${
@@ -438,13 +438,13 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
                 </div>
               )}
 
-              <div className="space-y-2 border-t border-[#1F2A3A] pt-4">
+              <div className="space-y-2 border-t border-[#1C2A25] pt-4">
                 <h3 className="text-xs font-semibold text-slate-200">{t('math.stepByStep')}</h3>
                 <ol className="space-y-1.5 text-xs font-mono text-slate-300">
                   {displayQuestion.formulaSteps.map((step, idx) => (
                     <li
                       key={idx}
-                      className="bg-[#0B1017] border border-[#1E293B] rounded-md px-3 py-2"
+                      className="bg-[#0A100E] border border-[#1B2823] rounded-md px-3 py-2"
                     >
                       {step}
                     </li>

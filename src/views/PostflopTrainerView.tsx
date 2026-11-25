@@ -178,7 +178,7 @@ export function PostflopTrainerView({
   return (
     <div className="space-y-3 sm:space-y-5 pb-10">
       {/* Toolbar (compact 1-row quick controls on mobile; full filter bar on desktop) */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 border-b border-[#222D3D] pb-3 sm:pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 border-b border-[#1F2D28] pb-3 sm:pb-4">
         <div className="space-y-0.5">
           <h1 className="text-lg sm:text-2xl font-semibold text-white">
             {t('postflop.title')}
@@ -195,7 +195,7 @@ export function PostflopTrainerView({
             className={`px-3 py-1.5 sm:py-2 text-xs font-semibold rounded-lg border inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               isPairedSpot
                 ? 'bg-emerald-500/15 border-emerald-400/60 text-emerald-300'
-                : 'bg-[#152030] border-[#2A3B55] text-emerald-300 hover:bg-[#1C2B40]'
+                : 'bg-[#121D19] border-[#283B34] text-emerald-300 hover:bg-[#1C2B40]'
             }`}
           >
             <GitCompareArrows className="w-3.5 h-3.5" aria-hidden="true" />
@@ -209,8 +209,8 @@ export function PostflopTrainerView({
             aria-expanded={showMobileFilters}
             className={`sm:hidden px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               showMobileFilters
-                ? 'bg-[#1C2636] border-emerald-400/50 text-emerald-200'
-                : 'bg-[#111722] border-[#222D3D] text-slate-300'
+                ? 'bg-[#182621] border-emerald-400/50 text-emerald-200'
+                : 'bg-[#0E1513] border-[#1F2D28] text-slate-300'
             }`}
           >
             <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
@@ -222,7 +222,7 @@ export function PostflopTrainerView({
             type="button"
             onClick={() => onUpdatePrefs({ soundEnabled: !prefs.soundEnabled })}
             aria-label={prefs.soundEnabled ? t('common.muteSound') : t('common.enableSound')}
-            className="sm:hidden ml-auto p-1.5 rounded-lg bg-[#111722] border border-[#222D3D] text-slate-300 hover:text-white cursor-pointer"
+            className="sm:hidden ml-auto p-1.5 rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:text-white cursor-pointer"
           >
             {prefs.soundEnabled ? (
               <Volume2 className="w-4 h-4" aria-hidden="true" />
@@ -241,7 +241,7 @@ export function PostflopTrainerView({
             <div
               role="group"
               aria-label={t('postflop.ariaStreetFilter')}
-              className="flex items-center gap-1 p-1 bg-[#111722] border border-[#222D3D] rounded-lg"
+              className="flex items-center gap-1 p-1 bg-[#0E1513] border border-[#1F2D28] rounded-lg"
             >
               {(['ALL', 'flop', 'turn', 'river'] as const).map((st) => (
                 <button
@@ -253,7 +253,7 @@ export function PostflopTrainerView({
                   }}
                   className={`px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                     streetFilter === st
-                      ? 'bg-[#222E40] text-white'
+                      ? 'bg-[#1E2E28] text-white'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -270,7 +270,7 @@ export function PostflopTrainerView({
                 setPotFilter(v);
                 dealNext(streetFilter, v, roleFilter);
               }}
-              className="bg-[#111722] border border-[#222D3D] rounded-lg px-2.5 py-2 text-xs text-slate-200 cursor-pointer"
+              className="bg-[#0E1513] border border-[#1F2D28] rounded-lg px-2.5 py-2 text-xs text-slate-200 cursor-pointer"
             >
               <option value="ALL">{t('postflop.allPots')}</option>
               <option value="SRP">{t('postflop.srp')}</option>
@@ -285,7 +285,7 @@ export function PostflopTrainerView({
                 setRoleFilter(v);
                 dealNext(streetFilter, potFilter, v);
               }}
-              className="bg-[#111722] border border-[#222D3D] rounded-lg px-2.5 py-2 text-xs text-slate-200 cursor-pointer"
+              className="bg-[#0E1513] border border-[#1F2D28] rounded-lg px-2.5 py-2 text-xs text-slate-200 cursor-pointer"
             >
               <option value="ALL">{t('postflop.allRoles')}</option>
               <option value="IP">{t('postflop.ip')}</option>
@@ -298,7 +298,7 @@ export function PostflopTrainerView({
               className={`px-2.5 py-2 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                 prefs.fourColorDeck
                   ? 'bg-[#172634] border-sky-500/40 text-sky-300'
-                  : 'bg-[#111722] border-[#222D3D] text-slate-400'
+                  : 'bg-[#0E1513] border-[#1F2D28] text-slate-400'
               }`}
             >
               <Palette className="w-3.5 h-3.5" aria-hidden="true" />
@@ -311,7 +311,7 @@ export function PostflopTrainerView({
               type="button"
               onClick={() => onUpdatePrefs({ soundEnabled: !prefs.soundEnabled })}
               aria-label={prefs.soundEnabled ? t('common.muteSound') : t('common.enableSound')}
-              className="hidden sm:inline-flex p-2 rounded-lg bg-[#111722] border border-[#222D3D] text-slate-300 hover:text-white cursor-pointer"
+              className="hidden sm:inline-flex p-2 rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:text-white cursor-pointer"
             >
               {prefs.soundEnabled ? (
                 <Volume2 className="w-4 h-4" aria-hidden="true" />
@@ -326,7 +326,7 @@ export function PostflopTrainerView({
       {/* Two-Zone Layout */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6 items-start">
         {/* Left Live Felt Stage */}
-        <div className="xl:col-span-7 bg-[#111722] border border-[#222D3D] rounded-xl p-3 sm:p-5 flex flex-col justify-between gap-2.5 sm:gap-4">
+        <div className="xl:col-span-7 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-3 sm:p-5 flex flex-col justify-between gap-2.5 sm:gap-4">
           {/* Neutral Title Before Answer; Full Lesson Title Revealed Only After Answering */}
           <div className="space-y-1">
             <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs text-slate-400">
@@ -372,7 +372,7 @@ export function PostflopTrainerView({
           {/* Compact Last-Action Strip right below board & Hero hand (keeps board + last action + buttons tight on mobile) */}
           <div
             data-testid="postflop-last-action"
-            className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 bg-[#0B1017] border border-[#233044] rounded-lg px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs"
+            className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 bg-[#0A100E] border border-[#20312B] rounded-lg px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs"
           >
             <div className="flex flex-wrap items-center gap-1.5 min-w-0">
               <span className="font-mono font-semibold text-amber-300 shrink-0">
@@ -387,7 +387,7 @@ export function PostflopTrainerView({
           </div>
 
           {/* Decisive Detail + Decision Buttons */}
-          <div className="pt-2 sm:pt-3 border-t border-[#1E293B] space-y-2.5">
+          <div className="pt-2 sm:pt-3 border-t border-[#1B2823] space-y-2.5">
             {!evaluation ? (
               <>
                 {/* Step 1: Identify the Decisive Detail */}
@@ -415,7 +415,7 @@ export function PostflopTrainerView({
                           className={`px-2.5 py-1.5 sm:py-2 rounded-lg border text-left text-xs font-medium transition-colors cursor-pointer ${
                             active
                               ? 'bg-emerald-500/15 border-emerald-400 text-emerald-200'
-                              : 'bg-[#0B1017] border-[#243145] text-slate-300 hover:border-[#364966] hover:text-white'
+                              : 'bg-[#0A100E] border-[#21322C] text-slate-300 hover:border-[#324A41] hover:text-white'
                           }`}
                         >
                           {t(opt.labelKey)}
@@ -430,7 +430,7 @@ export function PostflopTrainerView({
                     onChange={(e) => setDetailNote(e.target.value)}
                     placeholder={t('postflop.detailReasonPlaceholder')}
                     maxLength={120}
-                    className="w-full bg-[#0B1017] border border-[#222F42] rounded-lg px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
+                    className="w-full bg-[#0A100E] border border-[#1F2F29] rounded-lg px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
                   />
 
                   {detailError && (
@@ -454,7 +454,7 @@ export function PostflopTrainerView({
                           ? 'bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/50 text-sky-200'
                           : act.kind === 'check'
                             ? 'bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/45 text-amber-200'
-                            : 'bg-[#1A2230] hover:bg-[#232F42] border border-[#2E3C52] text-slate-200';
+                            : 'bg-[#16211D] hover:bg-[#20302A] border border-[#2B3E37] text-slate-200';
                     return (
                       <button
                         key={act.action}
@@ -506,7 +506,7 @@ export function PostflopTrainerView({
         </div>
 
         {/* Right Analytics & Coaching Deck */}
-        <div className="xl:col-span-5 bg-[#111722] border border-[#222D3D] rounded-xl p-4 sm:p-6 space-y-5">
+        <div className="xl:col-span-5 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-4 sm:p-6 space-y-5">
           {/* Action History Trail */}
           <div className="space-y-2.5">
             <h2 className="text-sm font-semibold text-white">{t('postflop.actionHistory')}</h2>
@@ -514,7 +514,7 @@ export function PostflopTrainerView({
               {displaySpot.actionLog.map((line, idx) => (
                 <li
                   key={idx}
-                  className="flex items-start gap-2.5 bg-[#0B1017] border border-[#1E293B] rounded-md px-3 py-2"
+                  className="flex items-start gap-2.5 bg-[#0A100E] border border-[#1B2823] rounded-md px-3 py-2"
                 >
                   <span className="text-slate-500 tabular-nums">{idx + 1}.</span>
                   <span>{line}</span>
@@ -524,7 +524,7 @@ export function PostflopTrainerView({
           </div>
 
           {!evaluation ? (
-            <div className="border-t border-[#1F2A3A] pt-4 space-y-3">
+            <div className="border-t border-[#1C2A25] pt-4 space-y-3">
               <h3 className="text-sm font-semibold text-white">{t('postflop.checklistTitle')}</h3>
               <ul className="space-y-2 text-xs text-slate-300 leading-relaxed">
                 <li>{t('postflop.check1')}</li>
@@ -537,7 +537,7 @@ export function PostflopTrainerView({
               </ul>
             </div>
           ) : (
-            <div className="border-t border-[#1F2A3A] pt-5 space-y-5">
+            <div className="border-t border-[#1C2A25] pt-5 space-y-5">
               {/* Decisive Detail & Hand Numbers Review */}
               <div
                 data-testid="postflop-numbers-card"
@@ -599,7 +599,7 @@ export function PostflopTrainerView({
                 </p>
               </div>
 
-              <div className="border-t border-[#1F2A3A] pt-4 space-y-3 text-xs leading-relaxed">
+              <div className="border-t border-[#1C2A25] pt-4 space-y-3 text-xs leading-relaxed">
                 <div>
                   <span className="font-semibold text-slate-200 block">
                     {t('postflop.boardTexture')}

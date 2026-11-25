@@ -456,7 +456,7 @@ export function PlayTableView({
             <button
               type="button"
               onClick={() => handleHeroAction('fold')}
-              className="flex-1 min-w-[96px] min-h-[42px] px-4 py-2 rounded-lg bg-[#1A2230] hover:bg-[#232F42] border border-[#2E3C52] text-sm font-semibold text-slate-200 cursor-pointer whitespace-nowrap"
+              className="flex-1 min-w-[96px] min-h-[42px] px-4 py-2 rounded-lg bg-[#16211D] hover:bg-[#20302A] border border-[#2B3E37] text-sm font-semibold text-slate-200 cursor-pointer whitespace-nowrap"
             >
               {t('common.fold')}
             </button>
@@ -491,7 +491,7 @@ export function PlayTableView({
 
         {legal.canBetOrRaise && (
           <div
-            className={`flex flex-wrap items-center gap-3 bg-[#0B1017] border border-[#1E293B] rounded-lg px-3.5 py-2 ${
+            className={`flex flex-wrap items-center gap-3 bg-[#0A100E] border border-[#1B2823] rounded-lg px-3.5 py-2 ${
               theaterMode ? 'flex-1 min-w-[340px]' : ''
             }`}
           >
@@ -511,7 +511,7 @@ export function PlayTableView({
                     key={preset.label}
                     type="button"
                     onClick={() => setRaiseAmount(clamped)}
-                    className="px-2.5 py-1 text-xs font-mono rounded bg-[#161F2E] hover:bg-[#222F44] border border-[#2A384F] text-slate-200 cursor-pointer whitespace-nowrap"
+                    className="px-2.5 py-1 text-xs font-mono rounded bg-[#141E1B] hover:bg-[#1F2F29] border border-[#273A33] text-slate-200 cursor-pointer whitespace-nowrap"
                   >
                     {preset.label}
                   </button>
@@ -550,7 +550,7 @@ export function PlayTableView({
         <button
           type="button"
           onClick={handleDealNext}
-          className="px-3.5 py-2 text-xs font-medium rounded-lg bg-[#17202E] hover:bg-[#222F44] border border-[#2B394F] text-slate-200 cursor-pointer whitespace-nowrap"
+          className="px-3.5 py-2 text-xs font-medium rounded-lg bg-[#141E1B] hover:bg-[#1F2F29] border border-[#283B34] text-slate-200 cursor-pointer whitespace-nowrap"
         >
           {t('table.skipNext')}
         </button>
@@ -563,7 +563,7 @@ export function PlayTableView({
       <div
         role="tablist"
         aria-label={t('table.ariaAnalyticsTabs')}
-        className="grid grid-cols-2 gap-1 p-1 bg-[#0B1017] border border-[#1E293B] rounded-lg"
+        className="grid grid-cols-2 gap-1 p-1 bg-[#0A100E] border border-[#1B2823] rounded-lg"
       >
         <button
           id="arena-tab-hud"
@@ -573,7 +573,7 @@ export function PlayTableView({
           aria-controls="arena-panel-hud"
           onClick={() => setRightTab('hud')}
           className={`py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-            rightTab === 'hud' ? 'bg-[#1D283A] text-white' : 'text-slate-400 hover:text-slate-200'
+            rightTab === 'hud' ? 'bg-[#192823] text-white' : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           {t('arena.tabHud')}
@@ -586,7 +586,7 @@ export function PlayTableView({
           aria-controls="arena-panel-feed"
           onClick={() => setRightTab('feed')}
           className={`py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-            rightTab === 'feed' ? 'bg-[#1D283A] text-white' : 'text-slate-400 hover:text-slate-200'
+            rightTab === 'feed' ? 'bg-[#192823] text-white' : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           {t('arena.tabFeed')} ({table.actionLog.length})
@@ -609,10 +609,10 @@ export function PlayTableView({
               )}
             </div>
 
-            <div className="overflow-x-auto border border-[#1E293B] rounded-lg bg-[#0B1017]">
+            <div className="overflow-x-auto border border-[#1B2823] rounded-lg bg-[#0A100E]">
               <table className="w-full text-left text-[11px] font-mono tabular-nums">
                 <thead>
-                  <tr className="border-b border-[#1E293B] text-slate-400">
+                  <tr className="border-b border-[#1B2823] text-slate-400">
                     <th className="py-2 px-2.5 font-medium">{t('arena.hudColPlayer')}</th>
                     <th className="py-2 px-2 font-medium">{t('arena.hudColStyle')}</th>
                     <th className="py-2 px-1.5 text-right font-medium">{t('arena.hudColVpip')}</th>
@@ -633,7 +633,7 @@ export function PlayTableView({
                       return (
                         <tr
                           key={bot.seatIndex}
-                          className={`border-b border-[#161F2D] last:border-0 ${
+                          className={`border-b border-[#141E1B] last:border-0 ${
                             isActing ? 'bg-emerald-500/10' : ''
                           } ${bot.folded ? 'opacity-50' : ''}`}
                         >
@@ -666,7 +666,7 @@ export function PlayTableView({
           </div>
 
           {/* Exploitative EV Audit */}
-          <div className="border-t border-[#1F2A3A] pt-4 space-y-3">
+          <div className="border-t border-[#1C2A25] pt-4 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-white">{t('table.auditTitle')}</h2>
               <span className="text-xs font-mono tabular-nums text-slate-400">
@@ -678,7 +678,7 @@ export function PlayTableView({
             </div>
 
             {table.heroAudits.length === 0 ? (
-              <p className="text-xs text-slate-400 bg-[#0B1017] border border-[#1E293B] rounded-lg p-3.5 leading-relaxed">
+              <p className="text-xs text-slate-400 bg-[#0A100E] border border-[#1B2823] rounded-lg p-3.5 leading-relaxed">
                 {t('table.auditEmpty')}
               </p>
             ) : (
@@ -686,7 +686,7 @@ export function PlayTableView({
                 {table.heroAudits.map((audit, idx) => (
                   <div
                     key={idx}
-                    className="bg-[#0B1017] border border-[#1E293B] rounded-lg p-3 space-y-1.5 text-xs"
+                    className="bg-[#0A100E] border border-[#1B2823] rounded-lg p-3 space-y-1.5 text-xs"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-mono text-slate-300">
@@ -754,11 +754,11 @@ export function PlayTableView({
     >
       {/* Header Bar: Compact Cinema Bar in Theater Mode, Full Config Toolbar in Standard Mode */}
       {theaterMode ? (
-        <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2.5 border-b border-[#1E293B] bg-[#0B1017] shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2.5 border-b border-[#1B2823] bg-[#0A100E] shrink-0">
           <div className="flex flex-wrap items-center gap-3">
             <span
               data-testid="arena-config-badge"
-              className="px-2.5 py-0.5 text-xs font-mono rounded-md bg-[#152030] border border-[#273852] text-emerald-300"
+              className="px-2.5 py-0.5 text-xs font-mono rounded-md bg-[#121D19] border border-[#253832] text-emerald-300"
             >
               {locale === 'zh-CN' ? `${table.config.tableSize}人桌` : `${table.config.tableSize}-Max`} · {presetLabel} · {table.config.startingStackBb}bb
             </span>
@@ -778,8 +778,8 @@ export function PlayTableView({
               onClick={() => setTheaterHudOpen((v) => !v)}
               className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                 theaterHudOpen
-                  ? 'bg-[#1D283A] border-emerald-500/50 text-white'
-                  : 'bg-[#111722] border-[#222D3D] text-slate-300 hover:text-white'
+                  ? 'bg-[#192823] border-emerald-500/50 text-white'
+                  : 'bg-[#0E1513] border-[#1F2D28] text-slate-300 hover:text-white'
               }`}
             >
               {theaterHudOpen ? (
@@ -812,7 +812,7 @@ export function PlayTableView({
               className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                 table.config.blindReadMode
                   ? 'bg-amber-500/15 border-amber-400/50 text-amber-200'
-                  : 'bg-[#111722] border-[#222D3D] text-slate-300 hover:text-white'
+                  : 'bg-[#0E1513] border-[#1F2D28] text-slate-300 hover:text-white'
               }`}
             >
               {table.config.blindReadMode ? (
@@ -834,7 +834,7 @@ export function PlayTableView({
               className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1 cursor-pointer whitespace-nowrap ${
                 table.config.fastFold
                   ? 'bg-emerald-500/15 border-emerald-400/50 text-emerald-300'
-                  : 'bg-[#111722] border-[#222D3D] text-slate-400 hover:text-white'
+                  : 'bg-[#0E1513] border-[#1F2D28] text-slate-400 hover:text-white'
               }`}
             >
               <Zap className="w-3.5 h-3.5" aria-hidden="true" />
@@ -846,7 +846,7 @@ export function PlayTableView({
               data-testid="toggle-fullscreen-btn"
               onClick={handleToggleFullscreen}
               aria-label={isFullscreen ? t('arena.exitFullscreen') : t('arena.fullscreen')}
-              className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#111722] border border-[#222D3D] text-slate-200 hover:border-emerald-500/50 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-200 hover:border-emerald-500/50 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               <Expand className="w-3.5 h-3.5" aria-hidden="true" />
               <span className="hidden sm:inline">
@@ -858,7 +858,7 @@ export function PlayTableView({
               type="button"
               data-testid="exit-theater-btn"
               onClick={handleToggleTheater}
-              className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#192334] border border-[#2B3B54] text-slate-100 hover:bg-[#233148] inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#17231F] border border-[#293C35] text-slate-100 hover:bg-[#21332C] inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
               <span>{t('arena.exitTheater')}</span>
@@ -866,13 +866,13 @@ export function PlayTableView({
           </div>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#222D3D] pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1F2D28] pb-4">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-xl sm:text-2xl font-semibold text-white">{t('table.title')}</h1>
               <span
                 data-testid="arena-config-badge"
-                className="px-2.5 py-0.5 text-xs font-mono rounded-md bg-[#152030] border border-[#273852] text-emerald-300"
+                className="px-2.5 py-0.5 text-xs font-mono rounded-md bg-[#121D19] border border-[#253832] text-emerald-300"
               >
                 {locale === 'zh-CN' ? `${table.config.tableSize}人桌` : `${table.config.tableSize}-Max`} · {presetLabel} · {table.config.startingStackBb}bb
               </span>
@@ -902,7 +902,7 @@ export function PlayTableView({
               type="button"
               data-testid="enter-theater-btn"
               onClick={handleToggleTheater}
-              className="px-3 py-2 text-xs font-medium rounded-lg bg-[#152030] hover:bg-[#1D2D44] border border-emerald-500/40 text-emerald-300 inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              className="px-3 py-2 text-xs font-medium rounded-lg bg-[#121D19] hover:bg-[#1D2D44] border border-emerald-500/40 text-emerald-300 inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
             >
               <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
               <span>{t('arena.theaterMode')}</span>
@@ -917,7 +917,7 @@ export function PlayTableView({
               className={`px-3 py-2 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
                 table.config.blindReadMode
                   ? 'bg-amber-500/15 border-amber-400/50 text-amber-200'
-                  : 'bg-[#111722] border-[#222D3D] text-slate-300 hover:text-white'
+                  : 'bg-[#0E1513] border-[#1F2D28] text-slate-300 hover:text-white'
               }`}
             >
               {table.config.blindReadMode ? (
@@ -939,7 +939,7 @@ export function PlayTableView({
               className={`px-2.5 py-2 text-xs font-medium rounded-lg border inline-flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
                 table.config.fastFold
                   ? 'bg-emerald-500/15 border-emerald-400/50 text-emerald-300'
-                  : 'bg-[#111722] border-[#222D3D] text-slate-400 hover:text-white'
+                  : 'bg-[#0E1513] border-[#1F2D28] text-slate-400 hover:text-white'
               }`}
             >
               <Zap className="w-3.5 h-3.5" aria-hidden="true" />
@@ -950,7 +950,7 @@ export function PlayTableView({
             <div
               role="group"
               aria-label={t('table.ariaVisualMode')}
-              className="flex items-center gap-1 p-1 bg-[#111722] border border-[#222D3D] rounded-lg"
+              className="flex items-center gap-1 p-1 bg-[#0E1513] border border-[#1F2D28] rounded-lg"
             >
               <button
                 type="button"
@@ -971,7 +971,7 @@ export function PlayTableView({
                 onClick={() => setViewMode('2d')}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                   viewMode === '2d'
-                    ? 'bg-[#222E40] text-white'
+                    ? 'bg-[#1E2E28] text-white'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -986,7 +986,7 @@ export function PlayTableView({
                 !((table.phase === 'IDLE' || table.phase === 'SHOWDOWN') &&
                   heroSeat.stackBb < table.config.startingStackBb)
               }
-              className="px-2.5 py-2 text-xs font-medium rounded-lg bg-[#111722] border border-[#222D3D] text-slate-200 hover:bg-[#192334] disabled:opacity-45 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              className="px-2.5 py-2 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-200 hover:bg-[#17231F] disabled:opacity-45 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
               <span>
@@ -1001,7 +1001,7 @@ export function PlayTableView({
               className={`p-2 rounded-lg border cursor-pointer ${
                 prefs.fourColorDeck
                   ? 'bg-[#172634] border-sky-500/40 text-sky-300'
-                  : 'bg-[#111722] border-[#222D3D] text-slate-400'
+                  : 'bg-[#0E1513] border-[#1F2D28] text-slate-400'
               }`}
             >
               <Palette className="w-4 h-4" aria-hidden="true" />
@@ -1011,7 +1011,7 @@ export function PlayTableView({
               type="button"
               onClick={() => onUpdatePrefs({ soundEnabled: !prefs.soundEnabled })}
               aria-label={prefs.soundEnabled ? t('common.muteSound') : t('common.enableSound')}
-              className="p-2 rounded-lg bg-[#111722] border border-[#222D3D] text-slate-300 hover:text-white cursor-pointer"
+              className="p-2 rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:text-white cursor-pointer"
             >
               {prefs.soundEnabled ? (
                 <Volume2 className="w-4 h-4" aria-hidden="true" />
@@ -1035,7 +1035,7 @@ export function PlayTableView({
           className={
             theaterMode
               ? 'flex-1 min-w-0 h-full flex flex-col'
-              : 'xl:col-span-8 bg-[#111722] border border-[#222D3D] rounded-xl p-4 sm:p-5 space-y-5'
+              : 'xl:col-span-8 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-4 sm:p-5 space-y-5'
           }
         >
           {/* Status Strip (standard mode; Theater shows status in its top bar) */}
@@ -1080,8 +1080,8 @@ export function PlayTableView({
           <div
             className={
               theaterMode
-                ? 'px-4 py-3 border-t border-[#1E293B] bg-[#0B1017] shrink-0'
-                : 'pt-4 border-t border-[#1E293B]'
+                ? 'px-4 py-3 border-t border-[#1B2823] bg-[#0A100E] shrink-0'
+                : 'pt-4 border-t border-[#1B2823]'
             }
           >
             {actionConsoleNode}
@@ -1095,12 +1095,12 @@ export function PlayTableView({
             data-testid={theaterMode ? 'theater-hud-drawer' : 'arena-analytics-panel'}
             className={
               theaterMode
-                ? 'fixed inset-0 z-50 lg:static lg:inset-auto lg:z-auto lg:w-[370px] shrink-0 border-l border-[#222D3D] bg-[#0D131D] p-4 overflow-y-auto flex flex-col'
-                : 'xl:col-span-4 bg-[#111722] border border-[#222D3D] rounded-xl p-5'
+                ? 'fixed inset-0 z-50 lg:static lg:inset-auto lg:z-auto lg:w-[370px] shrink-0 border-l border-[#1F2D28] bg-[#0B1210] p-4 overflow-y-auto flex flex-col'
+                : 'xl:col-span-4 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-5'
             }
           >
             {theaterMode && (
-              <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-[#1E293B] lg:hidden shrink-0">
+              <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-[#1B2823] lg:hidden shrink-0">
                 <span className="text-sm font-semibold text-white">
                   {t('arena.toggleHudDrawer')}
                 </span>
@@ -1109,7 +1109,7 @@ export function PlayTableView({
                   data-testid="close-theater-hud"
                   onClick={() => setTheaterHudOpen(false)}
                   aria-label={t('common.close')}
-                  className="p-1.5 rounded-lg bg-[#161F2E] hover:bg-[#222F44] border border-[#2B394F] text-slate-300 hover:text-white cursor-pointer"
+                  className="p-1.5 rounded-lg bg-[#141E1B] hover:bg-[#1F2F29] border border-[#283B34] text-slate-300 hover:text-white cursor-pointer"
                 >
                   <X className="w-4 h-4" aria-hidden="true" />
                 </button>

@@ -3,28 +3,33 @@
 @theme {
   --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-mono: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
 
-  --color-obsidian: #090D12;
-  --color-studio: #111722;
-  --color-studio-elevated: #17202E;
-  --color-studio-border: #222D3D;
-  --color-felt-core: #0F2E23;
-  --color-felt-edge: #071913;
-  --color-rail: #19222F;
+  --color-obsidian: #070B0A;
+  --color-studio: #0E1513;
+  --color-studio-elevated: #141E1B;
+  --color-studio-inset: #0A100E;
+  --color-studio-border: #1F2D28;
+  --color-ink: #F2F4F1;
+  --color-ink-muted: #99A8A1;
+  --color-brass: #E5B95C;
+  --color-felt-core: #0F3527;
+  --color-felt-edge: #061A13;
+  --color-rail: #17211E;
 }
 
 @layer base {
   html {
-    background-color: #090D12;
-    color: #E6EDF5;
+    background-color: var(--color-obsidian);
+    color: var(--color-ink);
     font-family: var(--font-sans);
-    letter-spacing: 0.01em;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     scroll-behavior: smooth;
   }
 
   h1, h2, h3, h4 {
     font-family: var(--font-display);
+    letter-spacing: -0.025em;
     text-wrap: balance;
   }
 
@@ -34,24 +39,34 @@
   }
 }
 
-.tabular-nums {
+.tabular-nums,
+.font-mono {
   font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 .felt-surface {
   background:
-    radial-gradient(ellipse 72% 64% at 50% 46%, rgba(22, 82, 61, 0.92) 0%, rgba(12, 43, 33, 0.96) 58%, rgba(7, 24, 19, 1) 100%);
+    radial-gradient(ellipse 74% 66% at 50% 45%, rgba(20, 86, 62, 0.94) 0%, rgba(11, 44, 33, 0.97) 58%, rgba(6, 24, 18, 1) 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
-    inset 0 18px 48px rgba(0, 0, 0, 0.48),
-    0 24px 64px rgba(0, 0, 0, 0.55);
+    inset 0 0 0 1px rgba(229, 185, 92, 0.12),
+    inset 0 18px 48px rgba(0, 0, 0, 0.5),
+    0 24px 64px rgba(0, 0, 0, 0.58);
 }
 
 .felt-rail {
-  background: linear-gradient(180deg, #1E2836 0%, #111824 100%);
+  background: linear-gradient(180deg, #1B2521 0%, #0F1614 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 18px 44px rgba(0, 0, 0, 0.6);
+    0 18px 44px rgba(0, 0, 0, 0.62);
 }
 
 .playing-card-shadow {
@@ -61,6 +76,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

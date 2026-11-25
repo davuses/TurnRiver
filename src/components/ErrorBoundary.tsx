@@ -42,8 +42,8 @@ export class ErrorBoundary extends React.Component<
     if (this.state.hasError) {
       const locale = getBoundaryLocale();
       return (
-        <div className="min-h-screen bg-[#090D12] text-[#E6EDF5] flex items-center justify-center p-6">
-          <div className="max-w-md w-full bg-[#111722] border border-[#222D3D] rounded-xl p-6 space-y-4">
+        <div className="min-h-screen bg-[#070B0A] text-[#E6EDF5] flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-[#0E1513] border border-[#1F2D28] rounded-xl p-6 space-y-4">
             <h1 className="text-xl font-semibold text-white">
               {translateKey(locale, 'error.title')}
             </h1>

@@ -58,9 +58,9 @@ export function SolverBars({ actions, chosenLabel }: SolverBarsProps) {
                 </span>
               </div>
             </div>
-            <div className="h-2 w-full rounded-full bg-[#192334] overflow-hidden">
+            <div className="h-2 w-full rounded-full bg-[#141E1B] overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-200 ${barColor(
+                className={`h-full rounded-full transition-[width] duration-200 ease-out ${barColor(
                   item.kind
                 )}`}
                 style={{ width: `${Math.max(item.frequency, item.frequency > 0 ? 3 : 0)}%` }}

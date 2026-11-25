@@ -6,7 +6,7 @@ export const LOCALE_STORAGE_KEY = 'feltlab_locale_v1';
 
 const en = {
   // Document Metadata
-  'meta.pageTitle': "TurnRiver — 6-Max Texas Hold'em Training Studio",
+  'meta.pageTitle': "TurnRiver | 6-Max Texas Hold'em Training Studio",
 
   // Navigation & Global
   'nav.preflop': 'Preflop',
@@ -68,7 +68,7 @@ const en = {
   'overview.eyebrow': "6-Max No-Limit Hold'em · 100bb Cash Mastery",
   'overview.heroTitle': 'Train every street with reference frequencies and honest math',
   'overview.heroDesc':
-    'Replace table guesswork with deliberate repetition. Drill 6-max preflop ranges, live postflop decision trees, pot odds & call EV math, multi-street hand reading, and full hands against strategic bots—with every number tied directly to its underlying calculation.',
+    'Drill 6-max preflop ranges, postflop decision trees, pot odds, hand reading, and live bot tables with transparent math.',
   'overview.ctaPreflop': 'Start Preflop Drill',
   'overview.ctaTable': 'Sit at 6-Max Table',
   'overview.cta3D': 'Open 3D Studio',
@@ -498,7 +498,7 @@ const zhCN: Record<TranslationKey, string> = {
   'overview.eyebrow': '6人桌无限注德州扑克 · 100bb 常规桌训练',
   'overview.heroTitle': '练透翻前到河牌的每一步决策，看清改变答案的关键细节',
   'overview.heroDesc':
-    '专为懂规则、想在陌生牌局里独立做决定的玩家打造。从 6人桌翻前范围、翻后实战决策、底池赔率与跟注 EV（期望值）计算，到多街读牌与 AI 牌桌对练，每项评分都只展示有计算依据的真实指标。',
+    '专注 6 人常规桌翻前范围、翻后决策、底池赔率、多街读牌与 AI 牌桌对练，每项评分都有清晰计算依据。',
   'overview.ctaPreflop': '开始翻前练习',
   'overview.ctaTable': '进入 AI 对练',
   'overview.cta3D': '查看 3D 牌桌',

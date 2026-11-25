@@ -164,7 +164,7 @@ export function PreflopLabView({
   return (
     <div className="space-y-6 pb-10">
       {/* Workspace Filter & Utility Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#222D3D] pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#1F2D28] pb-4">
         <div className="space-y-1">
           <h1 className="text-xl sm:text-2xl font-semibold text-white">
             {t('preflop.title')}
@@ -179,7 +179,7 @@ export function PreflopLabView({
           <div
             role="group"
             aria-label={t('preflop.ariaScenarioFilter')}
-            className="flex flex-wrap items-center gap-1 p-1 bg-[#111722] border border-[#222D3D] rounded-lg max-w-full"
+            className="flex flex-wrap items-center gap-1 p-1 bg-[#0E1513] border border-[#1F2D28] rounded-lg max-w-full"
           >
             {SCENARIO_OPTIONS.map((opt) => (
               <button
@@ -191,7 +191,7 @@ export function PreflopLabView({
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                   scenarioFilter === opt.value
-                    ? 'bg-[#222E40] text-white'
+                    ? 'bg-[#1E2E28] text-white'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -211,7 +211,7 @@ export function PreflopLabView({
                 setPositionFilter(nextPos);
                 dealNext(scenarioFilter, nextPos);
               }}
-              className="bg-[#111722] border border-[#222D3D] rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+              className="bg-[#0E1513] border border-[#1F2D28] rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
             >
               {POSITION_OPTIONS.map((pos) => (
                 <option key={pos} value={pos}>
@@ -231,7 +231,7 @@ export function PreflopLabView({
             className={`px-3 py-2 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               prefs.fourColorDeck
                 ? 'bg-[#172634] border-sky-500/40 text-sky-300'
-                : 'bg-[#111722] border-[#222D3D] text-slate-400 hover:text-slate-200'
+                : 'bg-[#0E1513] border-[#1F2D28] text-slate-400 hover:text-slate-200'
             }`}
           >
             <Palette className="w-3.5 h-3.5" aria-hidden="true" />
@@ -242,7 +242,7 @@ export function PreflopLabView({
             type="button"
             onClick={() => onUpdatePrefs({ soundEnabled: !prefs.soundEnabled })}
             aria-label={prefs.soundEnabled ? t('common.muteSound') : t('common.enableSound')}
-            className="p-2 rounded-lg bg-[#111722] border border-[#222D3D] text-slate-300 hover:text-white transition-colors cursor-pointer"
+            className="p-2 rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:text-white transition-colors cursor-pointer"
           >
             {prefs.soundEnabled ? (
               <Volume2 className="w-4 h-4" aria-hidden="true" />
@@ -256,7 +256,7 @@ export function PreflopLabView({
       {/* Two-Zone Studio Sandbox (65% Stage / 35% Analytics Deck) */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         {/* Left Interactive Felt Stage */}
-        <div className="xl:col-span-7 bg-[#111722] border border-[#222D3D] rounded-xl p-4 sm:p-6 flex flex-col justify-between gap-6">
+        <div className="xl:col-span-7 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-4 sm:p-6 flex flex-col justify-between gap-6">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
             <span className="font-semibold text-white text-sm">{localizedTemplate.title}</span>
             <span className="font-mono tabular-nums">
@@ -274,13 +274,13 @@ export function PreflopLabView({
           />
 
           {/* Action Control Strip */}
-          <div className="pt-4 border-t border-[#1E293B] flex flex-wrap items-center justify-between gap-3">
+          <div className="pt-4 border-t border-[#1B2823] flex flex-wrap items-center justify-between gap-3">
             {!evaluation ? (
               <div className="flex flex-wrap items-center gap-3 w-full">
                 <button
                   type="button"
                   onClick={() => handleAction('fold')}
-                  className="flex-1 min-w-[110px] min-h-[44px] px-4 py-2.5 rounded-lg bg-[#1A2230] hover:bg-[#232F42] border border-[#2E3C52] text-sm font-semibold text-slate-200 transition-colors cursor-pointer whitespace-nowrap"
+                  className="flex-1 min-w-[110px] min-h-[44px] px-4 py-2.5 rounded-lg bg-[#16211D] hover:bg-[#20302A] border border-[#2B3E37] text-sm font-semibold text-slate-200 transition-colors cursor-pointer whitespace-nowrap"
                 >
                   {t('common.fold')} <span className="text-xs font-mono text-slate-400 ml-1">[F]</span>
                 </button>
@@ -323,7 +323,7 @@ export function PreflopLabView({
         </div>
 
         {/* Right Analytics & 13x13 GTO Matrix Deck */}
-        <div className="xl:col-span-5 bg-[#111722] border border-[#222D3D] rounded-xl p-5 sm:p-6 space-y-5">
+        <div className="xl:col-span-5 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-5 sm:p-6 space-y-5">
           {!evaluation ? (
             <div className="space-y-4">
               <div className="space-y-1">
@@ -331,7 +331,7 @@ export function PreflopLabView({
                 <p className="text-xs text-slate-400">{t('preflop.preActionDesc')}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-xs border-y border-[#1F2A3A] py-4">
+              <div className="grid grid-cols-2 gap-3 text-xs border-y border-[#1C2A25] py-4">
                 <div>
                   <span className="text-slate-400 block">{t('preflop.heroSeat')}</span>
                   <span className="font-mono font-semibold text-white text-sm">
@@ -381,7 +381,7 @@ export function PreflopLabView({
 
               <SolverBars actions={evaluation.actions} chosenLabel={evaluation.chosenAction} />
 
-              <div className="space-y-2.5 pt-2 border-t border-[#1F2A3A]">
+              <div className="space-y-2.5 pt-2 border-t border-[#1C2A25]">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-medium text-slate-200">
                     {t('preflop.fullMatrix')} ({localizedTemplate.title})
@@ -398,7 +398,7 @@ export function PreflopLabView({
                       </span>
                     )}
                     <span className="inline-flex items-center gap-1">
-                      <span className="w-2.5 h-2.5 rounded-xs bg-[#1D2636] inline-block" />
+                      <span className="w-2.5 h-2.5 rounded-xs bg-[#192622] inline-block" />
                       {t('common.fold')}
                     </span>
                   </div>
@@ -414,7 +414,7 @@ export function PreflopLabView({
 
                 {/* Inspected Cell Micro-Readout */}
                 {activeInspectedCell && (
-                  <div className="flex items-center justify-between text-xs font-mono tabular-nums bg-[#0B1017] border border-[#1E293B] rounded-lg px-3 py-2">
+                  <div className="flex items-center justify-between text-xs font-mono tabular-nums bg-[#0A100E] border border-[#1B2823] rounded-lg px-3 py-2">
                     <span className="font-semibold text-amber-300">
                       {t('preflop.inspecting')} {activeInspectedCell.hand}
                     </span>
@@ -426,7 +426,7 @@ export function PreflopLabView({
                 )}
               </div>
 
-              <p className="text-xs text-slate-300 leading-relaxed border-t border-[#1F2A3A] pt-3">
+              <p className="text-xs text-slate-300 leading-relaxed border-t border-[#1C2A25] pt-3">
                 {localizedTemplate.strategyNote}
               </p>
             </div>

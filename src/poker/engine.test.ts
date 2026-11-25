@@ -579,6 +579,13 @@ test('Short all-in does not reopen betting for already-acted players or shrink m
     actingSeatIndex: 0,
     seats: table.seats.map((s, idx) => ({
       ...s,
+      cards: (
+        idx === 0
+          ? parseCards(['As', 'Qh'])
+          : idx === 1
+            ? parseCards(['Jd', 'Ts'])
+            : parseCards(['7h', '6d'])
+      ) as NonNullable<typeof s.cards>,
       stackBb: idx === 2 ? 12.0 : 100.0,
       streetBetBb: 0,
       totalInvestedBb: 2.0,
