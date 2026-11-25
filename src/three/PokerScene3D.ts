@@ -7,6 +7,7 @@ import {
   createCasinoChairsGroup,
   createCasinoSalonBackdropGroup,
   createChandelierDustMotes,
+  createCheckRippleMesh,
   createChipStacksGroup,
   createDealerPuckGroup,
   createPlayingCardGroup,
@@ -61,6 +62,25 @@ interface ActiveTween {
   duration: number;
   disposeOnEnd?: boolean;
   initialHidden?: boolean;
+  onStart?: () => void;
+  onFlip?: () => void;
+  onLand?: () => void;
+  startedFired?: boolean;
+  flippedFired?: boolean;
+  landedFired?: boolean;
+}
+
+interface ActiveRipple {
+  mesh: THREE.Mesh;
+  mat: THREE.ShaderMaterial;
+  elapsed: number;
+  duration: number;
+}
+
+interface ChandelierFadeEntry {
+  mat: THREE.Material;
+  baseOpacity: number;
+  isShaderCone: boolean;
 }
 
 interface HeroCardPeekTarget {
@@ -75,10 +95,10 @@ const CAMERA_PRESETS: Record<
   CameraPresetId,
   { pos: [number, number, number]; target: [number, number, number] }
 > = {
-  hero: { pos: [0, 3.22, 5.45], target: [0, FELT_Y + 0.04, 0.08] },
-  broadcast: { pos: [3.95, 3.85, 4.45], target: [0, FELT_Y, 0] },
+  hero: { pos: [0, 3.35, 5.92], target: [0, FELT_Y + 0.04, 0.04] },
+  broadcast: { pos: [3.95, 3.85, 4.45], target: [0, FELT_Y, 0.12] },
   topdown: { pos: [0, 7.15, 0.85], target: [0, FELT_Y, 0] },
-  closeup: { pos: [0.45, 2.02, 2.24], target: [0, FELT_Y + 0.04, -0.06] },
+  closeup: { pos: [0.35, 2.15, 2.65], target: [0, FELT_Y + 0.02, 0.22] },
   rail: { pos: [-2.42, 1.84, 3.42], target: [0.12, FELT_Y + 0.12, -0.06] },
 };
 
@@ -210,6 +230,10 @@ export class PokerScene3D {
 
   private tableAssembly: PokerTableAssembly;
   private chandelierGroup: THREE.Object3D | null = null;
+  private chandelierFadeEntries: ChandelierFadeEntry[] = [];
+  private lastChandelierOpacity = -1;
+  private seatPlaquePlates: THREE.Mesh[] = [];
+  private lastPlaqueRotX = -0.14;
   private ambientPropsGroup: THREE.Group;
   private dustMotes: THREE.Points;
   private dynamicGroup: THREE.Group;
@@ -227,6 +251,9 @@ export class PokerScene3D {
   private currentCameraPreset: CameraPresetId = 'hero';
   private userHasOrbited = false;
   private resizeObserver: ResizeObserver;
+  private lastWidth = 0;
+  private lastHeight = 0;
+  private lastDpr = 1;
   private rafId: number | null = null;
   private timeoutId: number | null = null;
   private lastTickMs = 0;
@@ -234,9 +261,11 @@ export class PokerScene3D {
   private dirty = true;
   private disposed = false;
   private contextLost = false;
+  private pendingShadowUpdate = false;
 
-  // Animation, active felt halos & state-delta trackers
+  // Animation, active felt halos, ripples & state-delta trackers
   private activeTweens: ActiveTween[] = [];
+  private activeRipples: ActiveRipple[] = [];
   private activeHaloMats: THREE.ShaderMaterial[] = [];
   private heroCardTargets: HeroCardPeekTarget[] = [];
   private hoveredHeroCardIdx = -1;
@@ -247,6 +276,13 @@ export class PokerScene3D {
   private prevStreetBets = new Map<number, { bet: number; x: number; z: number }>();
   private prevPotBb = 0;
   private prevHadWinner = false;
+  private prevFoldedSeats = new Set<number>();
+  private prevActionSigs = new Map<number, string>();
+  private prevDealerSeatIdx: number | null = null;
+  private prevDealerPos: THREE.Vector3 | null = null;
+  private prevHeroTurn = false;
+  private prevRevealedSeats = new Set<number>();
+  private prevAllInSeats = new Set<number>();
   private initializedHandOnce = false;
 
   // Smooth exponential-damped camera transition targets
@@ -266,7 +302,11 @@ export class PokerScene3D {
     probeGl?.getExtension('WEBGL_lose_context')?.loseContext();
 
     const width = Math.max(container.clientWidth, 320);
-    const height = Math.max(container.clientHeight, 260);
+    const height = Math.max(container.clientHeight, 240);
+    const dpr = this.isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 1.5);
+    this.lastWidth = width;
+    this.lastHeight = height;
+    this.lastDpr = dpr;
 
     // Lightweight single-pass renderer capped at 1.5x DPR with on-demand shadow maps (low GPU footprint!)
     this.renderer = new THREE.WebGLRenderer({
@@ -275,10 +315,8 @@ export class PokerScene3D {
       alpha: false,
       preserveDrawingBuffer: false,
     });
+    this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(width, height, false);
-    this.renderer.setPixelRatio(
-      this.isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 1.5)
-    );
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.92;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -390,6 +428,24 @@ export class PokerScene3D {
       // Grand Monte-Carlo Salon Privé architecture + Art-Deco chandelier + volumetric light cone
       const salonBackdrop = createCasinoSalonBackdropGroup(maxAniso);
       this.chandelierGroup = salonBackdrop.getObjectByName('ArtDecoSalonChandelier') ?? null;
+      if (this.chandelierGroup) {
+        const seenMats = new Set<THREE.Material>();
+        this.chandelierGroup.traverse((obj) => {
+          if (!(obj as THREE.Mesh).isMesh) return;
+          const mesh = obj as THREE.Mesh;
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          for (const m of mats) {
+            if (!m || seenMats.has(m)) continue;
+            seenMats.add(m);
+            const isShaderCone =
+              m instanceof THREE.ShaderMaterial && Boolean(m.uniforms?.uOpacity);
+            const baseOpacity = isShaderCone
+              ? Number((m as THREE.ShaderMaterial).uniforms.uOpacity.value)
+              : m.opacity;
+            this.chandelierFadeEntries.push({ mat: m, baseOpacity, isShaderCone });
+          }
+        });
+      }
       this.scene.add(salonBackdrop);
 
       // 5 Sculpted Executive Espresso-Leather Poker Chairs framing opponent seats
@@ -426,6 +482,8 @@ export class PokerScene3D {
 
       this.applyLighting(initialData.lighting);
       this.rebuildHandLayer(initialData);
+      this.updateChandelierOpacity();
+      this.updatePlaqueTilt(true);
 
       // Pre-compile shaders & render initial shadow map once so first deal has zero micro-stutter
       if (!this.isSoftwareGl) {
@@ -486,10 +544,13 @@ export class PokerScene3D {
     }
 
     if (hitIdx !== this.hoveredHeroCardIdx) {
+      const wasHovering = this.hoveredHeroCardIdx >= 0;
       this.hoveredHeroCardIdx = hitIdx;
       this.renderer.domElement.style.cursor = hitIdx >= 0 ? 'pointer' : '';
       if (hitIdx >= 0) {
-        this.soundEngine.playCardPeek();
+        this.soundEngine.playCardPeek(true);
+      } else if (wasHovering) {
+        this.soundEngine.playCardPeek(false);
       }
       this.requestRender();
     }
@@ -499,6 +560,7 @@ export class PokerScene3D {
     if (this.hoveredHeroCardIdx !== -1) {
       this.hoveredHeroCardIdx = -1;
       this.renderer.domElement.style.cursor = '';
+      this.soundEngine.playCardPeek(false);
       this.requestRender();
     }
   };
@@ -543,7 +605,7 @@ export class PokerScene3D {
     const desiredVFov = THREE.MathUtils.radToDeg(2 * Math.atan(targetHalfTanH / safeAspect));
     const vFov = THREE.MathUtils.clamp(desiredVFov, 42, 62);
     const actualHalfTanH = Math.tan(THREE.MathUtils.degToRad(vFov / 2)) * safeAspect;
-    const distScale = THREE.MathUtils.clamp(targetHalfTanH / actualHalfTanH, 1, 2.25);
+    const distScale = THREE.MathUtils.clamp(targetHalfTanH / actualHalfTanH, 1, 1.48);
     return { vFov, distScale };
   }
 
@@ -555,20 +617,73 @@ export class PokerScene3D {
     const target = new THREE.Vector3(...cfg.target);
     const basePos = new THREE.Vector3(...cfg.pos);
     const { distScale } = this.computeAspectFraming(aspect);
-    const effectiveScale = preset === 'closeup' ? Math.min(1.55, distScale) : distScale;
+    const effectiveScale = preset === 'closeup' ? Math.min(1.42, distScale) : distScale;
     const pos = target.clone().addScaledVector(basePos.sub(target), effectiveScale);
     return { pos, target };
   }
 
+  private panForX(x: number): number {
+    return THREE.MathUtils.clamp(x / 2.8, -0.8, 0.8);
+  }
+
+  private updateChandelierOpacity() {
+    if (!this.chandelierGroup) return;
+    const t = THREE.MathUtils.clamp((this.camera.position.y - 3.6) / (4.5 - 3.6), 0, 1);
+    const smooth = t * t * (3 - 2 * t);
+    const opacity = 1 - smooth;
+    this.chandelierGroup.visible = opacity > 0.02;
+    if (Math.abs(opacity - this.lastChandelierOpacity) < 0.002) return;
+    this.lastChandelierOpacity = opacity;
+
+    const isTransparent = opacity < 0.995;
+    for (let i = 0; i < this.chandelierFadeEntries.length; i++) {
+      const entry = this.chandelierFadeEntries[i];
+      if (entry.isShaderCone) {
+        (entry.mat as THREE.ShaderMaterial).uniforms.uOpacity.value = entry.baseOpacity * opacity;
+      } else {
+        entry.mat.opacity = entry.baseOpacity * opacity;
+        entry.mat.transparent = isTransparent || entry.baseOpacity < 0.995;
+        entry.mat.depthWrite = !isTransparent && entry.baseOpacity >= 0.995;
+      }
+    }
+  }
+
+  private updatePlaqueTilt(force = false) {
+    if (this.seatPlaquePlates.length === 0) return;
+    const dy = Math.max(0.01, this.camera.position.y - this.controls.target.y);
+    const horiz = Math.hypot(
+      this.camera.position.x - this.controls.target.x,
+      this.camera.position.z - this.controls.target.z
+    );
+    const pitch = Math.atan2(dy, Math.max(0.01, horiz));
+    const tiltBlend = THREE.MathUtils.clamp((pitch - 0.52) / (1.35 - 0.52), 0, 1);
+    const smoothTilt = tiltBlend * tiltBlend * (3 - 2 * tiltBlend);
+    const rotX = THREE.MathUtils.lerp(-0.14, -1.05, smoothTilt);
+    if (!force && Math.abs(rotX - this.lastPlaqueRotX) < 0.002) return;
+    this.lastPlaqueRotX = rotX;
+    for (let i = 0; i < this.seatPlaquePlates.length; i++) {
+      this.seatPlaquePlates[i].rotation.x = rotX;
+    }
+  }
+
   private handleResize() {
     if (this.disposed) return;
-    const width = Math.max(this.container.clientWidth, 280);
-    const height = Math.max(this.container.clientHeight, 220);
+    const width = Math.max(this.container.clientWidth, 320);
+    const height = Math.max(this.container.clientHeight, 240);
+    const dpr = this.isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 1.5);
+    if (width === this.lastWidth && height === this.lastHeight && dpr === this.lastDpr) {
+      return;
+    }
+    this.lastWidth = width;
+    this.lastHeight = height;
+    this.lastDpr = dpr;
+
     const aspect = width / height;
     const { vFov } = this.computeAspectFraming(aspect);
     this.camera.aspect = aspect;
     this.camera.fov = vFov;
     this.camera.updateProjectionMatrix();
+    this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(width, height, false);
     if (!this.userHasOrbited) {
       const adapted = this.getAdaptedPreset(this.currentCameraPreset, aspect);
@@ -581,7 +696,13 @@ export class PokerScene3D {
         this.controls.update();
       }
     }
-    this.requestRender();
+    this.updateChandelierOpacity();
+    this.updatePlaqueTilt();
+    // Synchronous render prevents the cleared black WebGL drawing buffer from ever being presented
+    if (!this.contextLost) {
+      this.dirty = false;
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   public setSoundEnabled(enabled: boolean) {
@@ -701,11 +822,12 @@ export class PokerScene3D {
     chipCount: number,
     arcHeight: number,
     duration: number,
-    baseDelay = 0
+    baseDelay = 0,
+    onLandFirst?: () => void
   ) {
     const chipRadius = 0.095;
     const chipHeight = 0.023;
-    const count = Math.max(1, Math.min(5, chipCount));
+    const count = Math.max(1, Math.min(8, chipCount));
 
     // Direction perpendicular to toss vector for organic staggered lateral spread
     const dx = toPos.x - fromPos.x;
@@ -759,11 +881,71 @@ export class PokerScene3D {
         bounceHeight: 0.055,
         fromRot: new THREE.Euler(0.45 * (c % 2 === 0 ? 1 : -1), c * 0.7, -0.35),
         toRot: new THREE.Euler(0, Math.PI * (0.8 + c * 0.35), 0),
-        delay: baseDelay + c * (this.isSoftwareGl ? 0.02 : 0.048),
+        delay: baseDelay + c * (this.isSoftwareGl ? 0.02 : 0.042),
         elapsed: 0,
-        duration: duration + c * 0.02,
+        duration: duration + c * 0.018,
         disposeOnEnd: true,
         initialHidden: true,
+        onLand: c === 0 ? onLandFirst : undefined,
+      });
+    }
+  }
+
+  private spawnCheckRipple(x: number, z: number) {
+    const mesh = createCheckRippleMesh(0xf59e0b, 0.58);
+    mesh.position.set(x, FELT_Y + 0.005, z);
+    this.fxGroup.add(mesh);
+    this.activeRipples.push({
+      mesh,
+      mat: mesh.material as THREE.ShaderMaterial,
+      elapsed: 0,
+      duration: this.isSoftwareGl ? 0.25 : 0.55,
+    });
+  }
+
+  private spawnFoldMuckCards(
+    fromX: number,
+    fromZ: number,
+    rotY: number,
+    deckOrigin: THREE.Vector3,
+    isHero: boolean
+  ) {
+    const dummyCard: Card = { rank: 'A', suit: 's' };
+    const pan = this.panForX(fromX);
+    for (let c = 0; c < 2; c++) {
+      const muckCard = createPlayingCardGroup(
+        dummyCard,
+        false,
+        false,
+        this.cardBackTex,
+        this.contactShadowTex,
+        isHero ? 1.05 : 0.94
+      );
+      const startPos = new THREE.Vector3(
+        fromX + (c === 0 ? -0.14 : 0.14),
+        FELT_Y + (isHero ? 0.09 : 0.012),
+        fromZ + c * 0.02
+      );
+      const startRot = new THREE.Euler(0, rotY + (c === 0 ? 0.12 : -0.12), 0);
+      const endRot = new THREE.Euler(0, rotY + Math.PI * (1.25 + c * 0.35), 0);
+      muckCard.position.copy(startPos);
+      muckCard.rotation.copy(startRot);
+      this.fxGroup.add(muckCard);
+
+      this.activeTweens.push({
+        obj: muckCard,
+        fromPos: startPos,
+        toPos: deckOrigin.clone(),
+        curveOffset: new THREE.Vector3((c === 0 ? -0.18 : 0.18), 0, -0.12),
+        arcHeight: 0.09 + c * 0.03,
+        bounceHeight: 0,
+        fromRot: startRot,
+        toRot: endRot,
+        delay: c * (this.isSoftwareGl ? 0.02 : 0.05),
+        elapsed: 0,
+        duration: this.isSoftwareGl ? 0.2 : 0.38,
+        disposeOnEnd: true,
+        onStart: c === 0 ? () => this.soundEngine.playCardMuck(pan) : undefined,
       });
     }
   }
@@ -784,9 +966,10 @@ export class PokerScene3D {
   }
 
   private rebuildHandLayer(data: Pick<Scene3DHandData, 'board' | 'potBb' | 'seats' | 'fourColorDeck'>) {
-    // Drop non-FX card tweens belonging to the previous dynamic layer (keep flying chip FX running!)
+    // Drop non-FX card tweens belonging to the previous dynamic layer (keep flying chip/muck FX running!)
     this.activeTweens = this.activeTweens.filter((tw) => tw.disposeOnEnd);
     this.activeHaloMats = [];
+    this.seatPlaquePlates = [];
     this.heroCardTargets = [];
     this.hoveredHeroCardIdx = -1;
 
@@ -873,6 +1056,7 @@ export class PokerScene3D {
         cardGrp.rotation.copy(startRot);
         cardGrp.visible = false;
 
+        const pan = this.panForX(targetPos.x);
         this.activeTweens.push({
           obj: cardGrp,
           fromPos: deckOrigin.clone(),
@@ -887,10 +1071,16 @@ export class PokerScene3D {
           elapsed: 0,
           duration: this.isSoftwareGl ? 0.22 : isSingleStreetPeel ? 0.62 : 0.48,
           initialHidden: true,
+          onStart: !animateInitialEntrance
+            ? () => this.soundEngine.playCardSlide(0, pan, 0.85)
+            : undefined,
+          onFlip: !animateInitialEntrance
+            ? () => this.soundEngine.playCardFlipSnap(pan)
+            : undefined,
+          onLand: !animateInitialEntrance
+            ? () => this.soundEngine.playCardFeltSlap(pan)
+            : undefined,
         });
-        if (!animateInitialEntrance) {
-          this.soundEngine.playCardSlide(delay);
-        }
         boardAnimOrder++;
       }
     }
@@ -915,10 +1105,17 @@ export class PokerScene3D {
     const activeSeatsCount = Math.min(6, data.seats.length);
     const anchors = getAnchorsForSeatCount(activeSeatsCount);
     const nextStreetBets = new Map<number, { bet: number; x: number; z: number }>();
+    const nextFoldedSeats = new Set<number>();
+    const nextActionSigs = new Map<number, string>();
+    const nextRevealedSeats = new Set<number>();
+    const nextAllInSeats = new Set<number>();
+    let nextDealerSeatIdx: number | null = null;
+    let nextDealerPos: THREE.Vector3 | null = null;
     let totalCurrentStreetBets = 0;
     let winnerPos: THREE.Vector3 | null = null;
-    let hasWinnerNow = false;
-    let tossedChipsCount = 0;
+    let winnerCount = 0;
+    let heroIsWinner = false;
+    let isHeroTurnNow = false;
 
     for (let i = 0; i < activeSeatsCount; i++) {
       const seat = data.seats[i];
@@ -937,10 +1134,50 @@ export class PokerScene3D {
           : anchor.z * 0.9;
       const sideHoleX = isSideSeat ? anchor.x * 0.75 : anchor.x * 0.72;
       const sideHoleZ = isSideSeat ? anchor.z * 0.46 : anchor.z * 0.72;
+      const seatFxX = seat.isHero ? 0 : sideHoleX;
+      const seatFxZ = seat.isHero ? 1.24 : sideHoleZ;
+
+      if (seat.folded) {
+        nextFoldedSeats.add(seat.seatIndex);
+      }
+      if (seat.isHero && !seat.folded && seat.isActiveTurn) {
+        isHeroTurnNow = true;
+      }
 
       if (seat.isWinner) {
-        hasWinnerNow = true;
-        winnerPos = new THREE.Vector3(chipBaseX, FELT_Y + 0.04, chipBaseZ);
+        winnerCount++;
+        if (seat.isHero) heroIsWinner = true;
+        if (!winnerPos || seat.isHero) {
+          winnerPos = new THREE.Vector3(chipBaseX, FELT_Y + 0.04, chipBaseZ);
+        }
+      }
+
+      // Fold mucking: slide 2 face-down cards back to dealer deck + muck foley
+      if (
+        this.initializedHandOnce &&
+        !isNewHoleDeal &&
+        seat.folded &&
+        !this.prevFoldedSeats.has(seat.seatIndex)
+      ) {
+        this.spawnFoldMuckCards(seatFxX, seatFxZ, anchor.rotY, deckOrigin, seat.isHero);
+      }
+
+      // Check ripple + double-tap foley when seat's action updates to check
+      const actionSig = `${seat.actionKind ?? ''}|${seat.actionText ?? ''}|${seat.streetBetBb ?? 0}`;
+      nextActionSigs.set(seat.seatIndex, actionSig);
+      const isCheckAction =
+        seat.actionKind === 'check' ||
+        (!seat.actionKind &&
+          Boolean(seat.actionText && (/check/i.test(seat.actionText) || seat.actionText.includes('过牌'))));
+      if (
+        this.initializedHandOnce &&
+        !isNewHoleDeal &&
+        !seat.folded &&
+        isCheckAction &&
+        actionSig !== this.prevActionSigs.get(seat.seatIndex)
+      ) {
+        this.spawnCheckRipple(seatFxX, seatFxZ);
+        this.soundEngine.playCheckDoubleTap(this.panForX(seatFxX));
       }
 
       // Seat plaque mounted flush atop the padded leather bolster crown, gently angled toward Hero for effortless reading
@@ -951,6 +1188,10 @@ export class PokerScene3D {
         plaque.position.set(1.12, FELT_Y + 0.212, 1.9);
         plaque.rotation.set(0, -0.2, 0);
       }
+      const plateObj = plaque.getObjectByName('SeatPlaquePlate');
+      if (plateObj && (plateObj as THREE.Mesh).isMesh) {
+        this.seatPlaquePlates.push(plateObj as THREE.Mesh);
+      }
       this.dynamicGroup.add(plaque);
 
       // Subtle glowing felt aura ring beneath active-turn seat (emerald) or showdown winner (gold)
@@ -958,9 +1199,7 @@ export class PokerScene3D {
         const haloColor = seat.isWinner ? 0xfbbf24 : 0x34d399;
         const haloRadius = seat.isHero ? 0.72 : 0.58;
         const haloMesh = createTurnHaloMesh(haloColor, haloRadius);
-        const hx = seat.isHero ? 0 : sideHoleX;
-        const hz = seat.isHero ? 1.24 : sideHoleZ;
-        haloMesh.position.set(hx, FELT_Y + 0.004, hz);
+        haloMesh.position.set(seatFxX, FELT_Y + 0.004, seatFxZ);
         this.dynamicGroup.add(haloMesh);
         this.activeHaloMats.push(haloMesh.material as THREE.ShaderMaterial);
       }
@@ -990,6 +1229,35 @@ export class PokerScene3D {
       const betX = anchor.x * 0.45 + (seat.isHero ? 0.52 : 0);
       const betZ = anchor.z * 0.42 + (seat.isHero ? -0.05 : 0);
       const streetBet = seat.streetBetBb ?? 0;
+      const isAllInNow = Boolean(
+        seat.isAllIn ||
+          seat.actionKind === 'all_in' ||
+          (seat.actionText && (/all-?in/i.test(seat.actionText) || seat.actionText.includes('全下')))
+      );
+      if (isAllInNow) {
+        nextAllInSeats.add(seat.seatIndex);
+      }
+      const newlyAllIn =
+        this.initializedHandOnce &&
+        !isNewHoleDeal &&
+        isAllInNow &&
+        !this.prevAllInSeats.has(seat.seatIndex);
+
+      if (newlyAllIn) {
+        const allInPan = this.panForX(betX);
+        this.spawnFlyingChips(
+          new THREE.Vector3(chipBaseX, FELT_Y + 0.06, chipBaseZ),
+          new THREE.Vector3(betX, FELT_Y + 0.015, betZ),
+          0xd97706,
+          7,
+          0.32,
+          this.isSoftwareGl ? 0.24 : 0.48,
+          0,
+          () => this.soundEngine.playChipClink(4, 0, allInPan)
+        );
+        this.soundEngine.playAllInSting(allInPan);
+      }
+
       if (streetBet > 0) {
         totalCurrentStreetBets += streetBet;
         nextStreetBets.set(seat.seatIndex, { bet: streetBet, x: betX, z: betZ });
@@ -1004,30 +1272,61 @@ export class PokerScene3D {
 
         // Staggered curved chip-toss arcs whenever this seat adds chips to the betting line
         const prevSeatBet = this.prevStreetBets.get(seat.seatIndex)?.bet ?? 0;
-        if (this.initializedHandOnce && streetBet > prevSeatBet + 0.05) {
+        if (!newlyAllIn && this.initializedHandOnce && streetBet > prevSeatBet + 0.05) {
           const flyCount = Math.min(4, Math.max(1, Math.ceil((streetBet - prevSeatBet) / 2.2)));
+          const betPan = this.panForX(betX);
           this.spawnFlyingChips(
             new THREE.Vector3(chipBaseX, FELT_Y + 0.06, chipBaseZ),
             new THREE.Vector3(betX, FELT_Y + 0.015, betZ),
             betColor,
             flyCount,
             0.25,
-            this.isSoftwareGl ? 0.22 : 0.44
+            this.isSoftwareGl ? 0.22 : 0.44,
+            0,
+            () => this.soundEngine.playChipClink(Math.min(4, flyCount), 0, betPan)
           );
-          tossedChipsCount += flyCount;
         }
       }
 
-      // Dealer button puck near BTN seat
+      // Dealer button puck near BTN seat (smoothly glides when dealer button moves!)
       if (seat.isDealer) {
         const puck = createDealerPuckGroup(this.contactShadowTex, this.dealerPuckTex);
-        puck.position.set(anchor.x * 0.54 + 0.34, FELT_Y + 0.002, anchor.z * 0.52);
+        const puckTarget = new THREE.Vector3(anchor.x * 0.54 + 0.34, FELT_Y + 0.002, anchor.z * 0.52);
+        nextDealerSeatIdx = seat.seatIndex;
+        nextDealerPos = puckTarget.clone();
+
+        if (
+          this.initializedHandOnce &&
+          this.prevDealerSeatIdx !== null &&
+          seat.seatIndex !== this.prevDealerSeatIdx &&
+          this.prevDealerPos
+        ) {
+          puck.position.copy(this.prevDealerPos);
+          this.activeTweens.push({
+            obj: puck,
+            fromPos: this.prevDealerPos.clone(),
+            toPos: puckTarget,
+            curveOffset: new THREE.Vector3(0, 0, 0),
+            arcHeight: 0.06,
+            bounceHeight: 0.01,
+            fromRot: new THREE.Euler(0, 0, 0),
+            toRot: new THREE.Euler(0, 0, 0),
+            delay: 0,
+            elapsed: 0,
+            duration: this.isSoftwareGl ? 0.2 : 0.42,
+          });
+        } else {
+          puck.position.copy(puckTarget);
+        }
         this.dynamicGroup.add(puck);
       }
 
       // Hole cards (round-robin casino deal: pass 1 then pass 2; Hero cards lift cleanly & support hover-peek!)
       if (seat.cards && !seat.folded) {
         const reveal = Boolean(seat.isHero || seat.revealCards);
+        if (seat.revealCards) {
+          nextRevealedSeats.add(seat.seatIndex);
+        }
         const cardScale = seat.isHero ? 1.18 : 0.96;
         const c1 = createPlayingCardGroup(
           seat.cards[0],
@@ -1077,6 +1376,13 @@ export class PokerScene3D {
         c2.rotation.copy(rot2);
         this.dynamicGroup.add(c1, c2);
 
+        const newlyRevealedOpponent =
+          this.initializedHandOnce &&
+          !isNewHoleDeal &&
+          !seat.isHero &&
+          Boolean(seat.revealCards) &&
+          !this.prevRevealedSeats.has(seat.seatIndex);
+
         if (isNewHoleDeal || animateInitialEntrance) {
           const dealDur = this.isSoftwareGl ? 0.22 : 0.46;
           const stagger = this.isSoftwareGl ? 0.02 : 0.075;
@@ -1095,6 +1401,9 @@ export class PokerScene3D {
 
           // Subtle curved dealer-flick offset toward table center
           const flickCurve = new THREE.Vector3(-pos1.x * 0.14, 0, -0.18);
+          const pan1 = this.panForX(pos1.x);
+          const pan2 = this.panForX(pos2.x);
+          const slideGain = seat.isHero ? 0.78 : 0.42;
 
           this.activeTweens.push(
             {
@@ -1111,6 +1420,17 @@ export class PokerScene3D {
               elapsed: 0,
               duration: dealDur,
               initialHidden: true,
+              onStart: !animateInitialEntrance
+                ? () => this.soundEngine.playCardSlide(0, pan1, slideGain)
+                : undefined,
+              onFlip:
+                seat.isHero && !animateInitialEntrance
+                  ? () => this.soundEngine.playCardFlipSnap(pan1)
+                  : undefined,
+              onLand:
+                seat.isHero && !animateInitialEntrance
+                  ? () => this.soundEngine.playCardFeltSlap(pan1)
+                  : undefined,
             },
             {
               obj: c2,
@@ -1126,18 +1446,67 @@ export class PokerScene3D {
               elapsed: 0,
               duration: dealDur,
               initialHidden: true,
+              onStart: !animateInitialEntrance
+                ? () => this.soundEngine.playCardSlide(0, pan2, slideGain)
+                : undefined,
+              onFlip:
+                seat.isHero && !animateInitialEntrance
+                  ? () => this.soundEngine.playCardFlipSnap(pan2)
+                  : undefined,
+              onLand:
+                seat.isHero && !animateInitialEntrance
+                  ? () => this.soundEngine.playCardFeltSlap(pan2)
+                  : undefined,
             }
           );
-          if (seat.isHero && !animateInitialEntrance) {
-            this.soundEngine.playCardSlide(delay1);
-            this.soundEngine.playCardSlide(delay2);
-          }
+        } else if (newlyRevealedOpponent) {
+          // Snappy showdown flip-in-place when an opponent turns over their hole cards
+          const pan = this.panForX(sideHoleX);
+          const flipStart1 = new THREE.Euler(0, rot1.y, Math.PI);
+          const flipStart2 = new THREE.Euler(0, rot2.y, Math.PI);
+          c1.rotation.copy(flipStart1);
+          c2.rotation.copy(flipStart2);
+          this.activeTweens.push(
+            {
+              obj: c1,
+              fromPos: pos1.clone(),
+              toPos: pos1,
+              curveOffset: new THREE.Vector3(0, 0, 0),
+              arcHeight: 0.11,
+              bounceHeight: 0.015,
+              fromRot: flipStart1,
+              toRot: rot1,
+              flipCard: true,
+              delay: 0,
+              elapsed: 0,
+              duration: this.isSoftwareGl ? 0.18 : 0.34,
+              onFlip: () => this.soundEngine.playCardFlipSnap(pan),
+              onLand: () => this.soundEngine.playCardFeltSlap(pan),
+            },
+            {
+              obj: c2,
+              fromPos: pos2.clone(),
+              toPos: pos2,
+              curveOffset: new THREE.Vector3(0, 0, 0),
+              arcHeight: 0.11,
+              bounceHeight: 0.015,
+              fromRot: flipStart2,
+              toRot: rot2,
+              flipCard: true,
+              delay: this.isSoftwareGl ? 0.02 : 0.08,
+              elapsed: 0,
+              duration: this.isSoftwareGl ? 0.18 : 0.34,
+              onFlip: () => this.soundEngine.playCardFlipSnap(pan),
+              onLand: () => this.soundEngine.playCardFeltSlap(pan),
+            }
+          );
         }
       }
     }
 
-    if (tossedChipsCount > 0) {
-      this.soundEngine.playChipClink(Math.min(3, tossedChipsCount), 0.16);
+    // Hero turn attention ping when Hero's turn begins
+    if (this.initializedHandOnce && isHeroTurnNow && !this.prevHeroTurn) {
+      this.soundEngine.playHeroTurnPing();
     }
 
     // Pot-sweep animation when prior street bets are collected into center pot on a street transition
@@ -1149,6 +1518,7 @@ export class PokerScene3D {
     ) {
       let sweepIdx = 0;
       for (const prev of this.prevStreetBets.values()) {
+        const isFirstSweep = sweepIdx === 0;
         this.spawnFlyingChips(
           new THREE.Vector3(prev.x, FELT_Y + 0.025, prev.z),
           new THREE.Vector3(0, FELT_Y + 0.04, -0.64),
@@ -1156,15 +1526,19 @@ export class PokerScene3D {
           2,
           0.14,
           this.isSoftwareGl ? 0.22 : 0.34,
-          sweepIdx * 0.05
+          sweepIdx * 0.05,
+          isFirstSweep ? () => this.soundEngine.playChipClink(3, 0, 0) : undefined
         );
         sweepIdx++;
       }
-      this.soundEngine.playChipClink(3, 0.18);
     }
 
     // Celebratory winner payout stream sweeping chips from center pot straight to the showdown winner!
+    const hasWinnerNow = winnerCount > 0;
     if (this.initializedHandOnce && hasWinnerNow && !this.prevHadWinner) {
+      const winnerPan = winnerPos ? this.panForX(winnerPos.x) : 0;
+      const cue: 'win' | 'loss' | 'split' =
+        winnerCount > 1 ? 'split' : heroIsWinner ? 'win' : 'loss';
       if (winnerPos) {
         this.spawnFlyingChips(
           new THREE.Vector3(0, FELT_Y + 0.05, -0.64),
@@ -1173,10 +1547,11 @@ export class PokerScene3D {
           4,
           0.22,
           this.isSoftwareGl ? 0.26 : 0.44,
-          0.08
+          0.08,
+          () => this.soundEngine.playChipClink(4, 0, winnerPan)
         );
       }
-      this.soundEngine.playWinnerChime();
+      this.soundEngine.playShowdownCue(cue, winnerPan);
     }
 
     // Neat stacked casino dealer stub deck (filigree card back + warm matte edges) near far-left dealer bay
@@ -1187,7 +1562,7 @@ export class PokerScene3D {
       envMapIntensity: 0.05,
     });
     const stubMatTop = new THREE.MeshStandardMaterial({
-      color: 0xe6dfd0,
+      color: 0xffffff,
       map: this.cardBackTex,
       roughness: 0.84,
       metalness: 0.0,
@@ -1216,12 +1591,22 @@ export class PokerScene3D {
     );
     this.dynamicGroup.add(chipsGroup);
 
+    // Ensure freshly created seat plaques match the current camera pitch immediately
+    this.updatePlaqueTilt(true);
+
     // Persist state snapshots for next animation diff
     this.prevBoardKeys = nextBoardKeys;
     this.prevHeroCardsSig = nextHeroCardsSig;
     this.prevStreetBets = nextStreetBets;
     this.prevPotBb = data.potBb;
     this.prevHadWinner = hasWinnerNow;
+    this.prevFoldedSeats = nextFoldedSeats;
+    this.prevActionSigs = nextActionSigs;
+    this.prevDealerSeatIdx = nextDealerSeatIdx;
+    this.prevDealerPos = nextDealerPos;
+    this.prevHeroTurn = isHeroTurnNow;
+    this.prevRevealedSeats = nextRevealedSeats;
+    this.prevAllInSeats = nextAllInSeats;
     this.initializedHandOnce = true;
   }
 
@@ -1261,7 +1646,6 @@ export class PokerScene3D {
 
     // Strictly on-demand rendering: 0% GPU usage when idle!
     let keepGoing = false;
-    let shadowsDirty = false;
 
     // 1. Step active curved card-flip & staggered chip-bounce physics tweens
     if (this.activeTweens.length > 0) {
@@ -1277,15 +1661,28 @@ export class PokerScene3D {
           tw.obj.visible = true;
           tw.initialHidden = false;
         }
+        if (!tw.startedFired) {
+          tw.startedFired = true;
+          tw.onStart?.();
+        }
 
         const rawT = Math.min(1, activeTime / tw.duration);
+        if (tw.flipCard && !tw.flippedFired && rawT >= 0.5) {
+          tw.flippedFired = true;
+          tw.onFlip?.();
+        }
+        if (!tw.landedFired && rawT >= 0.78) {
+          tw.landedFired = true;
+          tw.onLand?.();
+        }
+
         if (rawT >= 1) {
           tw.obj.position.copy(tw.toPos);
           tw.obj.rotation.copy(tw.toRot);
           if (tw.disposeOnEnd) {
             this.disposeSingleFxObj(tw.obj);
           }
-          shadowsDirty = true;
+          this.pendingShadowUpdate = true;
           continue;
         }
 
@@ -1324,6 +1721,30 @@ export class PokerScene3D {
         remaining.push(tw);
       }
       this.activeTweens = remaining;
+      this.dirty = true;
+      keepGoing = true;
+    }
+
+    // Coalesce shadow-map re-bake once all active tweens settle (instead of per-tween)
+    if (this.pendingShadowUpdate && this.activeTweens.length === 0 && !this.isSoftwareGl) {
+      this.renderer.shadowMap.needsUpdate = true;
+      this.pendingShadowUpdate = false;
+    }
+
+    // 1b. Step expanding check felt ripples
+    if (this.activeRipples.length > 0) {
+      const remainingRipples: ActiveRipple[] = [];
+      for (const rip of this.activeRipples) {
+        rip.elapsed += dt;
+        const t = Math.min(1, rip.elapsed / rip.duration);
+        if (t >= 1) {
+          this.disposeSingleFxObj(rip.mesh);
+          continue;
+        }
+        rip.mat.uniforms.uProgress.value = easeOutQuart(t);
+        remainingRipples.push(rip);
+      }
+      this.activeRipples = remainingRipples;
       this.dirty = true;
       keepGoing = true;
     }
@@ -1405,12 +1826,8 @@ export class PokerScene3D {
       if (!this.isSoftwareGl && this.dustMotes) {
         this.dustMotes.rotation.y = this.elapsedSec * 0.028;
       }
-      if (shadowsDirty && !this.isSoftwareGl) {
-        this.renderer.shadowMap.needsUpdate = true;
-      }
-      if (this.chandelierGroup) {
-        this.chandelierGroup.visible = this.camera.position.y < 4.35;
-      }
+      this.updateChandelierOpacity();
+      this.updatePlaqueTilt();
       this.dirty = false;
       this.renderer.render(this.scene, this.camera);
     }
@@ -1425,7 +1842,10 @@ export class PokerScene3D {
     this.disposed = true;
     this.cancelScheduledFrame();
     this.activeTweens = [];
+    this.activeRipples = [];
     this.activeHaloMats = [];
+    this.seatPlaquePlates = [];
+    this.chandelierFadeEntries = [];
     this.heroCardTargets = [];
     this.resizeObserver.disconnect();
     this.controls.dispose();

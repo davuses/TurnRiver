@@ -500,9 +500,9 @@ export function createCasinoSalonBackdropGroup(maxAnisotropy = 4): THREE.Group {
   const sconceTubeGeo = new THREE.CylinderGeometry(0.08, 0.06, 0.96, 12);
   const capGeo = new THREE.CylinderGeometry(0.11, 0.11, 0.05, 12);
 
-  // 10 architectural mahogany pilasters arranged around intimate salon perimeter (r = 12.2)
+  // 10 architectural mahogany pilasters arranged around intimate salon perimeter (r = 13.4)
   const count = 10;
-  const radius = 12.2;
+  const radius = 13.4;
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * Math.PI * 2 + Math.PI / 10;
     const colGroup = new THREE.Group();
@@ -550,7 +550,7 @@ export function createCasinoSalonBackdropGroup(maxAnisotropy = 4): THREE.Group {
 
   // Tufted acoustic emerald-obsidian velvet wall cylinder wrapping the private salon
   const wallRing = new THREE.Mesh(
-    new THREE.CylinderGeometry(12.6, 12.6, 6.6, 48, 1, true),
+    new THREE.CylinderGeometry(13.8, 13.8, 6.6, 48, 1, true),
     new THREE.MeshStandardMaterial({
       color: 0xffffff,
       map: velvetTex,
@@ -564,24 +564,28 @@ export function createCasinoSalonBackdropGroup(maxAnisotropy = 4): THREE.Group {
   group.add(wallRing);
 
   // Double brushed-brass wainscot & frieze chair-rail moldings
-  const molding = new THREE.Mesh(new THREE.TorusGeometry(12.42, 0.032, 8, 56), brassTrimMat);
+  const molding = new THREE.Mesh(new THREE.TorusGeometry(13.62, 0.032, 8, 56), brassTrimMat);
   molding.rotation.x = Math.PI / 2;
   molding.position.y = 1.28;
   group.add(molding);
 
-  const upperFrieze = new THREE.Mesh(new THREE.TorusGeometry(12.42, 0.042, 8, 56), brassTrimMat);
+  const upperFrieze = new THREE.Mesh(new THREE.TorusGeometry(13.62, 0.042, 8, 56), brassTrimMat);
   upperFrieze.rotation.x = Math.PI / 2;
   upperFrieze.position.y = 4.55;
   group.add(upperFrieze);
 
-  // Grand Suspended Art-Deco Monte-Carlo Brass & Crystal Chandelier (y = 4.65)
+  // Grand Suspended Art-Deco Monte-Carlo Brass & Crystal Chandelier (y = 3.85)
+  // Dedicated cloned materials so smooth camera-height opacity fading never affects salon walls/sconces
   const chandGroup = new THREE.Group();
   chandGroup.name = 'ArtDecoSalonChandelier';
+  const chandPilasterMat = pilasterMat.clone();
+  const chandBrassMat = brassTrimMat.clone();
+  const chandGlowMat = sconceGlowMat.clone();
 
   // Dual vertical brass suspension rods
   const rodGeo = new THREE.CylinderGeometry(0.025, 0.025, 2.2, 10);
   for (const rx of [-1.2, 1.2]) {
-    const rod = new THREE.Mesh(rodGeo, brassTrimMat);
+    const rod = new THREE.Mesh(rodGeo, chandBrassMat);
     rod.position.set(rx, 1.15, 0);
     chandGroup.add(rod);
   }
@@ -595,7 +599,7 @@ export function createCasinoSalonBackdropGroup(maxAnisotropy = 4): THREE.Group {
       bevelSize: 0.02,
       bevelSegments: 2,
     }).rotateX(-Math.PI / 2),
-    pilasterMat
+    chandPilasterMat
   );
   chandGroup.add(outerHalo);
 
@@ -604,7 +608,7 @@ export function createCasinoSalonBackdropGroup(maxAnisotropy = 4): THREE.Group {
       depth: 0.045,
       bevelEnabled: false,
     }).rotateX(-Math.PI / 2),
-    brassTrimMat
+    chandBrassMat
   );
   brassBand.position.y = 0.02;
   chandGroup.add(brassBand);
@@ -612,7 +616,7 @@ export function createCasinoSalonBackdropGroup(maxAnisotropy = 4): THREE.Group {
   // Glowing frosted warm-crystal light diffuser core
   const diffuser = new THREE.Mesh(
     new THREE.ShapeGeometry(createOvalShape(1.74, 0.54, 40)).rotateX(Math.PI / 2),
-    sconceGlowMat
+    chandGlowMat
   );
   diffuser.position.y = -0.01;
   chandGroup.add(diffuser);
@@ -951,6 +955,50 @@ export function createTurnHaloMesh(colorHex: number, radius = 0.62): THREE.Mesh 
 }
 
 /**
+ * Expanding amber felt ripple ring spawned when a player checks (tactile double-tap cue)
+ */
+export function createCheckRippleMesh(colorHex = 0xf59e0b, radius = 0.56): THREE.Mesh {
+  const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+    uniforms: {
+      uColor: { value: new THREE.Color(colorHex) },
+      uProgress: { value: 0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float uProgress;
+      varying vec2 vUv;
+      void main() {
+        float d = length(vUv - 0.5) * 2.0;
+        float ringRadius = mix(0.20, 0.94, uProgress);
+        float ringWidth = mix(0.14, 0.06, uProgress);
+        float ring = smoothstep(ringRadius - ringWidth, ringRadius, d) *
+                     (1.0 - smoothstep(ringRadius, ringRadius + ringWidth, d));
+        float fade = (1.0 - uProgress) * smoothstep(0.0, 0.12, uProgress);
+        gl_FragColor = vec4(uColor, ring * fade * 0.72);
+      }
+    `,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'CheckRippleFeltRing';
+  return mesh;
+}
+
+/**
  * Composite 3-part Dealer Button Puck (beveled metallic rim + brushed ivory "D" cap + contact shadow)
  */
 export function createDealerPuckGroup(
@@ -1280,10 +1328,10 @@ export function createPlayingCardGroup(
   bodyMesh.receiveShadow = true;
   group.add(bodyMesh);
 
-  // Top printed face (calibrated matte cardstock so cards never blow out under overhead spotlight)
+  // Top printed face (crisp un-tinted matte cardstock)
   const topGeo = createNormalizedRoundedCardFaceGeo(w * 0.992, h * 0.992, r * 0.96, false);
   const topMat = new THREE.MeshStandardMaterial({
-    color: 0xe6dfd0,
+    color: 0xffffff,
     map: faceUp ? frontTex : cardBackTex,
     roughness: 0.94,
     metalness: 0.0,
@@ -1300,7 +1348,7 @@ export function createPlayingCardGroup(
   // Underside printed face (visible when peeking or during airborne flip-deal arc)
   const botGeo = createNormalizedRoundedCardFaceGeo(w * 0.992, h * 0.992, r * 0.96, true);
   const botMat = new THREE.MeshStandardMaterial({
-    color: 0xe6dfd0,
+    color: 0xffffff,
     map: cardBackTex,
     roughness: 0.88,
     metalness: 0.0,
@@ -1446,6 +1494,8 @@ export interface Seat3DSpec {
   winnerLabel?: string;
   streetBetBb?: number;
   actionText?: string;
+  actionKind?: 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'all_in' | 'post_blind';
+  isAllIn?: boolean;
   isAggressiveAction?: boolean;
   styleTag?: string;
   cards?: [Card, Card] | null;
@@ -1499,7 +1549,9 @@ export function createSeatPlaqueMesh(seat: Seat3DSpec): THREE.Group {
     seat.actionText,
     seat.isWinner,
     seat.winnerLabel,
-    seat.isAggressiveAction
+    seat.isAggressiveAction,
+    seat.actionKind,
+    seat.isAllIn
   );
 
   // Sleek tapered brushed-brass or emerald active-turn pedestal base sitting cleanly atop the leather rail
@@ -1528,6 +1580,7 @@ export function createSeatPlaqueMesh(seat: Seat3DSpec): THREE.Group {
   });
   const plateGeo = new THREE.BoxGeometry(0.98, 0.42, 0.028);
   const plate = new THREE.Mesh(plateGeo, [backMat, backMat, backMat, backMat, faceMat, faceMat]);
+  plate.name = 'SeatPlaquePlate';
   plate.position.set(0, 0.228, 0);
   plate.rotation.x = -0.14;
   group.add(plate);

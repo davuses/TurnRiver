@@ -1,120 +1,23 @@
-let audioCtx: AudioContext | null = null;
-let userActivated = false;
-let unlockListenersBound = false;
-
-function handleUserGesture() {
-  userActivated = true;
-  if (audioCtx && audioCtx.state === 'suspended') {
-    void audioCtx.resume().catch(() => {});
-  }
-  if (audioCtx && audioCtx.state === 'running' && typeof window !== 'undefined') {
-    window.removeEventListener('pointerdown', handleUserGesture, { capture: true });
-    window.removeEventListener('keydown', handleUserGesture, { capture: true });
-    unlockListenersBound = false;
-  }
-}
-
-function bindGestureUnlock() {
-  if (unlockListenersBound || typeof window === 'undefined') return;
-  unlockListenersBound = true;
-  window.addEventListener('pointerdown', handleUserGesture, { capture: true, passive: true });
-  window.addEventListener('keydown', handleUserGesture, { capture: true, passive: true });
-}
-
-if (typeof window !== 'undefined') {
-  bindGestureUnlock();
-}
-
-function hasUserActivation(): boolean {
-  if (userActivated) return true;
-  if (typeof navigator !== 'undefined') {
-    const nav = navigator as Navigator & { userActivation?: { hasBeenActive?: boolean } };
-    if (nav.userActivation?.hasBeenActive) return true;
-  }
-  return false;
-}
-
-function getCtx(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-  if (!audioCtx) {
-    if (!hasUserActivation()) return null;
-    try {
-      const Ctx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (Ctx) {
-        audioCtx = new Ctx();
-      }
-    } catch {
-      return null;
-    }
-  }
-  if (audioCtx && audioCtx.state === 'suspended') {
-    void audioCtx.resume().catch(() => {});
-  }
-  // Never schedule nodes while AudioContext is suspended/closed to avoid autoplay bursts
-  if (!audioCtx || audioCtx.state !== 'running') {
-    return null;
-  }
-  return audioCtx;
-}
+import { sharedCasinoSoundEngine } from '../three/soundEngine';
 
 export function closePokerSound(): void {
-  if (audioCtx) {
-    void audioCtx.close().catch(() => {});
-    audioCtx = null;
-  }
+  sharedCasinoSoundEngine.dispose();
 }
 
 export function playPokerSound(
-  type: 'card' | 'chip' | 'optimal' | 'mistake',
+  kind: 'card' | 'chip' | 'optimal' | 'mistake',
   enabled: boolean
 ): void {
   if (!enabled) return;
-  const ctx = getCtx();
-  if (!ctx) return;
+  sharedCasinoSoundEngine.enabled = true;
 
-  try {
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    if (type === 'card') {
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(520, now);
-      osc.frequency.exponentialRampToValueAtTime(190, now + 0.055);
-      gain.gain.setValueAtTime(0.06, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-      osc.start(now);
-      osc.stop(now + 0.065);
-    } else if (type === 'chip') {
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1680, now);
-      osc.frequency.exponentialRampToValueAtTime(1180, now + 0.05);
-      gain.gain.setValueAtTime(0.05, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
-      osc.start(now);
-      osc.stop(now + 0.06);
-    } else if (type === 'optimal') {
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, now);
-      osc.frequency.setValueAtTime(880, now + 0.07);
-      gain.gain.setValueAtTime(0.05, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-      osc.start(now);
-      osc.stop(now + 0.19);
-    } else {
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(220, now);
-      osc.frequency.exponentialRampToValueAtTime(155, now + 0.14);
-      gain.gain.setValueAtTime(0.04, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-      osc.start(now);
-      osc.stop(now + 0.16);
-    }
-  } catch {
-    // Ignore audio context autoplay errors in non-interactive sessions
+  if (kind === 'card') {
+    sharedCasinoSoundEngine.playCardSlide(0, 0, 0.95);
+  } else if (kind === 'chip') {
+    sharedCasinoSoundEngine.playChipClink(2, 0, 0);
+  } else if (kind === 'optimal') {
+    sharedCasinoSoundEngine.playShowdownCue('win', 0);
+  } else {
+    sharedCasinoSoundEngine.playShowdownCue('loss', 0);
   }
 }

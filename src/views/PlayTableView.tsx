@@ -31,12 +31,14 @@ import {
   startNewHand,
   type ArenaConfig,
   type PokerTableState,
+  type TableActionKind,
 } from '../poker/tableEngine';
 import { PokerTableOval, type TableSeatDisplay } from '../components/PokerTableOval';
 import { Studio3DTable } from '../components/Studio3DTable';
 import { ArenaSetupModal } from '../components/ArenaSetupModal';
 import { GradeBadge } from '../components/GradeBadge';
 import { playPokerSound } from '../utils/sound';
+import { sharedCasinoSoundEngine } from '../three/soundEngine';
 import { useLocale } from '../i18n/LocaleContext';
 import {
   translateArchetype,
@@ -82,6 +84,34 @@ const AGGRESSIVE_ACTION_KINDS = new Set([
   'four_bet',
   'all_in',
 ]);
+
+function mapActionKindTo3D(kind?: TableActionKind): Seat3DSpec['actionKind'] {
+  if (!kind) return undefined;
+  switch (kind) {
+    case 'fold':
+    case 'folded':
+      return 'fold';
+    case 'check':
+      return 'check';
+    case 'call':
+      return 'call';
+    case 'call_allin':
+    case 'all_in':
+      return 'all_in';
+    case 'bet':
+      return 'bet';
+    case 'raise':
+    case 'three_bet':
+    case 'four_bet':
+      return 'raise';
+    case 'post_sb':
+    case 'post_bb':
+    case 'blind':
+      return 'post_blind';
+    default:
+      return undefined;
+  }
+}
 
 export function PlayTableView({
   prefs,
@@ -308,6 +338,69 @@ export function PlayTableView({
     setTable((curr) => settleAndStartNewHand(curr));
   };
 
+  // Poker action hotkeys: F (Fold), C/Space (Check/Call), R (Bet/Raise), Enter (Deal Next on showdown)
+  const hotkeyStateRef = useRef({
+    setupOpen,
+    phase: table.phase,
+    isHeroTurn,
+    legal,
+    raiseAmount,
+    handleHeroAction,
+    handleDealNext,
+  });
+  hotkeyStateRef.current = {
+    setupOpen,
+    phase: table.phase,
+    isHeroTurn,
+    legal,
+    raiseAmount,
+    handleHeroAction,
+    handleDealNext,
+  };
+
+  useEffect(() => {
+    const onActionHotkey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        tag === 'button' ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      const st = hotkeyStateRef.current;
+      if (st.setupOpen) return;
+
+      const key = e.key.toLowerCase();
+      if (st.phase === 'SHOWDOWN' && e.key === 'Enter') {
+        e.preventDefault();
+        st.handleDealNext();
+        return;
+      }
+
+      if (!st.isHeroTurn) return;
+
+      if (key === 'f' && st.legal.canFold) {
+        e.preventDefault();
+        st.handleHeroAction('fold');
+      } else if (key === 'c' || e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+        st.handleHeroAction(st.legal.canCheck ? 'check' : 'call');
+      } else if (key === 'r' && st.legal.canBetOrRaise) {
+        e.preventDefault();
+        st.handleHeroAction('raise', st.raiseAmount);
+      }
+    };
+
+    window.addEventListener('keydown', onActionHotkey);
+    return () => window.removeEventListener('keydown', onActionHotkey);
+  }, []);
+
   const handleRebuy = () => {
     if (!is3DActive) {
       playPokerSound('chip', prefs.soundEnabled);
@@ -337,82 +430,97 @@ export function PlayTableView({
     }));
   };
 
-  const displaySeats: TableSeatDisplay[] = useMemo(
-    () =>
-      table.seats.map((s) => {
-        const hud = computeHudDisplay(s.stats);
-        const botStyleLabel = table.config.blindReadMode
-          ? `${t('arena.hiddenTag')} · ${hud.vpipPct}/${hud.pfrPct}`
-          : translateArchetype(locale, s.archetype);
+  const displaySeats: TableSeatDisplay[] = useMemo(() => {
+    const activeCount = table.seats.filter((x) => !x.folded).length;
+    return table.seats.map((s) => {
+      const hud = computeHudDisplay(s.stats);
+      const botStyleLabel = table.config.blindReadMode
+        ? `${t('arena.hiddenTag')} · ${hud.vpipPct}/${hud.pfrPct}`
+        : translateArchetype(locale, s.archetype);
 
-        return {
-          seatIndex: s.seatIndex,
-          position: s.position,
-          label: s.isHero ? t('common.hero') : s.name,
-          sublabel: s.isHero ? undefined : botStyleLabel,
-          stackBb: s.stackBb,
-          isHero: s.isHero,
-          isDealer: s.seatIndex === table.buttonSeatIndex,
-          isActiveTurn: table.actingSeatIndex === s.seatIndex,
-          isWinner: table.winnerSeatIndices.includes(s.seatIndex),
-          folded: s.folded,
-          streetBetBb: s.streetBetBb,
-          actionText: s.lastActionText,
-          actionSpec: s.lastActionSpec,
-          cards: s.cards,
-          revealCards:
-            s.isHero ||
-            (table.phase === 'SHOWDOWN' &&
-              !s.folded &&
-              table.seats.filter((x) => !x.folded).length > 1),
-        };
-      }),
-    [table, locale, t]
-  );
+      return {
+        seatIndex: s.seatIndex,
+        position: s.position,
+        label: s.isHero ? t('common.hero') : s.name,
+        sublabel: s.isHero ? undefined : botStyleLabel,
+        stackBb: s.stackBb,
+        isHero: s.isHero,
+        isDealer: s.seatIndex === table.buttonSeatIndex,
+        isActiveTurn: table.actingSeatIndex === s.seatIndex,
+        isWinner: table.winnerSeatIndices.includes(s.seatIndex),
+        folded: s.folded,
+        streetBetBb: s.streetBetBb,
+        actionText: s.lastActionText,
+        actionSpec: s.lastActionSpec,
+        cards: s.cards,
+        revealCards:
+          s.isHero || (table.phase === 'SHOWDOWN' && !s.folded && activeCount > 1),
+      };
+    });
+  }, [
+    table.seats,
+    table.config.blindReadMode,
+    table.buttonSeatIndex,
+    table.actingSeatIndex,
+    table.winnerSeatIndices,
+    table.phase,
+    locale,
+    t,
+  ]);
 
-  const seats3D: Seat3DSpec[] = useMemo(
-    () =>
-      table.seats.map((s, idx) => {
-        const d = displaySeats[idx];
-        const hud = computeHudDisplay(s.stats);
-        const shortStyle =
-          locale === 'zh-CN'
-            ? (ARCHETYPE_SHORT_ZH[s.archetype] ?? translateArchetype(locale, s.archetype))
-            : (ARCHETYPE_SHORT[s.archetype] ?? s.archetype);
-        const styleTag = s.isHero
-          ? undefined
-          : table.config.blindReadMode
-            ? `${locale === 'zh-CN' ? '未知' : '???'} ${hud.vpipPct}/${hud.pfrPct}`
-            : `${shortStyle} ${hud.vpipPct}/${hud.pfrPct}`;
-        const isAggressiveAction = s.lastActionSpec
-          ? AGGRESSIVE_ACTION_KINDS.has(s.lastActionSpec.kind)
-          : undefined;
-        const winnerLabel = locale === 'zh-CN' ? '赢家' : 'WINNER';
+  const seats3D: Seat3DSpec[] = useMemo(() => {
+    const activeCount = table.seats.filter((x) => !x.folded).length;
+    const winnerLabel = locale === 'zh-CN' ? '赢家' : 'WINNER';
+    return table.seats.map((s) => {
+      const hud = computeHudDisplay(s.stats);
+      const shortStyle =
+        locale === 'zh-CN'
+          ? (ARCHETYPE_SHORT_ZH[s.archetype] ?? translateArchetype(locale, s.archetype))
+          : (ARCHETYPE_SHORT[s.archetype] ?? s.archetype);
+      const styleTag = s.isHero
+        ? undefined
+        : table.config.blindReadMode
+          ? `${locale === 'zh-CN' ? '未知' : '???'} ${hud.vpipPct}/${hud.pfrPct}`
+          : `${shortStyle} ${hud.vpipPct}/${hud.pfrPct}`;
+      const isAggressiveAction = s.lastActionSpec
+        ? AGGRESSIVE_ACTION_KINDS.has(s.lastActionSpec.kind)
+        : undefined;
 
-        return {
-          seatIndex: s.seatIndex,
-          position: s.position,
-          label: s.isHero ? t('common.heroShort') : s.name,
-          stackBb: s.stackBb,
-          isHero: s.isHero,
-          isDealer: d.isDealer ?? false,
-          isActiveTurn: d.isActiveTurn ?? false,
-          folded: s.folded,
-          isWinner: d.isWinner ?? false,
-          winnerLabel,
-          streetBetBb: s.streetBetBb,
-          actionText:
-            s.lastActionSpec || s.lastActionText
-              ? formatArenaAction(locale, s.lastActionSpec, s.lastActionText)
-              : undefined,
-          isAggressiveAction,
-          styleTag,
-          cards: s.cards,
-          revealCards: d.revealCards,
-        };
-      }),
-    [table.seats, table.config.blindReadMode, displaySeats, locale, t]
-  );
+      return {
+        seatIndex: s.seatIndex,
+        position: s.position,
+        label: s.isHero ? t('common.heroShort') : s.name,
+        stackBb: s.stackBb,
+        isHero: s.isHero,
+        isDealer: s.seatIndex === table.buttonSeatIndex,
+        isActiveTurn: table.actingSeatIndex === s.seatIndex,
+        folded: s.folded,
+        isWinner: table.winnerSeatIndices.includes(s.seatIndex),
+        winnerLabel,
+        streetBetBb: s.streetBetBb,
+        actionText:
+          s.lastActionSpec || s.lastActionText
+            ? formatArenaAction(locale, s.lastActionSpec, s.lastActionText)
+            : undefined,
+        actionKind: mapActionKindTo3D(s.lastActionSpec?.kind),
+        isAllIn: s.allIn,
+        isAggressiveAction,
+        styleTag,
+        cards: s.cards,
+        revealCards:
+          s.isHero || (table.phase === 'SHOWDOWN' && !s.folded && activeCount > 1),
+      };
+    });
+  }, [
+    table.seats,
+    table.config.blindReadMode,
+    table.buttonSeatIndex,
+    table.actingSeatIndex,
+    table.winnerSeatIndices,
+    table.phase,
+    locale,
+    t,
+  ]);
 
   const activeSeat =
     table.actingSeatIndex !== null ? table.seats[table.actingSeatIndex] : null;
@@ -496,13 +604,25 @@ export function PlayTableView({
             }`}
           >
             <div className="flex flex-wrap items-center gap-1.5">
-              {[
-                { label: '33%', val: roundBb(table.potBb * 0.33) },
-                { label: '50%', val: roundBb(table.potBb * 0.5) },
-                { label: '75%', val: roundBb(table.potBb * 0.75) },
-                { label: t('common.pot'), val: roundBb(table.potBb) },
-                { label: t('common.allIn'), val: legal.maxTotalBetBb },
-              ].map((preset) => {
+              {(table.phase === 'PREFLOP'
+                ? (() => {
+                    const preflopBase = Math.max(1, table.currentBetBb);
+                    return [
+                      { label: '2.2x', val: roundBb(preflopBase * 2.2) },
+                      { label: '2.5x', val: roundBb(preflopBase * 2.5) },
+                      { label: '3x', val: roundBb(preflopBase * 3) },
+                      { label: '4x', val: roundBb(preflopBase * 4) },
+                      { label: t('common.allIn'), val: legal.maxTotalBetBb },
+                    ];
+                  })()
+                : [
+                    { label: '33%', val: roundBb(table.potBb * 0.33) },
+                    { label: '50%', val: roundBb(table.potBb * 0.5) },
+                    { label: '75%', val: roundBb(table.potBb * 0.75) },
+                    { label: t('common.pot'), val: roundBb(table.potBb) },
+                    { label: t('common.allIn'), val: legal.maxTotalBetBb },
+                  ]
+              ).map((preset) => {
                 const clamped = roundBb(
                   Math.max(legal.minTotalBetBb, Math.min(legal.maxTotalBetBb, preset.val))
                 );
@@ -510,7 +630,13 @@ export function PlayTableView({
                   <button
                     key={preset.label}
                     type="button"
-                    onClick={() => setRaiseAmount(clamped)}
+                    onClick={() => {
+                      setRaiseAmount(clamped);
+                      if (prefs.soundEnabled) {
+                        sharedCasinoSoundEngine.enabled = true;
+                        sharedCasinoSoundEngine.playUiTick();
+                      }
+                    }}
                     className="px-2.5 py-1 text-xs font-mono rounded bg-[#141E1B] hover:bg-[#1F2F29] border border-[#273A33] text-slate-200 cursor-pointer whitespace-nowrap"
                   >
                     {preset.label}
@@ -642,7 +768,7 @@ export function PlayTableView({
                             <span>{bot.name.split(' ')[1] ?? bot.name}</span>
                           </td>
                           <td
-                            className="py-2 px-2 text-slate-300 truncate max-w-[92px]"
+                            className="py-2 px-2 text-slate-300 whitespace-nowrap"
                             title={styleLabel}
                           >
                             {table.config.blindReadMode ? (
@@ -1080,8 +1206,8 @@ export function PlayTableView({
           <div
             className={
               theaterMode
-                ? 'px-4 py-3 border-t border-[#1B2823] bg-[#0A100E] shrink-0'
-                : 'pt-4 border-t border-[#1B2823]'
+                ? 'px-4 py-3 border-t border-[#1B2823] bg-[#0A100E] shrink-0 min-h-[84px] flex flex-col justify-center'
+                : 'pt-4 border-t border-[#1B2823] min-h-[118px] flex flex-col justify-center'
             }
           >
             {actionConsoleNode}
