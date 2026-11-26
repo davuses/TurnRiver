@@ -1499,7 +1499,7 @@ export class PokerScene3D {
         if (seat.revealCards) {
           nextRevealedSeats.add(seat.seatIndex);
         }
-        const cardScale = seat.isHero ? 1.18 : reveal ? 1.18 : 0.96;
+        const cardScale = seat.isHero ? 1.18 : reveal ? 1.08 : 0.96;
         const cardSig = `${seat.cards[0].rank}${seat.cards[0].suit}-${seat.cards[1].rank}${seat.cards[1].suit}|${reveal ? 1 : 0}|${data.fourColorDeck ? 4 : 2}|${cardStyle}|${seat.isHero ? 1 : 0}`;
         // Showdown winner spotlight: revealed winning hand rises slightly and tilts toward the camera
         const spot = Boolean(seat.isWinner && reveal);
@@ -1517,14 +1517,13 @@ export class PokerScene3D {
           pos2 = new THREE.Vector3(0.24, FELT_Y + 0.115 + liftY, 1.24);
           rot2 = new THREE.Euler(0.22 + liftRot, -0.09, 0);
         } else if (reveal) {
-          // Showdown opponent reveal: pull clear of the far rail/puck, spread side-by-side, lift & tilt upright toward Hero
+          // Showdown opponent reveal: rest flat on the felt, pulled clear of the far rail/puck and oriented upright
           const cx = isTopCenter ? 0 : anchor.x * 0.66;
-          const cz = isTopCenter ? anchor.z * 0.54 : anchor.z * 0.44;
-          const tiltX = (isTopCenter ? 0.48 : 0.36) + liftRot;
-          pos1 = new THREE.Vector3(cx - 0.23, FELT_Y + 0.13 + liftY, cz);
-          rot1 = new THREE.Euler(tiltX, 0.06, 0);
-          pos2 = new THREE.Vector3(cx + 0.23, FELT_Y + 0.13 + liftY, cz);
-          rot2 = new THREE.Euler(tiltX, -0.06, 0);
+          const cz = isTopCenter ? anchor.z * 0.56 : anchor.z * 0.46;
+          pos1 = new THREE.Vector3(cx - 0.21, FELT_Y + 0.005 + liftY, cz);
+          rot1 = new THREE.Euler(liftRot, 0.05, 0);
+          pos2 = new THREE.Vector3(cx + 0.21, FELT_Y + 0.006 + liftY, cz);
+          rot2 = new THREE.Euler(liftRot, -0.05, 0);
         } else {
           const cx = sideHoleX;
           const cz = sideHoleZ;
