@@ -1685,7 +1685,7 @@ const POSTFLOP_ARCHETYPE_CONFIG: Record<BotArchetype, PostflopArchetypeConfig> =
     donkFreq: 0.07,
     raiseAggression: 1.32,
     riverBluffScale: 1.75,
-    callEquitySlack: -0.025,
+    callEquitySlack: 0.015,
     pureAirFoldGuard: true,
   },
   'Calling Station': {
@@ -1703,7 +1703,7 @@ const POSTFLOP_ARCHETYPE_CONFIG: Record<BotArchetype, PostflopArchetypeConfig> =
     donkFreq: 0.01,
     raiseAggression: 0.62,
     riverBluffScale: 0.28,
-    callEquitySlack: 0.095,
+    callEquitySlack: 0.155,
     pureAirFoldGuard: true,
   },
   Maniac: {
@@ -2129,7 +2129,19 @@ function decidePostflopBotAction(
       : 0;
 
   const adjustedEquity = hand.estEquity + impliedOddsBonus + tinyBetCushion + stationPairBonus;
-  const threshold = reqEq + cfg.callEquitySlack;
+  // Turn/River betting ranges polarize & strengthen vs flop c-bets; tighten calling threshold
+  // for disciplined archetypes on later streets except against hyper-bluffing Maniacs.
+  let streetCallTighten = 0;
+  if (
+    archetype !== 'Calling Station' &&
+    archetype !== 'Maniac' &&
+    ctx.street !== 'flop' &&
+    ctx.lastAggressorArchetype !== 'Maniac'
+  ) {
+    const baseTighten = ctx.street === 'turn' ? 0.06 : 0.11;
+    streetCallTighten = ctx.lastAggressorArchetype === 'Loose-Aggressive' ? baseTighten * 0.5 : baseTighten;
+  }
+  const threshold = reqEq + cfg.callEquitySlack + streetCallTighten;
 
   // Smooth mixed boundary (+/- 0.04 around threshold) so decisions aren't robotic cliff edges
   const margin = adjustedEquity - threshold;
