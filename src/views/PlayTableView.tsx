@@ -2772,6 +2772,12 @@ export function PlayTableView({
                 seats={seats3D}
                 fourColorDeck={prefs.fourColorDeck}
                 onToggleFourColor={() => onUpdatePrefs({ fourColorDeck: !prefs.fourColorDeck })}
+                cardStyle={prefs.cardStyle ?? 'classic'}
+                onToggleCardStyle={() =>
+                  onUpdatePrefs({
+                    cardStyle: (prefs.cardStyle ?? 'classic') === 'classic' ? 'jumbo' : 'classic',
+                  })
+                }
                 soundEnabled={prefs.soundEnabled}
                 onToggleSound={() => onUpdatePrefs({ soundEnabled: !prefs.soundEnabled })}
                 fillParent={theaterMode}

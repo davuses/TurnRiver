@@ -505,6 +505,8 @@ const en = {
   'studio3d.soundOff': 'Muted',
   'studio3d.theater': 'Theater',
   'studio3d.exitTheater': 'Exit Theater',
+  'studio3d.cardClassic': 'Classic',
+  'studio3d.cardJumbo': 'Jumbo',
   'studio3d.webglErrorTitle': '3D WebGL Unavailable',
   'studio3d.webglErrorFallback': 'Unable to initialize WebGL 3D scene.',
 
@@ -1032,6 +1034,8 @@ const zhCN: Record<TranslationKey, string> = {
   'studio3d.soundOff': '静音',
   'studio3d.theater': '大屏模式',
   'studio3d.exitTheater': '退出大屏',
+  'studio3d.cardClassic': '经典牌面',
+  'studio3d.cardJumbo': '大字牌面',
   'studio3d.webglErrorTitle': '当前环境暂不支持 3D WebGL',
   'studio3d.webglErrorFallback': '无法初始化 3D 牌桌画面。',
 

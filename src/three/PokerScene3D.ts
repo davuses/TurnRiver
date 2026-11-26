@@ -33,6 +33,7 @@ import {
   createFeltBadgeTexture,
   createStudioFloorTexture,
   disposeFeltBadgeTextures,
+  type CardStyle,
   type FeltThemeId,
 } from './textures';
 
@@ -45,6 +46,7 @@ export interface Scene3DHandData {
   potText?: string;
   seats: Seat3DSpec[];
   fourColorDeck: boolean;
+  cardStyle?: CardStyle;
   feltTheme: FeltThemeId;
   lighting: LightingPresetId;
   showProps?: boolean;
@@ -807,7 +809,7 @@ export class PokerScene3D {
   }
 
   public updateHandLayer(
-    data: Pick<Scene3DHandData, 'board' | 'potBb' | 'potText' | 'seats' | 'fourColorDeck'>
+    data: Pick<Scene3DHandData, 'board' | 'potBb' | 'potText' | 'seats' | 'fourColorDeck' | 'cardStyle'>
   ) {
     if (this.disposed) return;
     this.rebuildHandLayer(data);
@@ -846,11 +848,15 @@ export class PokerScene3D {
     );
   }
 
-  private getCardFaceTexture(card: Card, fourColor: boolean): THREE.CanvasTexture {
-    const key = `${card.rank}${card.suit}_${fourColor ? '4' : '2'}`;
+  private getCardFaceTexture(
+    card: Card,
+    fourColor: boolean,
+    cardStyle: CardStyle = 'classic'
+  ): THREE.CanvasTexture {
+    const key = `${card.rank}${card.suit}_${fourColor ? '4' : '2'}_${cardStyle}`;
     let tex = this.cardFaceTexCache.get(key);
     if (!tex) {
-      tex = createCardFaceTexture(card, fourColor);
+      tex = createCardFaceTexture(card, fourColor, cardStyle);
       this.cardFaceTexCache.set(key, tex);
       this.cardFaceTexSet.add(tex);
     }
@@ -1092,8 +1098,9 @@ export class PokerScene3D {
   }
 
   private rebuildHandLayer(
-    data: Pick<Scene3DHandData, 'board' | 'potBb' | 'potText' | 'seats' | 'fourColorDeck'>
+    data: Pick<Scene3DHandData, 'board' | 'potBb' | 'potText' | 'seats' | 'fourColorDeck' | 'cardStyle'>
   ) {
+    const cardStyle: CardStyle = data.cardStyle ?? 'classic';
     // Keep FX tweens and persistent card tweens running; only drop tweens of meshes about to be disposed
     this.activeTweens = this.activeTweens.filter(
       (tw) => tw.disposeOnEnd || tw.obj.parent === this.cardsGroup
@@ -1151,7 +1158,7 @@ export class PokerScene3D {
 
     const seenBoardKeys = new Set<string>();
     for (let i = 0; i < boardCount; i++) {
-      const boardKey = `${i}|${nextBoardKeys[i]}|${data.fourColorDeck ? 4 : 2}`;
+      const boardKey = `${i}|${nextBoardKeys[i]}|${data.fourColorDeck ? 4 : 2}|${cardStyle}`;
       seenBoardKeys.add(boardKey);
       const targetPos = new THREE.Vector3(startX + i * cardSpacing, FELT_Y + 0.002, -0.08);
       const targetRot = new THREE.Euler(0, (i - (boardCount - 1) / 2) * 0.018, 0);
@@ -1167,7 +1174,7 @@ export class PokerScene3D {
         this.cardBackTex,
         this.contactShadowTex,
         1.05,
-        this.getCardFaceTexture(data.board[i], data.fourColorDeck)
+        this.getCardFaceTexture(data.board[i], data.fourColorDeck, cardStyle)
       );
       cardGrp.position.copy(targetPos);
       cardGrp.rotation.copy(targetRot);
@@ -1262,7 +1269,7 @@ export class PokerScene3D {
       const isTopCenter = Math.abs(anchor.x) < 0.1 && anchor.z < 0;
       const isSideSeat = !seat.isHero && !isTopCenter;
       const chipBaseX = seat.isHero
-        ? -0.68
+        ? -0.96
         : isTopCenter
           ? 0.56
           : anchor.x * 0.58;
@@ -1493,7 +1500,7 @@ export class PokerScene3D {
           nextRevealedSeats.add(seat.seatIndex);
         }
         const cardScale = seat.isHero ? 1.18 : 0.96;
-        const cardSig = `${seat.cards[0].rank}${seat.cards[0].suit}-${seat.cards[1].rank}${seat.cards[1].suit}|${reveal ? 1 : 0}|${data.fourColorDeck ? 4 : 2}|${seat.isHero ? 1 : 0}`;
+        const cardSig = `${seat.cards[0].rank}${seat.cards[0].suit}-${seat.cards[1].rank}${seat.cards[1].suit}|${reveal ? 1 : 0}|${data.fourColorDeck ? 4 : 2}|${cardStyle}|${seat.isHero ? 1 : 0}`;
         // Showdown winner spotlight: revealed winning hand rises slightly and tilts toward the camera
         const spot = Boolean(seat.isWinner && reveal);
         const liftY = spot ? 0.035 : 0;
@@ -1561,7 +1568,7 @@ export class PokerScene3D {
           this.cardBackTex,
           this.contactShadowTex,
           cardScale,
-          reveal ? this.getCardFaceTexture(seat.cards[0], data.fourColorDeck) : undefined
+          reveal ? this.getCardFaceTexture(seat.cards[0], data.fourColorDeck, cardStyle) : undefined
         );
         const c2 = createPlayingCardGroup(
           seat.cards[1],
@@ -1570,7 +1577,7 @@ export class PokerScene3D {
           this.cardBackTex,
           this.contactShadowTex,
           cardScale,
-          reveal ? this.getCardFaceTexture(seat.cards[1], data.fourColorDeck) : undefined
+          reveal ? this.getCardFaceTexture(seat.cards[1], data.fourColorDeck, cardStyle) : undefined
         );
 
         const targets: HeroCardPeekTarget[] = [];

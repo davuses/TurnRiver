@@ -84,6 +84,7 @@ export type CoachMode = 'off' | 'after_hand' | 'live';
 
 export interface UserPreferences {
   fourColorDeck: boolean;
+  cardStyle?: 'classic' | 'jumbo';
   soundEnabled: boolean;
   chipDisplayUnit?: ChipDisplayUnit;
   cashStakesId?: CashStakesId;

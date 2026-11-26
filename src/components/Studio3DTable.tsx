@@ -8,6 +8,7 @@ import {
   Move3d,
   Palette,
   RefreshCw,
+  Spade,
   Sun,
   Volume2,
   VolumeX,
@@ -20,7 +21,7 @@ import {
   type LightingPresetId,
 } from '../three/PokerScene3D';
 import type { Seat3DSpec } from '../three/models';
-import type { FeltThemeId } from '../three/textures';
+import type { CardStyle, FeltThemeId } from '../three/textures';
 import { useLocale } from '../i18n/LocaleContext';
 
 export interface Studio3DTableProps {
@@ -31,6 +32,8 @@ export interface Studio3DTableProps {
   seats: Seat3DSpec[];
   fourColorDeck: boolean;
   onToggleFourColor?: () => void;
+  cardStyle?: CardStyle;
+  onToggleCardStyle?: () => void;
   soundEnabled?: boolean;
   onToggleSound?: () => void;
   onDealSample?: () => void;
@@ -48,6 +51,8 @@ export function Studio3DTable({
   seats,
   fourColorDeck,
   onToggleFourColor,
+  cardStyle = 'classic',
+  onToggleCardStyle,
   soundEnabled: soundEnabledProp,
   onToggleSound,
   onDealSample,
@@ -108,6 +113,7 @@ export function Studio3DTable({
         potText,
         seats,
         fourColorDeck,
+        cardStyle,
         feltTheme,
         lighting,
         showProps,
@@ -144,7 +150,7 @@ export function Studio3DTable({
     sceneRef.current?.setOrbitEnabled(effectiveOrbit);
   }, [effectiveOrbit, hasWebglError]);
 
-  // Rebuild dynamic hand layer ONLY when hand state / deck color changes (skip redundant initial mount!)
+  // Rebuild dynamic hand layer ONLY when hand state / deck color / card style changes (skip redundant initial mount!)
   useEffect(() => {
     if (!didMountHandRef.current) {
       didMountHandRef.current = true;
@@ -156,8 +162,9 @@ export function Studio3DTable({
       potText,
       seats,
       fourColorDeck,
+      cardStyle,
     });
-  }, [board, potBb, potText, seats, fourColorDeck]);
+  }, [board, potBb, potText, seats, fourColorDeck, cardStyle]);
 
   // Lightweight setters: never rebuild cards/chips/plaques when toggling felt, light, props, or audio
   useEffect(() => {
@@ -457,6 +464,23 @@ export function Studio3DTable({
               >
                 <Palette className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>{fourColorDeck ? t('common.fourColorShort') : t('common.twoColorShort')}</span>
+              </button>
+            )}
+
+            {onToggleCardStyle && (
+              <button
+                type="button"
+                data-testid="toggle-card-style"
+                aria-pressed={cardStyle === 'jumbo'}
+                onClick={onToggleCardStyle}
+                className={`px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md border inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0 ${
+                  cardStyle === 'jumbo'
+                    ? 'bg-amber-500/15 border-amber-400/45 text-amber-200'
+                    : 'bg-[#131C19] border-[#23342E] text-slate-300 hover:text-white'
+                }`}
+              >
+                <Spade className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>{cardStyle === 'jumbo' ? t('studio3d.cardJumbo') : t('studio3d.cardClassic')}</span>
               </button>
             )}
 

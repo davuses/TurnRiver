@@ -19,6 +19,7 @@ const DEFAULT_SUMMARY: MasterySummary = {
 
 const DEFAULT_PREFS: UserPreferences = {
   fourColorDeck: true,
+  cardStyle: 'classic',
   soundEnabled: true,
   chipDisplayUnit: 'bb',
   cashStakesId: 'nl200',
