@@ -351,7 +351,7 @@ export function Studio3DTable({
 
       {/* Viewport-First Collapsible Bottom Dock (single-row scroll strip on <640px mobile, NO backdrop-filter) */}
       {dockVisible && (
-        <div className="absolute bottom-2 left-2 right-2 sm:bottom-3 sm:left-3 sm:right-3 flex flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible items-center justify-between gap-1.5 sm:gap-2.5 bg-[#0A100E]/94 border border-[#21322C] rounded-xl px-2 py-1.5 sm:px-3.5 sm:py-2.5">
+        <div className="no-scrollbar absolute bottom-2 left-2 right-2 sm:bottom-3 sm:left-3 sm:right-3 flex flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible items-center justify-between gap-1.5 sm:gap-2.5 bg-[#0A100E]/94 border border-[#21322C] rounded-xl px-2 py-1.5 sm:px-3.5 sm:py-2.5">
           {/* Camera Angle Selector */}
           <div className="flex flex-nowrap sm:flex-wrap shrink-0 items-center gap-1 sm:gap-1.5">
             <span className="text-[11px] font-medium text-slate-400 inline-flex items-center gap-1 mr-0.5 sm:mr-1 shrink-0">

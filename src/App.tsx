@@ -22,9 +22,6 @@ const HandReadingView = lazy(() =>
 const PlayTableView = lazy(() =>
   import('./views/PlayTableView').then((m) => ({ default: m.PlayTableView }))
 );
-const Studio3DView = lazy(() =>
-  import('./views/Studio3DView').then((m) => ({ default: m.Studio3DView }))
-);
 const LeakTrackerView = lazy(() =>
   import('./views/LeakTrackerView').then((m) => ({ default: m.LeakTrackerView }))
 );
@@ -52,15 +49,14 @@ function ViewLoadingSkeleton() {
   );
 }
 
-export type AppView = 'overview' | DrillModule | 'studio3d' | 'leaks';
+export type AppView = 'overview' | DrillModule | 'leaks';
 
-const NAV_LINKS: { id: DrillModule | 'studio3d'; labelKey: TranslationKey }[] = [
+const NAV_LINKS: { id: DrillModule; labelKey: TranslationKey }[] = [
   { id: 'preflop', labelKey: 'nav.preflop' },
   { id: 'postflop', labelKey: 'nav.postflop' },
   { id: 'math', labelKey: 'nav.math' },
   { id: 'reading', labelKey: 'nav.reading' },
   { id: 'table', labelKey: 'nav.table' },
-  { id: 'studio3d', labelKey: 'nav.studio3d' },
 ];
 
 function getInitialView(): AppView {
@@ -68,13 +64,13 @@ function getInitialView(): AppView {
     const params = new URLSearchParams(window.location.search);
     if (params.get('autostart') === '1') return 'preflop';
     const viewParam = params.get('view');
+    if (viewParam === 'studio3d') return 'table';
     if (
       viewParam === 'preflop' ||
       viewParam === 'postflop' ||
       viewParam === 'math' ||
       viewParam === 'reading' ||
       viewParam === 'table' ||
-      viewParam === 'studio3d' ||
       viewParam === 'leaks'
     ) {
       return viewParam;
@@ -271,13 +267,6 @@ function TurnRiverShell() {
                 prefs={store.prefs}
                 onUpdatePrefs={store.updatePrefs}
                 onRecordAttempt={store.recordAttempt}
-              />
-            )}
-
-            {activeView === 'studio3d' && (
-              <Studio3DView
-                prefs={store.prefs}
-                onUpdatePrefs={store.updatePrefs}
               />
             )}
 

@@ -23,6 +23,8 @@ const DEFAULT_PREFS: UserPreferences = {
   chipDisplayUnit: 'bb',
   cashStakesId: 'nl200',
   autoTopUp: false,
+  coachMode: 'after_hand',
+  rngEnabled: false,
 };
 
 function readLocal<T>(key: string, fallback: T): T {

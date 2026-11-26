@@ -8,31 +8,8 @@ import heroStudioImg from '../assets/images/hero_studio_table.webp';
 interface OverviewViewProps {
   summary: MasterySummary;
   attempts: DrillAttemptRecord[];
-  onNavigate: (view: DrillModule | 'studio3d' | 'leaks') => void;
+  onNavigate: (view: DrillModule | 'leaks') => void;
 }
-
-const FEATURED_TABLES: {
-  id: 'table' | 'studio3d';
-  titleKey: TranslationKey;
-  metaKey: TranslationKey;
-  descKey: TranslationKey;
-  ctaKey: TranslationKey;
-}[] = [
-  {
-    id: 'table',
-    titleKey: 'overview.mod.table.title',
-    metaKey: 'overview.mod.table.meta',
-    descKey: 'overview.mod.table.desc',
-    ctaKey: 'overview.mod.table.cta',
-  },
-  {
-    id: 'studio3d',
-    titleKey: 'overview.mod.studio3d.title',
-    metaKey: 'overview.mod.studio3d.meta',
-    descKey: 'overview.mod.studio3d.desc',
-    ctaKey: 'overview.mod.studio3d.cta',
-  },
-];
 
 const CORE_DRILLS: {
   id: Exclude<DrillModule, 'table'>;
@@ -84,12 +61,11 @@ export function OverviewView({ summary, attempts, onNavigate }: OverviewViewProp
       ? Math.round((summary.totalAccuracyScore ?? 0) / summary.totalDecisions)
       : 0;
 
-  const countByModule = (mod: DrillModule | 'studio3d') =>
-    mod === 'studio3d' ? null : attempts.filter((a) => a.module === mod).length;
+  const countByModule = (mod: DrillModule) =>
+    attempts.filter((a) => a.module === mod).length;
 
-  const formatLoggedCount = (mod: DrillModule | 'studio3d') => {
+  const formatLoggedCount = (mod: DrillModule) => {
     const completed = countByModule(mod);
-    if (completed === null) return t('overview.studio3dTag');
     const unit =
       mod === 'math' || mod === 'reading'
         ? completed === 1
@@ -167,50 +143,86 @@ export function OverviewView({ summary, attempts, onNavigate }: OverviewViewProp
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {FEATURED_TABLES.map((item, idx) => {
-              const isPrimary = idx === 0;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onNavigate(item.id)}
-                  className={`group text-left rounded-xl p-7 sm:p-8 flex flex-col justify-between gap-8 transition-[border-color,background-color] duration-200 ease-out cursor-pointer border ${
-                    isPrimary
-                      ? 'lg:col-span-7 felt-surface border-emerald-400/25 hover:border-emerald-400/55'
-                      : 'lg:col-span-5 bg-[#0E1513] border-[#1F2D28] hover:border-[#344A42] hover:bg-[#111A17]'
-                  }`}
-                >
-                  <div className="space-y-3">
-                    <p
-                      className={`text-[13px] font-medium ${
-                        isPrimary ? 'text-[#E5B95C]' : 'text-emerald-400'
-                      }`}
-                    >
-                      {t(item.metaKey)}
-                    </p>
-                    <h3 className="text-xl sm:text-2xl font-semibold text-[#F2F4F1]">
-                      {t(item.titleKey)}
-                    </h3>
-                    <p className="text-[15px] text-[#C2CFC8] leading-relaxed max-w-[54ch]">
-                      {t(item.descKey)}
-                    </p>
-                  </div>
+            {/* Flagship 3D Multi-Bot Arena Stage */}
+            <button
+              type="button"
+              onClick={() => onNavigate('table')}
+              className="group lg:col-span-8 text-left rounded-xl p-7 sm:p-9 flex flex-col justify-between gap-8 transition-[border-color,background-color] duration-200 ease-out cursor-pointer border felt-surface border-emerald-400/25 hover:border-emerald-400/55"
+            >
+              <div className="space-y-4">
+                <p className="text-[13px] font-medium text-[#E5B95C]">
+                  {t('overview.mod.table.meta')}
+                </p>
+                <h3 className="text-2xl sm:text-[26px] font-semibold text-[#F2F4F1] tracking-[-0.015em]">
+                  {t('overview.mod.table.title')}
+                </h3>
+                <p className="text-[15px] text-[#C2CFC8] leading-relaxed max-w-[60ch]">
+                  {t('overview.mod.table.desc')}
+                </p>
 
-                  <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                    <span className="text-[13px] tabular-nums text-[#99A8A1]">
-                      {formatLoggedCount(item.id)}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-emerald-300 group-hover:text-emerald-200 transition-colors duration-200 ease-out">
-                      <span>{t(item.ctaKey)}</span>
-                      <ArrowRight
-                        className="w-4 h-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5"
-                        aria-hidden="true"
-                      />
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="px-2.5 py-1 rounded-md text-[12px] font-medium bg-[#081410]/80 text-emerald-200 border border-emerald-400/25">
+                    {t('table.view3D')}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md text-[12px] font-medium bg-[#081410]/80 text-[#E5B95C] border border-[#E5B95C]/25">
+                    {t('arena.unitBb')} / {t('arena.unitUsd')}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md text-[12px] font-medium bg-[#081410]/80 text-[#D8E2DD] border border-white/15">
+                    {t('arena.tabReplay')} · {t('arena.flashbackBtn')}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md text-[12px] font-medium bg-[#081410]/80 text-[#D8E2DD] border border-white/15">
+                    {t('arena.bankrollLabel')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-white/10">
+                <span className="text-[13px] tabular-nums text-[#99A8A1]">
+                  {formatLoggedCount('table')}
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-emerald-300 group-hover:text-emerald-200 transition-colors duration-200 ease-out">
+                  <span>{t('overview.mod.table.cta')}</span>
+                  <ArrowRight
+                    className="w-4 h-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5"
+                    aria-hidden="true"
+                  />
+                </span>
+              </div>
+            </button>
+
+            {/* Leak Tracker & Mastery Companion Card */}
+            <button
+              type="button"
+              onClick={() => onNavigate('leaks')}
+              className="group lg:col-span-4 text-left rounded-xl p-7 sm:p-8 flex flex-col justify-between gap-8 transition-[border-color,background-color] duration-200 ease-out cursor-pointer border bg-[#0E1513] border-[#1F2D28] hover:border-[#344A42] hover:bg-[#111A17]"
+            >
+              <div className="space-y-3">
+                <p className="text-[13px] font-medium text-emerald-400">
+                  {t('overview.leaksCardMeta')}
+                </p>
+                <h3 className="text-xl sm:text-2xl font-semibold text-[#F2F4F1]">
+                  {t('overview.leaksCardTitle')}
+                </h3>
+                <p className="text-[15px] text-[#C2CFC8] leading-relaxed">
+                  {t('overview.leaksCardDesc')}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-white/10">
+                <span className="text-[13px] tabular-nums text-[#99A8A1]">
+                  {summary.totalDecisions > 0
+                    ? `${optimalRate}% · ${avgScore} / 100`
+                    : `${summary.totalDecisions} ${t('overview.unitDecisionPlural')}`}
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-emerald-300 group-hover:text-emerald-200 transition-colors duration-200 ease-out">
+                  <span>{t('overview.leaksCardCta')}</span>
+                  <ArrowRight
+                    className="w-4 h-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5"
+                    aria-hidden="true"
+                  />
+                </span>
+              </div>
+            </button>
           </div>
         </section>
 

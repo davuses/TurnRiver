@@ -47,21 +47,34 @@ import {
   chooseBotAction,
   computeEffectivePotOdds,
   computeHudDisplay,
+  createEmptyHudStats,
   createInitialTable,
   createTableFromConfig,
   DEFAULT_ARENA_CONFIG,
   detectDrawBonus,
   getLegalActions,
   rebuyHeroTo100,
+  resolveRunItTwice,
   resolveShowdown,
+  revealRabbitHunt,
   roundBb,
   settleAndStartNewHand,
   startNewHand,
+  toggleHeroShowHand,
   type ArenaSize,
   type BotArchetype,
   type PokerTableState,
   type TableSeat,
 } from './tableEngine';
+import {
+  exportHandToPokerStarsText,
+  exportSessionHandsText,
+  type ExportableReplayRecord,
+} from './handHistoryExport';
+import {
+  ARENA_CHALLENGES,
+  evaluateChallengeProgress,
+} from './arenaChallenges';
 
 test('7-card hand evaluator ranks all hand categories accurately including wheel straight', () => {
   const royal = evaluateHand(parseCards(['As', 'Ks', 'Qs', 'Js', 'Ts', '2d', '3c']));
@@ -314,14 +327,10 @@ test('multiway all-in side pots: 20/100/100 bb showdown where short stack holds 
     cards: parseCards(cards) as [any, any],
     lastActionText: folded ? 'Folded' : `All-In ${totalInvestedBb}bb`,
     stats: {
+      ...createEmptyHudStats(),
       handsDealt: 1,
       vpipHands: folded ? 0 : 1,
-      pfrHands: 0,
-      threeBetHands: 0,
-      threeBetOpps: 0,
       postflopAggActs: 1,
-      postflopCalls: 0,
-      handsWon: 0,
     },
     didVpipThisHand: !folded,
     didPfrThisHand: false,
@@ -1428,4 +1437,558 @@ test('Seeded 6-max calibration simulation verifies realistic poker envelopes acr
   assert.ok(maniac.threeBetPct >= 14, `Maniac 3Bet must be >= 14%, got ${maniac.threeBetPct.toFixed(1)}%`);
   assert.ok(maniac.foldToBetPct >= 15, `Maniac FoldToBet must be >= 15% (was 0%), got ${maniac.foldToBetPct.toFixed(1)}%`);
   assert.ok(maniac.rivAirCallPct <= 5, `Maniac RivAirCall must be <= 5%, got ${maniac.rivAirCallPct.toFixed(1)}%`);
+});
+
+test('Antes (0.1bb & 0.25bb) and UTG Straddle (2bb) preserve exact chip conservation and live UTG option', () => {
+  // 1. 6-max with 0.25bb ante + UTG straddle
+  let seed = 808;
+  const rng = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+
+  let table = createTableFromConfig({
+    ...DEFAULT_ARENA_CONFIG,
+    tableSize: 6,
+    startingStackBb: 100,
+    anteBb: 0.25,
+    straddleEnabled: true,
+  });
+  table = startNewHand(table, rng);
+
+  // 6 * 0.25 ante = 1.5bb + 0.5 SB + 1.0 BB + 2.0 UTG straddle = 5.0bb pot
+  assert.equal(table.potBb, 5.0, 'Ante 0.25x6 + SB 0.5 + BB 1.0 + Straddle 2.0 must equal 5.0bb');
+  assert.equal(table.currentBetBb, 2.0, 'Straddle must raise currentBetBb to 2.0bb');
+  assert.equal(table.minRaiseBb, 3.0, 'Min raise over 2.0bb straddle must be 3.0bb');
+  assert.equal(table.lastFullRaiseIncrementBb, 1.0);
+
+  const bbSeat = table.seats.find((s) => s.position === 'BB')!;
+  const utgIdx = (bbSeat.seatIndex + 1) % 6;
+  const utgSeat = table.seats[utgIdx];
+  assert.equal(utgSeat.position, 'UTG');
+  assert.equal(utgSeat.streetBetBb, 2.0, 'UTG streetBetBb must reflect 2.0bb straddle only (not ante)');
+  assert.equal(utgSeat.totalInvestedBb, 2.25, 'UTG totalInvestedBb must include 0.25 ante + 2.0 straddle');
+  assert.equal(utgSeat.actedThisStreet, false, 'UTG must retain live option preflop');
+  assert.equal(table.actingSeatIndex, (utgIdx + 1) % 6, 'Preflop action must start left of UTG straddle');
+
+  // Non-blind seat has 0 streetBetBb, 0.25 totalInvestedBb, 99.75 stack
+  const hjSeat = table.seats.find((s) => s.position === 'HJ')!;
+  assert.equal(hjSeat.streetBetBb, 0);
+  assert.equal(hjSeat.totalInvestedBb, 0.25);
+  assert.equal(hjSeat.stackBb, 99.75);
+
+  const anteLogs = table.actionLog.filter((l) => l.actionSpec?.kind === 'post_ante');
+  const straddleLogs = table.actionLog.filter((l) => l.actionSpec?.kind === 'post_straddle');
+  assert.equal(anteLogs.length, 6);
+  assert.equal(straddleLogs.length, 1);
+
+  // Verify UTG gets live option when everyone calls/folds around to UTG
+  let limpState = table;
+  while (limpState.phase === 'PREFLOP' && limpState.actingSeatIndex !== utgIdx) {
+    limpState = applyPlayerAction(limpState, limpState.actingSeatIndex!, 'call');
+  }
+  assert.equal(limpState.phase, 'PREFLOP', 'Hand must pause on UTG for live straddle option');
+  assert.equal(limpState.actingSeatIndex, utgIdx);
+  assert.equal(getLegalActions(limpState, utgIdx).canCheck, true);
+  assert.equal(getLegalActions(limpState, utgIdx).canBetOrRaise, true);
+
+  // Play 12 full hands with 0.25bb ante + straddle and verify exact 600bb chip conservation every hand
+  let simTable = createTableFromConfig({
+    ...DEFAULT_ARENA_CONFIG,
+    tableSize: 6,
+    startingStackBb: 100,
+    anteBb: 0.25,
+    straddleEnabled: true,
+  });
+  for (let h = 0; h < 12; h++) {
+    simTable = {
+      ...simTable,
+      seats: simTable.seats.map((s) => ({ ...s, stackBb: 100, allIn: false })),
+    };
+    simTable = startNewHand(simTable, rng);
+    let steps = 0;
+    while (simTable.phase !== 'SHOWDOWN' && simTable.actingSeatIndex !== null && steps < 140) {
+      const actor = simTable.actingSeatIndex;
+      const move = chooseBotAction(simTable, actor, rng);
+      simTable = applyPlayerAction(simTable, actor, move.type, move.raiseToBb);
+      steps++;
+    }
+    assert.equal(simTable.phase, 'SHOWDOWN');
+    const total = roundBb(simTable.seats.reduce((s, seat) => s + seat.stackBb, 0));
+    assert.equal(total, 600, `Ante 0.25 + straddle hand #${h + 1} must conserve exact 600bb`);
+  }
+
+  // 2. 0.1bb ante + straddle ignored on 3-max (tableSize < 4)
+  const threeMax = startNewHand(
+    createTableFromConfig({
+      ...DEFAULT_ARENA_CONFIG,
+      tableSize: 3,
+      startingStackBb: 100,
+      anteBb: 0.1,
+      straddleEnabled: true,
+      botArchetypes: ['Balanced Reg', 'Tight-Aggressive'],
+    }),
+    rng
+  );
+  assert.equal(threeMax.potBb, 1.8, '3-max 0.1 ante (0.3) + 0.5 SB + 1.0 BB = 1.8bb (no straddle)');
+  assert.equal(threeMax.currentBetBb, 1.0, 'Straddle must not activate when tableSize < 4');
+  assert.equal(
+    roundBb(threeMax.seats.reduce((s, seat) => s + seat.stackBb, 0) + threeMax.potBb),
+    300
+  );
+});
+
+test('Run It Twice pauses on all-in, deals disjoint boards, splits 50/50 with odd 0.1bb to board 1, and conserves chips', () => {
+  const base = startNewHand(
+    createTableFromConfig({
+      ...DEFAULT_ARENA_CONFIG,
+      tableSize: 2,
+      botArchetypes: ['Balanced Reg'],
+      runItTwiceEnabled: true,
+    }),
+    () => 0.41
+  );
+
+  // Set up flop all-in with odd 0.1bb total pot (20.1bb: Hero invests 10.1, Bot invests 10.0? Wait: equal contested pot 20.1 via dead money)
+  const flopBoard = parseCards(['9s', '7d', '2c']);
+  const heroCards = parseCards(['As', 'Kh']) as [any, any];
+  const botCards = parseCards(['Qd', 'Qc']) as [any, any];
+  // Construct deterministic deck:
+  // Runout 1: Ah 3c (Hero wins Board 1 with Pair of Aces)
+  // Runout 2: 4s 5h (Bot wins Board 2 with Pair of Queens)
+  const fixedDeck = parseCards(['Ah', '3c', '4s', '5h', 'Js', 'Tc', '8d', '6h']);
+
+  const allInCallState: PokerTableState = {
+    ...base,
+    phase: 'FLOP',
+    board: flopBoard,
+    deck: fixedDeck,
+    potBb: 15.1, // 5.1bb prior pot + 10.0bb bot shove; Hero calls 5.0bb all-in -> 20.1bb contested!
+    currentBetBb: 10.0,
+    minRaiseBb: 20.0,
+    actingSeatIndex: 0,
+    seats: base.seats.map((s, idx) => ({
+      ...s,
+      cards: idx === 0 ? heroCards : botCards,
+      stackBb: idx === 0 ? 5.0 : 0,
+      streetBetBb: idx === 1 ? 10.0 : 5.0,
+      totalInvestedBb: idx === 0 ? 7.5 : 12.6, // Wait: use equal contested totalInvestedBb=10.05 via 3-way dead money below
+      folded: false,
+      allIn: idx === 1,
+      actedThisStreet: idx === 1,
+      didSawFlopThisHand: true,
+    })),
+  };
+
+  // Better: 3-max with 0.1bb folded dead money + two 10bb all-in stacks => exact 20.1bb single contested pot!
+  const threeBase = startNewHand(
+    createTableFromConfig({
+      ...DEFAULT_ARENA_CONFIG,
+      tableSize: 3,
+      botArchetypes: ['Balanced Reg', 'Tight-Aggressive'],
+      runItTwiceEnabled: true,
+    }),
+    () => 0.25
+  );
+  const ritSpot: PokerTableState = {
+    ...threeBase,
+    phase: 'FLOP',
+    board: flopBoard,
+    deck: fixedDeck,
+    potBb: 15.1, // 0.1 folded dead money + 5.0 Hero prior + 10.0 Bot1 total -> Hero calls last 5.0 => 20.1bb
+    currentBetBb: 10.0,
+    minRaiseBb: 20.0,
+    actingSeatIndex: 0,
+    seats: [
+      {
+        ...threeBase.seats[0],
+        cards: heroCards,
+        stackBb: 5.0,
+        streetBetBb: 5.0,
+        totalInvestedBb: 5.0,
+        folded: false,
+        allIn: false,
+        actedThisStreet: false,
+        didSawFlopThisHand: true,
+      },
+      {
+        ...threeBase.seats[1],
+        cards: botCards,
+        stackBb: 0,
+        streetBetBb: 10.0,
+        totalInvestedBb: 10.0,
+        folded: false,
+        allIn: true,
+        actedThisStreet: true,
+        didSawFlopThisHand: true,
+      },
+      {
+        ...threeBase.seats[2],
+        cards: parseCards(['2s', '3d']) as [any, any],
+        stackBb: 99.9,
+        streetBetBb: 0,
+        totalInvestedBb: 0.1,
+        folded: true,
+        allIn: false,
+        actedThisStreet: true,
+      },
+    ],
+  };
+  const startingChips = roundBb(
+    ritSpot.seats.reduce((sum, s) => sum + s.stackBb, 0) + ritSpot.potBb
+  );
+  assert.equal(startingChips, 120.0);
+
+  // Hero calls 5bb all-in -> pauses awaiting Run It Twice choice!
+  const paused = applyPlayerAction(ritSpot, 0, 'call');
+  assert.equal(paused.awaitingRunItTwiceChoice, true, 'All-in runout with RIT enabled must pause');
+  assert.equal(paused.phase, 'FLOP', 'Must not advance phase or deal turn/river before choice');
+  assert.equal(paused.board.length, 3, 'Board must remain at 3 cards while awaiting choice');
+  assert.equal(paused.actingSeatIndex, null);
+  assert.equal(paused.potBb, 20.1);
+
+  // Branch A: Run It Once -> normal single showdown (Board 1 Ah 3c => Hero wins full 20.1bb)
+  const runOnce = resolveRunItTwice(paused, false);
+  assert.equal(runOnce.phase, 'SHOWDOWN');
+  assert.equal(runOnce.awaitingRunItTwiceChoice, false);
+  assert.equal(runOnce.runItTwiceBoards, null);
+  assert.equal(runOnce.seats[0].stackBb, 20.1);
+  assert.equal(runOnce.seats[1].stackBb, 0);
+  assert.equal(
+    roundBb(runOnce.seats.reduce((sum, s) => sum + s.stackBb, 0)),
+    startingChips
+  );
+
+  // Branch B: Run It Twice -> 20.1bb splits 10.1bb (Board 1 -> Hero) and 10.0bb (Board 2 -> Bot 1)
+  const runTwice = resolveRunItTwice(paused, true);
+  assert.equal(runTwice.phase, 'SHOWDOWN');
+  assert.equal(runTwice.awaitingRunItTwiceChoice, false);
+  assert.ok(runTwice.runItTwiceBoards, 'runItTwiceBoards must be populated');
+  const [b1, b2] = runTwice.runItTwiceBoards!;
+  assert.equal(b1.length, 5);
+  assert.equal(b2.length, 5);
+  assert.deepEqual(b1.slice(0, 3), flopBoard);
+  assert.deepEqual(b2.slice(0, 3), flopBoard);
+
+  // Zero duplicate cards across shared flop + runout 1 + runout 2 + all hole cards
+  const allDealtCards = [
+    ...flopBoard,
+    ...b1.slice(3),
+    ...b2.slice(3),
+    ...heroCards,
+    ...botCards,
+  ].map((c) => `${c.rank}${c.suit}`);
+  assert.equal(new Set(allDealtCards).size, allDealtCards.length, 'Run It Twice must deal zero duplicate cards');
+
+  assert.equal(runTwice.seats[0].stackBb, 10.1, 'Board 1 winner (Hero) must receive 10.1bb including 0.1bb odd remainder');
+  assert.equal(runTwice.seats[1].stackBb, 10.0, 'Board 2 winner (Bot) must receive 10.0bb');
+  assert.equal(
+    roundBb(runTwice.seats.reduce((sum, s) => sum + s.stackBb, 0)),
+    startingChips,
+    'Exact 100% chip conservation in Run It Twice'
+  );
+  assert.ok(runTwice.winnerSpec?.potBreakdowns?.length === 2);
+
+  // Guard: ignore unused variable warning
+  assert.equal(allInCallState.phase, 'FLOP');
+});
+
+test('Rabbit Hunt reveals 5 disjoint cards without mutating stacks/pot/board/deck, and toggleHeroShowHand logs show_hand', () => {
+  let hu = createTableFromConfig({
+    ...DEFAULT_ARENA_CONFIG,
+    tableSize: 2,
+    botArchetypes: ['Balanced Reg'],
+  });
+  hu = startNewHand(hu, () => 0.35);
+
+  // Make Hero win uncontested preflop (board.length === 0)
+  const firstActor = hu.actingSeatIndex!;
+  let uncontested: PokerTableState;
+  if (firstActor === 0) {
+    const raised = applyPlayerAction(hu, 0, 'raise', 3.0);
+    uncontested = applyPlayerAction(raised, 1, 'fold');
+  } else {
+    uncontested = applyPlayerAction(hu, firstActor, 'fold');
+  }
+  assert.equal(uncontested.phase, 'SHOWDOWN');
+  assert.equal(uncontested.board.length, 0);
+  assert.equal(uncontested.winnerSpec?.type, 'uncontested');
+  assert.equal(uncontested.winnerSpec?.winners.some((w) => w.isHero), true);
+
+  const stacksBefore = uncontested.seats.map((s) => s.stackBb);
+  const potBefore = uncontested.potBb;
+  const deckBefore = uncontested.deck.map((c) => `${c.rank}${c.suit}`);
+
+  const hunted = revealRabbitHunt(uncontested);
+  assert.ok(hunted.rabbitHuntBoard, 'revealRabbitHunt must populate rabbitHuntBoard');
+  assert.equal(hunted.rabbitHuntBoard!.length, 5);
+  assert.equal(hunted.board.length, 0, 'Real board must remain untouched');
+  assert.deepEqual(
+    hunted.seats.map((s) => s.stackBb),
+    stacksBefore,
+    'Stacks must not mutate'
+  );
+  assert.equal(hunted.potBb, potBefore, 'Pot must not mutate');
+  assert.deepEqual(
+    hunted.deck.map((c) => `${c.rank}${c.suit}`),
+    deckBefore,
+    'Deck integrity must not mutate'
+  );
+
+  // Disjoint from all hole cards
+  const allCards = [
+    ...hunted.rabbitHuntBoard!,
+    ...hunted.seats.flatMap((s) => s.cards ?? []),
+  ].map((c) => `${c.rank}${c.suit}`);
+  assert.equal(new Set(allCards).size, allCards.length, 'Rabbit hunt cards must be disjoint from hole cards');
+
+  // Idempotent on second call
+  assert.equal(revealRabbitHunt(hunted), hunted);
+
+  // toggleHeroShowHand sets heroShowedUncontested and logs show_hand
+  const shown = toggleHeroShowHand(hunted);
+  assert.equal(shown.heroShowedUncontested, true);
+  const lastLog = shown.actionLog[shown.actionLog.length - 1];
+  assert.equal(lastLog.actionSpec?.kind, 'show_hand');
+  assert.equal(lastLog.isHero, true);
+
+  // Idempotent on second call
+  assert.equal(toggleHeroShowHand(shown), shown);
+});
+
+test('Extended HUD stats track cbetPct, foldToCbetPct, sawFlopHands, and wtsdPct for both Hero and bots', () => {
+  // Hand 1: Hero is PFR, bets flop (c-bet), Bot folds to c-bet
+  let hu = createTableFromConfig({
+    ...DEFAULT_ARENA_CONFIG,
+    tableSize: 2,
+    heroPositionLock: 'BTN',
+    botArchetypes: ['Balanced Reg'],
+  });
+  hu = startNewHand(hu, () => 0.22);
+  // Hero is BTN/SB and acts first preflop
+  assert.equal(hu.actingSeatIndex, 0);
+  hu = applyPlayerAction(hu, 0, 'raise', 2.5);
+  hu = applyPlayerAction(hu, 1, 'call');
+  assert.equal(hu.phase, 'FLOP');
+  assert.equal(hu.seats[0].stats.sawFlopHands, 1);
+  assert.equal(hu.seats[1].stats.sawFlopHands, 1);
+  // Postflop HU: BB (seat 1) acts first -> checks -> Hero (PFR) c-bets -> Bot folds
+  hu = applyPlayerAction(hu, 1, 'check');
+  hu = applyPlayerAction(hu, 0, 'raise', 2.0);
+  hu = applyPlayerAction(hu, 1, 'fold');
+  assert.equal(hu.phase, 'SHOWDOWN');
+
+  const heroHud1 = computeHudDisplay(hu.seats[0].stats);
+  const botHud1 = computeHudDisplay(hu.seats[1].stats);
+  assert.equal(hu.seats[0].stats.cbetOpps, 1);
+  assert.equal(hu.seats[0].stats.cbetHands, 1);
+  assert.equal(heroHud1.cbetPct, 100);
+  assert.equal(hu.seats[1].stats.foldToCbetOpps, 1);
+  assert.equal(hu.seats[1].stats.foldToCbetHands, 1);
+  assert.equal(botHud1.foldToCbetPct, 100);
+  assert.equal(hu.seats[0].stats.wtsdHands, 0, 'Uncontested fold must not increment wtsdHands');
+  assert.equal(heroHud1.wtsdPct, 0);
+
+  // Hand 2: Hero is PFR, checks back flop (0/1 c-bet), checks down to contested showdown
+  hu = startNewHand(hu, () => 0.44);
+  hu = applyPlayerAction(hu, 0, 'raise', 2.5);
+  hu = applyPlayerAction(hu, 1, 'call');
+  hu = applyPlayerAction(hu, 1, 'check'); // BB checks flop
+  hu = applyPlayerAction(hu, 0, 'check'); // Hero (PFR) checks back -> cbetOpps=2, cbetHands=1
+  hu = applyPlayerAction(hu, 1, 'check'); // Turn
+  hu = applyPlayerAction(hu, 0, 'check');
+  hu = applyPlayerAction(hu, 1, 'check'); // River
+  hu = applyPlayerAction(hu, 0, 'check');
+  assert.equal(hu.phase, 'SHOWDOWN');
+
+  const heroHud2 = computeHudDisplay(hu.seats[0].stats);
+  const botHud2 = computeHudDisplay(hu.seats[1].stats);
+  assert.equal(hu.seats[0].stats.cbetOpps, 2);
+  assert.equal(hu.seats[0].stats.cbetHands, 1);
+  assert.equal(heroHud2.cbetPct, 50);
+  assert.equal(hu.seats[0].stats.sawFlopHands, 2);
+  assert.equal(hu.seats[0].stats.wtsdHands, 1);
+  assert.equal(heroHud2.wtsdPct, 50);
+  assert.equal(hu.seats[1].stats.sawFlopHands, 2);
+  assert.equal(hu.seats[1].stats.wtsdHands, 1);
+  assert.equal(botHud2.wtsdPct, 50);
+});
+
+test('exportHandToPokerStarsText and exportSessionHandsText format BB and USD PokerStars hand histories', () => {
+  const heroCards = parseCards(['As', 'Kd']) as [any, any];
+  const botCards = parseCards(['Qh', 'Qd']) as [any, any];
+  const board = parseCards(['Ac', '7s', '2d', '9h', '3c']);
+
+  const record: ExportableReplayRecord = {
+    handNumber: 12,
+    tableSize: 2,
+    heroCards,
+    netBb: 12.5,
+    totalPotBb: 25,
+    frames: [
+      {
+        phase: 'PREFLOP',
+        board: [],
+        potBb: 1.5,
+        buttonSeatIndex: 0,
+        winnerSummary: null,
+        seats: [
+          { seatIndex: 0, name: 'Hero (You)', isHero: true, position: 'BTN', stackBb: 99.5, cards: heroCards, folded: false },
+          { seatIndex: 1, name: 'V. Mercer', isHero: false, position: 'BB', stackBb: 99, cards: botCards, folded: false },
+        ],
+      },
+      {
+        phase: 'SHOWDOWN',
+        board,
+        potBb: 25,
+        buttonSeatIndex: 0,
+        winnerSummary: 'Hero (You) (BTN) wins 25bb with Pair of Aces.',
+        seats: [
+          { seatIndex: 0, name: 'Hero (You)', isHero: true, position: 'BTN', stackBb: 112.5, cards: heroCards, folded: false },
+          { seatIndex: 1, name: 'V. Mercer', isHero: false, position: 'BB', stackBb: 87.5, cards: botCards, folded: false },
+        ],
+      },
+    ],
+    actionLog: [
+      { street: 'preflop', seatName: 'Hero (You)', isHero: true, position: 'BTN', text: 'Posts SB 0.5bb', actionSpec: { kind: 'post_sb', amountBb: 0.5 } },
+      { street: 'preflop', seatName: 'V. Mercer', isHero: false, position: 'BB', text: 'Posts BB 1bb', actionSpec: { kind: 'post_bb', amountBb: 1 } },
+      { street: 'preflop', seatName: 'Hero (You)', isHero: true, position: 'BTN', text: 'Raises to 2.5bb', actionSpec: { kind: 'raise', amountBb: 2.5 } },
+      { street: 'preflop', seatName: 'V. Mercer', isHero: false, position: 'BB', text: 'Calls 1.5bb', actionSpec: { kind: 'call', amountBb: 1.5 } },
+      { street: 'flop', seatName: 'V. Mercer', isHero: false, position: 'BB', text: 'Checks', actionSpec: { kind: 'check' } },
+      { street: 'flop', seatName: 'Hero (You)', isHero: true, position: 'BTN', text: 'Bets 10bb', actionSpec: { kind: 'bet', amountBb: 10 } },
+      { street: 'flop', seatName: 'V. Mercer', isHero: false, position: 'BB', text: 'Calls 10bb', actionSpec: { kind: 'call', amountBb: 10 } },
+    ],
+  };
+
+  const bbText = exportHandToPokerStarsText(record, { unit: 'bb', stakesId: 'nl200' });
+  assert.ok(bbText.includes("PokerStars Hand #12: Hold'em No Limit (0.5bb/1bb)"));
+  assert.ok(bbText.includes('Seat 1: Hero (You) (99.5bb in chips)'));
+  assert.ok(bbText.includes('*** HOLE CARDS ***'));
+  assert.ok(bbText.includes('Dealt to Hero (You) [As Kd]'));
+  assert.ok(bbText.includes('*** FLOP *** [Ac 7s 2d]'));
+  assert.ok(bbText.includes('*** TURN *** [Ac 7s 2d] [9h]'));
+  assert.ok(bbText.includes('*** RIVER *** [Ac 7s 2d 9h] [3c]'));
+  assert.ok(bbText.includes('*** SHOW DOWN ***'));
+  assert.ok(bbText.includes('Total pot 25bb'));
+
+  const usdText = exportHandToPokerStarsText(record, { unit: 'usd', stakesId: 'nl200' });
+  assert.ok(usdText.includes("PokerStars Hand #12: Hold'em No Limit ($1/$2 USD)"));
+  assert.ok(usdText.includes('Seat 1: Hero (You) ($199 in chips)'));
+  assert.ok(usdText.includes('Hero (You): raises to $5'));
+  assert.ok(usdText.includes('Total pot $50 | Rake $0'));
+  assert.ok(usdText.includes('+$25'));
+
+  const sessionText = exportSessionHandsText([record, { ...record, handNumber: 13 }], { unit: 'usd', stakesId: 'nl200' });
+  assert.ok(sessionText.includes('PokerStars Hand #12'));
+  assert.ok(sessionText.includes('PokerStars Hand #13'));
+  assert.equal(exportSessionHandsText([], { unit: 'bb', stakesId: 'nl200' }), '');
+});
+
+test('ARENA_CHALLENGES and evaluateChallengeProgress evaluate all 4 Arena challenges accurately', () => {
+  assert.equal(ARENA_CHALLENGES.length, 4);
+  const byId = Object.fromEntries(ARENA_CHALLENGES.map((c) => [c.id, c]));
+
+  // 1. microstakes_climb
+  assert.deepEqual(
+    evaluateChallengeProgress(byId.microstakes_climb, {
+      sessionNetBb: 22.5,
+      sessionHands: 12,
+      avgAccuracyPct: 85,
+      correctBlindReads: 0,
+      poolPreset: 'microstakes',
+      tableSize: 6,
+      blindReadMode: false,
+    }),
+    { current: 22.5, target: 20, completed: true }
+  );
+  assert.equal(
+    evaluateChallengeProgress(byId.microstakes_climb, {
+      sessionNetBb: 25,
+      sessionHands: 12,
+      avgAccuracyPct: 85,
+      correctBlindReads: 0,
+      poolPreset: 'reg_wars',
+      tableSize: 6,
+      blindReadMode: false,
+    }).completed,
+    false
+  );
+
+  // 2. reg_wars_discipline (requires >= 15 hands AND >= 80% accuracy in reg_wars)
+  assert.deepEqual(
+    evaluateChallengeProgress(byId.reg_wars_discipline, {
+      sessionNetBb: -2,
+      sessionHands: 15,
+      avgAccuracyPct: 79,
+      correctBlindReads: 0,
+      poolPreset: 'reg_wars',
+      tableSize: 6,
+      blindReadMode: false,
+    }),
+    { current: 15, target: 15, completed: false }
+  );
+  assert.deepEqual(
+    evaluateChallengeProgress(byId.reg_wars_discipline, {
+      sessionNetBb: 4,
+      sessionHands: 16,
+      avgAccuracyPct: 84,
+      correctBlindReads: 0,
+      poolPreset: 'reg_wars',
+      tableSize: 6,
+      blindReadMode: false,
+    }),
+    { current: 16, target: 15, completed: true }
+  );
+
+  // 3. blind_read_detective
+  assert.deepEqual(
+    evaluateChallengeProgress(byId.blind_read_detective, {
+      sessionNetBb: 0,
+      sessionHands: 20,
+      avgAccuracyPct: 90,
+      correctBlindReads: 3,
+      poolPreset: 'mixed',
+      tableSize: 6,
+      blindReadMode: true,
+    }),
+    { current: 3, target: 3, completed: true }
+  );
+  assert.equal(
+    evaluateChallengeProgress(byId.blind_read_detective, {
+      sessionNetBb: 0,
+      sessionHands: 20,
+      avgAccuracyPct: 90,
+      correctBlindReads: 2,
+      poolPreset: 'mixed',
+      tableSize: 6,
+      blindReadMode: true,
+    }).completed,
+    false
+  );
+
+  // 4. heads_up_boss
+  assert.deepEqual(
+    evaluateChallengeProgress(byId.heads_up_boss, {
+      sessionNetBb: 18,
+      sessionHands: 10,
+      avgAccuracyPct: 82,
+      correctBlindReads: 0,
+      poolPreset: 'heads_up',
+      tableSize: 2,
+      blindReadMode: false,
+    }),
+    { current: 18, target: 15, completed: true }
+  );
+  assert.equal(
+    evaluateChallengeProgress(byId.heads_up_boss, {
+      sessionNetBb: 30,
+      sessionHands: 10,
+      avgAccuracyPct: 82,
+      correctBlindReads: 0,
+      poolPreset: 'mixed',
+      tableSize: 6,
+      blindReadMode: false,
+    }).completed,
+    false
+  );
 });

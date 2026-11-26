@@ -1,5 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bot, DollarSign, EyeOff, RefreshCw, SlidersHorizontal, X, Zap } from 'lucide-react';
+import {
+  Bot,
+  Dices,
+  DollarSign,
+  EyeOff,
+  GraduationCap,
+  Layers,
+  Play,
+  RefreshCw,
+  SlidersHorizontal,
+  Split,
+  Trophy,
+  X,
+  Zap,
+} from 'lucide-react';
 import {
   ALL_BOT_ARCHETYPES,
   buildPresetConfig,
@@ -11,7 +25,8 @@ import {
   type HeroPositionLock,
   type PoolPresetId,
 } from '../poker/tableEngine';
-import type { UserPreferences } from '../poker/types';
+import type { CoachMode, UserPreferences } from '../poker/types';
+import { ARENA_CHALLENGES, type ArenaChallengeSpec } from '../poker/arenaChallenges';
 import {
   CASH_STAKES_LIST,
   DEFAULT_CHIP_DISPLAY,
@@ -29,6 +44,11 @@ interface ArenaSetupModalProps {
   config: ArenaConfig;
   chipDisplay?: ChipDisplayConfig;
   autoTopUp?: boolean;
+  coachMode?: CoachMode;
+  rngEnabled?: boolean;
+  onChangeCoachMode?: (m: CoachMode) => void;
+  onChangeRngEnabled?: (v: boolean) => void;
+  onSelectChallenge?: (spec: ArenaChallengeSpec) => void;
   onClose: () => void;
   onApply: (next: ArenaConfig, prefsPatch?: Partial<UserPreferences>) => void;
 }
@@ -43,20 +63,39 @@ const PRESET_LIST: Exclude<PoolPresetId, 'custom'>[] = [
 
 const TABLE_SIZES: ArenaSize[] = [2, 3, 4, 6];
 const STACK_OPTIONS: (50 | 100 | 200)[] = [50, 100, 200];
+const ANTE_OPTIONS: (0 | 0.1 | 0.25)[] = [0, 0.1, 0.25];
+const COACH_MODES: CoachMode[] = ['off', 'after_hand', 'live'];
+
+function normalizeDraftConfig(config: ArenaConfig): ArenaConfig {
+  return {
+    ...config,
+    botArchetypes: [...config.botArchetypes],
+    anteBb: config.anteBb ?? 0,
+    straddleEnabled: Boolean(config.straddleEnabled),
+    runItTwiceEnabled: Boolean(config.runItTwiceEnabled),
+  };
+}
 
 export function ArenaSetupModal({
   open,
   config,
   chipDisplay = DEFAULT_CHIP_DISPLAY,
   autoTopUp = false,
+  coachMode = 'after_hand',
+  rngEnabled = false,
+  onChangeCoachMode,
+  onChangeRngEnabled,
+  onSelectChallenge,
   onClose,
   onApply,
 }: ArenaSetupModalProps) {
   const { locale, t } = useLocale();
-  const [draft, setDraft] = useState<ArenaConfig>(config);
+  const [draft, setDraft] = useState<ArenaConfig>(() => normalizeDraftConfig(config));
   const [draftUnit, setDraftUnit] = useState<ChipDisplayUnit>(chipDisplay.unit);
   const [draftStakesId, setDraftStakesId] = useState<CashStakesId>(chipDisplay.stakesId);
   const [draftAutoTopUp, setDraftAutoTopUp] = useState<boolean>(autoTopUp);
+  const [draftCoachMode, setDraftCoachMode] = useState<CoachMode>(coachMode);
+  const [draftRngEnabled, setDraftRngEnabled] = useState<boolean>(rngEnabled);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -64,15 +103,14 @@ export function ArenaSetupModal({
 
   useEffect(() => {
     if (open) {
-      setDraft({
-        ...config,
-        botArchetypes: [...config.botArchetypes],
-      });
+      setDraft(normalizeDraftConfig(config));
       setDraftUnit(chipDisplay.unit);
       setDraftStakesId(chipDisplay.stakesId);
       setDraftAutoTopUp(autoTopUp);
+      setDraftCoachMode(coachMode);
+      setDraftRngEnabled(rngEnabled);
     }
-  }, [open, config, chipDisplay.unit, chipDisplay.stakesId, autoTopUp]);
+  }, [open, config, chipDisplay.unit, chipDisplay.stakesId, autoTopUp, coachMode, rngEnabled]);
 
   const draftDisplay: ChipDisplayConfig = {
     unit: draftUnit,
@@ -150,7 +188,7 @@ export function ArenaSetupModal({
   };
 
   const handleSelectPreset = (preset: Exclude<PoolPresetId, 'custom'>) => {
-    setDraft(buildPresetConfig(preset, draft));
+    setDraft(normalizeDraftConfig(buildPresetConfig(preset, draft)));
   };
 
   const handleChangeSeatArchetype = (botIdx: number, arch: BotArchetype) => {
@@ -162,6 +200,8 @@ export function ArenaSetupModal({
       botArchetypes: next,
     });
   };
+
+  const activeAnte = draft.anteBb ?? 0;
 
   return (
     <div
@@ -177,7 +217,10 @@ export function ArenaSetupModal({
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-[#1B2823] bg-[#0A100E]">
           <div className="flex items-start gap-2.5">
-            <SlidersHorizontal className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" aria-hidden="true" />
+            <SlidersHorizontal
+              className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0"
+              aria-hidden="true"
+            />
             <div>
               <h2 id="arena-setup-title" className="text-base font-semibold text-white">
                 {t('arena.modalTitle')}
@@ -398,6 +441,157 @@ export function ArenaSetupModal({
             </div>
           </div>
 
+          {/* Table Rules: Ante, UTG Straddle, Run It Twice */}
+          <div className="bg-[#0A100E] border border-[#1F2D28] rounded-xl p-3.5 space-y-3">
+            <fieldset className="border-0 p-0 m-0">
+              <legend className="text-xs font-semibold text-slate-200 mb-2 inline-flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+                {t('arena.anteLabel')}
+              </legend>
+              <div className="grid grid-cols-3 gap-1.5">
+                {ANTE_OPTIONS.map((ante) => {
+                  const active = activeAnte === ante;
+                  return (
+                    <button
+                      key={ante}
+                      type="button"
+                      data-testid={`setup-ante-${ante}`}
+                      aria-pressed={active}
+                      onClick={() => setDraft({ ...draft, anteBb: ante })}
+                      className={`px-2.5 py-1.5 text-xs font-mono tabular-nums rounded-lg border transition-colors cursor-pointer ${
+                        active
+                          ? 'bg-amber-400/20 border-amber-400 text-amber-200 font-semibold'
+                          : 'bg-[#111917] border-[#22332D] text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      {ante === 0 ? t('arena.anteOff') : `${ante}bb`}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                data-testid="setup-straddle-toggle"
+                aria-pressed={Boolean(draft.straddleEnabled)}
+                onClick={() =>
+                  setDraft({ ...draft, straddleEnabled: !draft.straddleEnabled })
+                }
+                className={`flex items-start gap-2.5 p-3 rounded-lg border text-left transition-colors cursor-pointer ${
+                  draft.straddleEnabled
+                    ? 'bg-amber-400/12 border-amber-400/50'
+                    : 'bg-[#111917] border-[#22332D] hover:border-slate-500'
+                }`}
+              >
+                <Zap
+                  className={`w-4 h-4 mt-0.5 shrink-0 ${
+                    draft.straddleEnabled ? 'text-amber-300' : 'text-slate-400'
+                  }`}
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="text-xs font-semibold text-white">{t('arena.straddle')}</p>
+                  <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
+                    {t('arena.straddleDesc')}
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                data-testid="setup-run-it-twice-toggle"
+                aria-pressed={Boolean(draft.runItTwiceEnabled)}
+                onClick={() =>
+                  setDraft({ ...draft, runItTwiceEnabled: !draft.runItTwiceEnabled })
+                }
+                className={`flex items-start gap-2.5 p-3 rounded-lg border text-left transition-colors cursor-pointer ${
+                  draft.runItTwiceEnabled
+                    ? 'bg-emerald-500/12 border-emerald-400/50'
+                    : 'bg-[#111917] border-[#22332D] hover:border-slate-500'
+                }`}
+              >
+                <Split
+                  className={`w-4 h-4 mt-0.5 shrink-0 ${
+                    draft.runItTwiceEnabled ? 'text-emerald-300' : 'text-slate-400'
+                  }`}
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="text-xs font-semibold text-white">{t('arena.runItTwice')}</p>
+                  <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
+                    {t('arena.runItTwiceDesc')}
+                  </p>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Coach Mode & RNG Randomizer */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <div className="sm:col-span-7 bg-[#0A100E] border border-[#1F2D28] rounded-xl p-3">
+              <fieldset className="border-0 p-0 m-0">
+                <legend className="text-xs font-semibold text-slate-200 mb-2 inline-flex items-center gap-1.5">
+                  <GraduationCap className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+                  {t('arena.coachMode')}
+                </legend>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {COACH_MODES.map((mode) => {
+                    const active = draftCoachMode === mode;
+                    const labelKey: TranslationKey =
+                      mode === 'off'
+                        ? 'arena.coachOff'
+                        : mode === 'after_hand'
+                          ? 'arena.coachAfter'
+                          : 'arena.coachLive';
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        data-testid={`setup-coach-${mode}`}
+                        aria-pressed={active}
+                        onClick={() => setDraftCoachMode(mode)}
+                        className={`px-2 py-2 text-xs font-medium rounded-lg border transition-colors cursor-pointer whitespace-nowrap ${
+                          active
+                            ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200 font-semibold'
+                            : 'bg-[#111917] border-[#22332D] text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        {t(labelKey)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            </div>
+
+            <button
+              type="button"
+              data-testid="setup-rng-toggle"
+              aria-pressed={draftRngEnabled}
+              onClick={() => setDraftRngEnabled((v) => !v)}
+              className={`sm:col-span-5 flex items-start gap-2.5 p-3 rounded-xl border text-left transition-colors cursor-pointer ${
+                draftRngEnabled
+                  ? 'bg-amber-400/12 border-amber-400/50'
+                  : 'bg-[#0A100E] border-[#1F2D28] hover:border-slate-500'
+              }`}
+            >
+              <Dices
+                className={`w-4 h-4 mt-0.5 shrink-0 ${
+                  draftRngEnabled ? 'text-amber-300' : 'text-slate-400'
+                }`}
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-xs font-semibold text-white">{t('arena.rngToggle')}</p>
+                <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
+                  {t('arena.rngDesc')}
+                </p>
+              </div>
+            </button>
+          </div>
+
           {/* Per-Seat Custom Bot Roster */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
@@ -517,6 +711,45 @@ export function ArenaSetupModal({
               </div>
             </button>
           </div>
+
+          {/* Optional Arena Challenge Quick Launch */}
+          {onSelectChallenge && ARENA_CHALLENGES.length > 0 && (
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center gap-1.5">
+                <Trophy className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+                <span className="text-xs font-semibold text-slate-200">
+                  {t('arena.challengesHeading')}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {ARENA_CHALLENGES.map((spec) => (
+                  <button
+                    key={spec.id}
+                    type="button"
+                    data-testid={`setup-challenge-${spec.id}`}
+                    onClick={() => {
+                      onSelectChallenge(spec);
+                      onClose();
+                    }}
+                    className="flex items-center justify-between gap-2.5 p-2.5 rounded-lg bg-[#0A100E] hover:bg-[#131F1B] border border-[#1F2D28] hover:border-amber-400/45 text-left transition-colors cursor-pointer"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">
+                        {locale === 'zh-CN' ? spec.titleZh : spec.titleEn}
+                      </p>
+                      <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                        {locale === 'zh-CN' ? spec.descZh : spec.descEn}
+                      </p>
+                    </div>
+                    <span className="px-2 py-1 text-[10px] font-semibold rounded bg-amber-400/15 border border-amber-400/35 text-amber-200 inline-flex items-center gap-1 shrink-0 whitespace-nowrap">
+                      <Play className="w-2.5 h-2.5" aria-hidden="true" />
+                      <span>{t('arena.challengeLaunch')}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer Actions */}
@@ -534,12 +767,22 @@ export function ArenaSetupModal({
             onClick={() => {
               const nextSbBb =
                 draftUnit === 'usd' ? getCashStakes(draftStakesId).sbBb : 0.5;
+              onChangeCoachMode?.(draftCoachMode);
+              onChangeRngEnabled?.(draftRngEnabled);
               onApply(
-                { ...draft, sbBb: nextSbBb },
+                {
+                  ...draft,
+                  sbBb: nextSbBb,
+                  anteBb: draft.anteBb ?? 0,
+                  straddleEnabled: Boolean(draft.straddleEnabled),
+                  runItTwiceEnabled: Boolean(draft.runItTwiceEnabled),
+                },
                 {
                   chipDisplayUnit: draftUnit,
                   cashStakesId: draftStakesId,
                   autoTopUp: draftAutoTopUp,
+                  coachMode: draftCoachMode,
+                  rngEnabled: draftRngEnabled,
                 }
               );
               onClose();

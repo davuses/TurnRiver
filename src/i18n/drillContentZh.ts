@@ -820,11 +820,25 @@ export function formatArenaAction(
     return translateActionText(locale, fallbackText);
   }
   const amt =
-    spec.amountBb !== undefined ? formatChips(spec.amountBb, display, { compact: true }) : '';
+    spec.amountBb !== undefined
+      ? display?.unit === 'usd'
+        ? formatChips(spec.amountBb, display, { compact: true })
+        : Math.abs(spec.amountBb * 10 - Math.round(spec.amountBb * 10)) > 1e-4
+          ? `${Number(spec.amountBb.toFixed(2))}bb`
+          : formatChips(spec.amountBb, display, { compact: true })
+      : '';
+
+  const kind = spec.kind as string;
 
   if (locale === 'en') {
     if (fallbackText && display?.unit !== 'usd') return fallbackText;
-    switch (spec.kind) {
+    switch (kind) {
+      case 'post_ante':
+        return amt ? `Posts Ante ${amt}` : 'Posts Ante';
+      case 'post_straddle':
+        return amt ? `Straddles ${amt}` : 'Straddles';
+      case 'show_hand':
+        return 'Shows hand';
       case 'post_sb':
         return `Posts SB ${amt}`.trim();
       case 'post_bb':
@@ -851,10 +865,18 @@ export function formatArenaAction(
         return amt ? `4-Bet to ${amt}` : '4-Bet';
       case 'all_in':
         return amt ? `All-In ${amt}` : 'All-In';
+      default:
+        return fallbackText;
     }
   }
 
-  switch (spec.kind) {
+  switch (kind) {
+    case 'post_ante':
+      return amt ? `下前注 ${amt}` : '下前注';
+    case 'post_straddle':
+      return amt ? `盲抓 ${amt}` : '盲抓';
+    case 'show_hand':
+      return '亮牌';
     case 'post_sb':
       return amt ? `下小盲 ${amt}` : '下小盲';
     case 'post_bb':
@@ -881,6 +903,8 @@ export function formatArenaAction(
       return amt ? `4-Bet 到 ${amt}` : '4-Bet';
     case 'all_in':
       return amt ? `全下到 ${amt}` : '全下';
+    default:
+      return translateActionText(locale, fallbackText);
   }
 }
 

@@ -398,6 +398,49 @@ describe('TurnRiver i18n EN / zh-CN locale support', () => {
       assert.equal(formatArenaAction('zh-CN', spec), zhExpected);
     }
 
+    // New arena action kinds: post_ante, post_straddle, show_hand
+    assert.equal(
+      formatArenaAction('en', { kind: 'post_ante' as TableActionSpec['kind'], amountBb: 0.1 }),
+      'Posts Ante 0.1bb'
+    );
+    assert.equal(
+      formatArenaAction('zh-CN', { kind: 'post_ante' as TableActionSpec['kind'], amountBb: 0.1 }),
+      '下前注 0.1bb'
+    );
+    assert.equal(
+      formatArenaAction('en', { kind: 'post_ante' as TableActionSpec['kind'], amountBb: 0.25 }),
+      'Posts Ante 0.25bb'
+    );
+    assert.equal(
+      formatArenaAction('zh-CN', { kind: 'post_ante' as TableActionSpec['kind'], amountBb: 0.25 }),
+      '下前注 0.25bb'
+    );
+    assert.equal(
+      formatArenaAction(
+        'zh-CN',
+        { kind: 'post_ante' as TableActionSpec['kind'], amountBb: 0.25 },
+        '',
+        { unit: 'usd', stakesId: 'nl200' }
+      ),
+      '下前注 $0.50'
+    );
+    assert.equal(
+      formatArenaAction('en', { kind: 'post_straddle' as TableActionSpec['kind'], amountBb: 2 }),
+      'Straddles 2bb'
+    );
+    assert.equal(
+      formatArenaAction('zh-CN', { kind: 'post_straddle' as TableActionSpec['kind'], amountBb: 2 }),
+      '盲抓 2bb'
+    );
+    assert.equal(
+      formatArenaAction('en', { kind: 'show_hand' as TableActionSpec['kind'] }),
+      'Shows hand'
+    );
+    assert.equal(
+      formatArenaAction('zh-CN', { kind: 'show_hand' as TableActionSpec['kind'] }),
+      '亮牌'
+    );
+
     assert.equal(formatSeatDisplayName('zh-CN', 'Hero (You)', true), '我方');
     assert.equal(formatSeatDisplayName('zh-CN', 'Hero (You)'), '我方');
     assert.equal(formatSeatDisplayName('zh-CN', 'Bot Luna', false), 'Bot Luna');
@@ -588,6 +631,26 @@ describe('TurnRiver i18n EN / zh-CN locale support', () => {
     assert.ok(!allKeys.includes('studio3d.resetCam'));
     assert.ok(!allKeys.includes('metric.avgScore'));
     assert.ok(allKeys.includes('common.close'), 'common.close is actively used and must be retained');
+
+    // Retired standalone Studio3DView keys are removed while embedded Studio3DTable keys remain
+    const retiredStudioKeys = [
+      'nav.studio3d',
+      'overview.mod.studio3d.title',
+      'overview.mod.studio3d.meta',
+      'overview.mod.studio3d.desc',
+      'overview.mod.studio3d.cta',
+      'overview.studio3dTag',
+      'overview.cta3D',
+      'studio3d.title',
+      'studio3d.subtitle',
+    ];
+    for (const deadKey of retiredStudioKeys) {
+      assert.ok(!allKeys.includes(deadKey), `Retired Studio3DView key should be removed: ${deadKey}`);
+    }
+    assert.ok(allKeys.includes('studio3d.camHero'), 'Embedded Studio3DTable keys must be retained');
+    assert.ok(allKeys.includes('overview.leaksCardTitle'), 'Overview Leak Tracker companion card keys must exist');
+    assert.ok(allKeys.includes('arena.flashbackBtn'), 'Flashback i18n keys must exist');
+    assert.ok(allKeys.includes('arena.challengeLaunch'), 'Arena Challenge i18n keys must exist');
 
     // 4. ?lang= URL query sync updates stale query param without mutating clean URLs
     assert.equal(

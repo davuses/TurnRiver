@@ -80,12 +80,16 @@ export interface DrillAttemptRecord {
   timestamp: number;
 }
 
+export type CoachMode = 'off' | 'after_hand' | 'live';
+
 export interface UserPreferences {
   fourColorDeck: boolean;
   soundEnabled: boolean;
   chipDisplayUnit?: ChipDisplayUnit;
   cashStakesId?: CashStakesId;
   autoTopUp?: boolean;
+  coachMode?: CoachMode;
+  rngEnabled?: boolean;
 }
 
 export interface MasterySummary {

@@ -2,6 +2,7 @@ import type { Card, DecisionGrade, Position, Street } from './types';
 import { accuracyFromGrade, gradeFromFrequency } from './types';
 import {
   canonicalHandKey,
+  cardKey,
   createDeck,
   evaluateHand,
   handStrengthScore,
@@ -50,6 +51,9 @@ export interface ArenaConfig {
   tableSize: ArenaSize;
   startingStackBb: 50 | 100 | 200;
   sbBb?: number;
+  anteBb?: number;
+  straddleEnabled?: boolean;
+  runItTwiceEnabled?: boolean;
   poolPreset: PoolPresetId;
   botArchetypes: BotArchetype[]; // Length = tableSize - 1
   heroPositionLock: HeroPositionLock;
@@ -64,6 +68,12 @@ export interface SeatHudStats {
   pfrHands: number;
   threeBetHands: number;
   threeBetOpps: number;
+  cbetOpps: number;
+  cbetHands: number;
+  foldToCbetOpps: number;
+  foldToCbetHands: number;
+  sawFlopHands: number;
+  wtsdHands: number;
   postflopAggActs: number;
   postflopCalls: number;
   handsWon: number;
@@ -73,12 +83,17 @@ export interface HudDisplayMetrics {
   vpipPct: number;
   pfrPct: number;
   threeBetPct: number;
+  cbetPct: number;
+  foldToCbetPct: number;
+  wtsdPct: number;
   af: string;
 }
 
 export type TableActionKind =
+  | 'post_ante'
   | 'post_sb'
   | 'post_bb'
+  | 'post_straddle'
   | 'blind'
   | 'fold'
   | 'folded'
@@ -89,7 +104,8 @@ export type TableActionKind =
   | 'raise'
   | 'three_bet'
   | 'four_bet'
-  | 'all_in';
+  | 'all_in'
+  | 'show_hand';
 
 export interface TableActionSpec {
   kind: TableActionKind;
@@ -144,6 +160,7 @@ export interface PotPayoutBreakdown {
   handLabel?: string;
   isSplit: boolean;
   isUncalledReturn?: boolean;
+  runBoard?: 1 | 2;
 }
 
 export interface WinnerSummarySpec {
@@ -175,6 +192,9 @@ export interface TableSeat {
   didPfrThisHand: boolean;
   didThreeBetThisHand: boolean;
   hadThreeBetOppThisHand: boolean;
+  didSawFlopThisHand?: boolean;
+  hadCbetOppThisHand?: boolean;
+  hadFoldToCbetOppThisHand?: boolean;
   stats: SeatHudStats;
 }
 
@@ -213,6 +233,7 @@ export interface PokerTableState {
   actingSeatIndex: number | null;
   preflopAggressorSeatIndex: number | null;
   preflopRaiseCount: number;
+  flopCbetActive?: boolean;
   potBb: number;
   currentBetBb: number;
   minRaiseBb: number;
@@ -226,6 +247,10 @@ export interface PokerTableState {
   winnerSummary: string | null;
   winnerSpec?: WinnerSummarySpec | null;
   winnerSeatIndices: number[];
+  rabbitHuntBoard?: Card[];
+  heroShowedUncontested?: boolean;
+  runItTwiceBoards?: [Card[], Card[]] | null;
+  awaitingRunItTwiceChoice?: boolean;
 }
 
 export const POSITIONS_BY_SIZE: Record<ArenaSize, Position[]> = {
@@ -344,11 +369,19 @@ export function createEmptyHudStats(): SeatHudStats {
     pfrHands: 0,
     threeBetHands: 0,
     threeBetOpps: 0,
+    cbetOpps: 0,
+    cbetHands: 0,
+    foldToCbetOpps: 0,
+    foldToCbetHands: 0,
+    sawFlopHands: 0,
+    wtsdHands: 0,
     postflopAggActs: 0,
     postflopCalls: 0,
     handsWon: 0,
   };
 }
+
+export const emptyHudStats = createEmptyHudStats;
 
 export function computeHudDisplay(stats: SeatHudStats): HudDisplayMetrics {
   const h = Math.max(1, stats.handsDealt);
@@ -358,6 +391,16 @@ export function computeHudDisplay(stats: SeatHudStats): HudDisplayMetrics {
     stats.threeBetOpps > 0
       ? Math.round((stats.threeBetHands / stats.threeBetOpps) * 100)
       : 0;
+  const cbetPct =
+    stats.cbetOpps > 0 ? Math.round((stats.cbetHands / stats.cbetOpps) * 100) : 0;
+  const foldToCbetPct =
+    stats.foldToCbetOpps > 0
+      ? Math.round((stats.foldToCbetHands / stats.foldToCbetOpps) * 100)
+      : 0;
+  const wtsdPct =
+    stats.sawFlopHands > 0
+      ? Math.round((stats.wtsdHands / stats.sawFlopHands) * 100)
+      : 0;
   const af =
     stats.postflopCalls === 0
       ? stats.postflopAggActs > 0
@@ -365,11 +408,12 @@ export function computeHudDisplay(stats: SeatHudStats): HudDisplayMetrics {
         : '—'
       : (stats.postflopAggActs / stats.postflopCalls).toFixed(1);
 
-  return { vpipPct, pfrPct, threeBetPct, af };
+  return { vpipPct, pfrPct, threeBetPct, cbetPct, foldToCbetPct, wtsdPct, af };
 }
 
 export function roundBb(v: number): number {
-  return Math.round(v * 10) / 10;
+  const rounded = Math.round(v * 100) / 100;
+  return Object.is(rounded, -0) ? 0 : rounded;
 }
 
 export function createTableFromConfig(config: ArenaConfig): PokerTableState {
@@ -399,6 +443,9 @@ export function createTableFromConfig(config: ArenaConfig): PokerTableState {
       didPfrThisHand: false,
       didThreeBetThisHand: false,
       hadThreeBetOppThisHand: false,
+      didSawFlopThisHand: false,
+      hadCbetOppThisHand: false,
+      hadFoldToCbetOppThisHand: false,
       stats: createEmptyHudStats(),
     },
     ...normalizedArchetypes.map((arch, i) => ({
@@ -419,6 +466,9 @@ export function createTableFromConfig(config: ArenaConfig): PokerTableState {
       didPfrThisHand: false,
       didThreeBetThisHand: false,
       hadThreeBetOppThisHand: false,
+      didSawFlopThisHand: false,
+      hadCbetOppThisHand: false,
+      hadFoldToCbetOppThisHand: false,
       stats: createEmptyHudStats(),
     })),
   ];
@@ -432,6 +482,7 @@ export function createTableFromConfig(config: ArenaConfig): PokerTableState {
     actingSeatIndex: null,
     preflopAggressorSeatIndex: null,
     preflopRaiseCount: 0,
+    flopCbetActive: false,
     potBb: 0,
     currentBetBb: 0,
     minRaiseBb: 1,
@@ -444,6 +495,10 @@ export function createTableFromConfig(config: ArenaConfig): PokerTableState {
     heroAudits: [],
     winnerSummary: null,
     winnerSeatIndices: [],
+    rabbitHuntBoard: undefined,
+    heroShowedUncontested: false,
+    runItTwiceBoards: null,
+    awaitingRunItTwiceChoice: false,
   };
 }
 
@@ -507,6 +562,9 @@ export function startNewHand(
       didPfrThisHand: false,
       didThreeBetThisHand: false,
       hadThreeBetOppThisHand: false,
+      didSawFlopThisHand: false,
+      hadCbetOppThisHand: false,
+      hadFoldToCbetOppThisHand: false,
       stats: {
         ...s.stats,
         handsDealt: s.stats.handsDealt + 1,
@@ -516,6 +574,31 @@ export function startNewHand(
 
   seats = assignPositions(seats, nextBtn, size);
 
+  const actionLog: TableActionLogItem[] = [];
+  let potBb = 0;
+
+  // Optional Antes: every seat with chips posts into potBb & totalInvestedBb (NOT streetBetBb or currentBetBb)
+  const anteTarget = roundBb(prev.config.anteBb ?? 0);
+  if (anteTarget > 0) {
+    for (const seat of seats) {
+      if (seat.stackBb <= 0) continue;
+      const posted = roundBb(Math.min(seat.stackBb, anteTarget));
+      if (posted <= 0) continue;
+      seat.stackBb = roundBb(seat.stackBb - posted);
+      seat.totalInvestedBb = roundBb(seat.totalInvestedBb + posted);
+      if (seat.stackBb <= 0) seat.allIn = true;
+      potBb = roundBb(potBb + posted);
+      actionLog.push({
+        street: 'preflop',
+        seatName: seat.name,
+        isHero: seat.isHero,
+        position: seat.position,
+        text: `Posts Ante ${posted}bb`,
+        actionSpec: { kind: 'post_ante', amountBb: posted },
+      });
+    }
+  }
+
   // Heads-Up rule: BTN posts SB (0.5bb) and acts FIRST preflop; BB posts 1bb and acts first postflop
   const sbSeat =
     size === 2
@@ -524,10 +607,10 @@ export function startNewHand(
   const bbSeat = seats.find((s) => s.position === 'BB')!;
 
   const postBlind = (seat: TableSeat, amount: number, kind: 'post_sb' | 'post_bb') => {
-    const posted = Math.min(seat.stackBb, amount);
+    const posted = roundBb(Math.min(seat.stackBb, amount));
     seat.stackBb = roundBb(seat.stackBb - posted);
-    seat.streetBetBb = roundBb(posted);
-    seat.totalInvestedBb = roundBb(posted);
+    seat.streetBetBb = roundBb(seat.streetBetBb + posted);
+    seat.totalInvestedBb = roundBb(seat.totalInvestedBb + posted);
     if (seat.stackBb <= 0) seat.allIn = true;
     seat.lastActionText = `Blind ${posted}bb`;
     seat.lastActionSpec = { kind, amountBb: posted };
@@ -536,9 +619,61 @@ export function startNewHand(
 
   const sbAmt = postBlind(sbSeat, roundBb(prev.config.sbBb ?? 0.5), 'post_sb');
   const bbAmt = postBlind(bbSeat, 1.0, 'post_bb');
+  potBb = roundBb(potBb + sbAmt + bbAmt);
 
+  actionLog.push(
+    {
+      street: 'preflop',
+      seatName: sbSeat.name,
+      isHero: sbSeat.isHero,
+      position: sbSeat.position,
+      text: `Posts SB ${sbAmt}bb`,
+      actionSpec: { kind: 'post_sb', amountBb: sbAmt },
+    },
+    {
+      street: 'preflop',
+      seatName: bbSeat.name,
+      isHero: bbSeat.isHero,
+      position: bbSeat.position,
+      text: `Posts BB ${bbAmt}bb`,
+      actionSpec: { kind: 'post_bb', amountBb: bbAmt },
+    }
+  );
+
+  let currentBetBb = 1.0;
+  let lastFullRaiseIncrementBb = 1.0;
+  let minRaiseBb = 2.0;
   // First preflop actor: seat immediately left of BB (in 2-max that wraps to BTN/SB!)
-  const firstPreflopIndex = (bbSeat.seatIndex + 1) % size;
+  let firstPreflopIndex = (bbSeat.seatIndex + 1) % size;
+
+  // Optional UTG Straddle (2.0bb live blind on 4-max+ tables)
+  if (prev.config.straddleEnabled && size >= 4) {
+    const utgIdx = (bbSeat.seatIndex + 1) % size;
+    const utgSeat = seats[utgIdx];
+    const straddleAmt = roundBb(Math.min(utgSeat.stackBb, 2.0));
+    if (straddleAmt > 0) {
+      utgSeat.stackBb = roundBb(utgSeat.stackBb - straddleAmt);
+      utgSeat.streetBetBb = roundBb(utgSeat.streetBetBb + straddleAmt);
+      utgSeat.totalInvestedBb = roundBb(utgSeat.totalInvestedBb + straddleAmt);
+      if (utgSeat.stackBb <= 0) utgSeat.allIn = true;
+      utgSeat.actedThisStreet = false; // Live option preflop!
+      utgSeat.lastActionText = `Straddle ${straddleAmt}bb`;
+      utgSeat.lastActionSpec = { kind: 'post_straddle', amountBb: straddleAmt };
+      potBb = roundBb(potBb + straddleAmt);
+      currentBetBb = Math.max(currentBetBb, straddleAmt);
+      lastFullRaiseIncrementBb = Math.max(1, roundBb(straddleAmt - 1));
+      minRaiseBb = roundBb(currentBetBb + lastFullRaiseIncrementBb);
+      actionLog.push({
+        street: 'preflop',
+        seatName: utgSeat.name,
+        isHero: utgSeat.isHero,
+        position: utgSeat.position,
+        text: `Straddles ${straddleAmt}bb`,
+        actionSpec: { kind: 'post_straddle', amountBb: straddleAmt },
+      });
+      firstPreflopIndex = (utgIdx + 1) % size;
+    }
+  }
 
   return {
     ...prev,
@@ -548,36 +683,24 @@ export function startNewHand(
     actingSeatIndex: firstPreflopIndex,
     preflopAggressorSeatIndex: null,
     preflopRaiseCount: 0,
-    potBb: roundBb(sbAmt + bbAmt),
-    currentBetBb: 1.0,
-    minRaiseBb: 2.0,
-    lastFullRaiseIncrementBb: 1.0,
+    flopCbetActive: false,
+    potBb,
+    currentBetBb,
+    minRaiseBb,
+    lastFullRaiseIncrementBb,
     callOnlySeatIndices: [],
     board: [],
     deck: deck.slice(cursor),
     seats,
-    actionLog: [
-      {
-        street: 'preflop',
-        seatName: sbSeat.name,
-        isHero: sbSeat.isHero,
-        position: sbSeat.position,
-        text: `Posts SB ${sbAmt}bb`,
-        actionSpec: { kind: 'post_sb', amountBb: sbAmt },
-      },
-      {
-        street: 'preflop',
-        seatName: bbSeat.name,
-        isHero: bbSeat.isHero,
-        position: bbSeat.position,
-        text: `Posts BB ${bbAmt}bb`,
-        actionSpec: { kind: 'post_bb', amountBb: bbAmt },
-      },
-    ],
+    actionLog,
     heroAudits: [],
     winnerSummary: null,
     winnerSpec: null,
     winnerSeatIndices: [],
+    rabbitHuntBoard: undefined,
+    heroShowedUncontested: false,
+    runItTwiceBoards: null,
+    awaitingRunItTwiceChoice: false,
   };
 }
 
@@ -613,6 +736,11 @@ export function settleAndStartNewHand(
   }
 
   let curr = state;
+  if (curr.awaitingRunItTwiceChoice) {
+    curr = resolveRunItTwice(curr, false);
+    return startNewHand(curr, rng);
+  }
+
   const hero = curr.seats[0];
   if (hero && !hero.folded) {
     if (curr.actingSeatIndex === 0) {
@@ -648,7 +776,9 @@ export function settleAndStartNewHand(
     guard++;
   }
 
-  if (curr.phase !== 'SHOWDOWN') {
+  if (curr.awaitingRunItTwiceChoice) {
+    curr = resolveRunItTwice(curr, false);
+  } else if (curr.phase !== 'SHOWDOWN') {
     curr = resolveShowdown(curr);
   }
 
@@ -1159,6 +1289,7 @@ export function resolveShowdown(state: PokerTableState): PokerTableState {
       ...state,
       phase: 'SHOWDOWN',
       actingSeatIndex: null,
+      awaitingRunItTwiceChoice: false,
       board,
       deck,
       seats,
@@ -1173,8 +1304,18 @@ export function resolveShowdown(state: PokerTableState): PokerTableState {
     };
   }
 
+  const dealtFlopAtShowdown = board.length < 3;
   while (board.length < 5 && deck.length > 0) {
     board.push(deck.shift()!);
+  }
+
+  for (const c of contenders) {
+    const seat = seats[c.seatIndex];
+    if (dealtFlopAtShowdown && !seat.didSawFlopThisHand) {
+      seat.didSawFlopThisHand = true;
+      seat.stats.sawFlopHands += 1;
+    }
+    seat.stats.wtsdHands += 1;
   }
 
   const evalBySeat = new Map<number, ReturnType<typeof evaluateHand>>();
@@ -1193,7 +1334,7 @@ export function resolveShowdown(state: PokerTableState): PokerTableState {
         eligibleSeatIndices: contenders.map((c) => c.seatIndex).sort((a, b) => a - b),
       },
     ];
-  } else if (slices.length > 0 && Math.abs(totalFromSlices - state.potBb) >= 0.05) {
+  } else if (slices.length > 0 && Math.abs(totalFromSlices - state.potBb) >= 0.005) {
     // Reconcile any floating-point rounding drift onto the main pot
     slices[0].amountBb = roundBb(slices[0].amountBb + (state.potBb - totalFromSlices));
   }
@@ -1279,6 +1420,7 @@ export function resolveShowdown(state: PokerTableState): PokerTableState {
       ...state,
       phase: 'SHOWDOWN',
       actingSeatIndex: null,
+      awaitingRunItTwiceChoice: false,
       board,
       deck,
       seats,
@@ -1316,6 +1458,7 @@ export function resolveShowdown(state: PokerTableState): PokerTableState {
     ...state,
     phase: 'SHOWDOWN',
     actingSeatIndex: null,
+    awaitingRunItTwiceChoice: false,
     board,
     deck,
     seats,
@@ -1332,17 +1475,333 @@ export function resolveShowdown(state: PokerTableState): PokerTableState {
   };
 }
 
+/**
+ * Reveals the remaining undealt community cards after an early uncontested fold
+ * without mutating stacks, pot, or live deck integrity.
+ */
+export function revealRabbitHunt(state: PokerTableState): PokerTableState {
+  if (state.phase !== 'SHOWDOWN' || state.board.length >= 5 || state.rabbitHuntBoard) {
+    return state;
+  }
+  const needed = 5 - state.board.length;
+  const usedKeys = new Set<string>();
+  for (const c of state.board) usedKeys.add(cardKey(c));
+  for (const s of state.seats) {
+    if (s.cards) {
+      usedKeys.add(cardKey(s.cards[0]));
+      usedKeys.add(cardKey(s.cards[1]));
+    }
+  }
+  const extra = state.deck.filter((c) => !usedKeys.has(cardKey(c))).slice(0, needed);
+  if (extra.length === 0) return state;
+
+  return {
+    ...state,
+    rabbitHuntBoard: [...state.board, ...extra],
+  };
+}
+
+/**
+ * Allows Hero to voluntarily flash their winning hand after winning a pot uncontested.
+ */
+export function toggleHeroShowHand(state: PokerTableState): PokerTableState {
+  if (
+    state.phase !== 'SHOWDOWN' ||
+    state.winnerSpec?.type !== 'uncontested' ||
+    !state.winnerSpec.winners.some((w) => w.isHero) ||
+    state.heroShowedUncontested
+  ) {
+    return state;
+  }
+  const hero = state.seats.find((s) => s.isHero);
+  if (!hero) return state;
+
+  const street: Street =
+    state.board.length >= 5
+      ? 'river'
+      : state.board.length === 4
+        ? 'turn'
+        : state.board.length === 3
+          ? 'flop'
+          : 'preflop';
+  const cardsSuffix = hero.cards
+    ? ` (${hero.cards[0].rank}${hero.cards[0].suit} ${hero.cards[1].rank}${hero.cards[1].suit})`
+    : '';
+
+  return {
+    ...state,
+    heroShowedUncontested: true,
+    actionLog: [
+      ...state.actionLog,
+      {
+        street,
+        seatName: hero.name,
+        isHero: true,
+        position: hero.position,
+        text: `Shows hand${cardsSuffix}`,
+        actionSpec: { kind: 'show_hand' },
+      },
+    ],
+  };
+}
+
+/**
+ * Resolves a paused all-in runout either once (normal showdown) or twice (two completely
+ * disjoint 5-card runouts splitting every contested pot slice 50/50 with exact chip conservation).
+ */
+export function resolveRunItTwice(state: PokerTableState, runTwice: boolean): PokerTableState {
+  if (state.phase === 'IDLE' || state.phase === 'SHOWDOWN') {
+    return state;
+  }
+  if (!runTwice) {
+    return resolveShowdown({
+      ...state,
+      awaitingRunItTwiceChoice: false,
+      runItTwiceBoards: null,
+    });
+  }
+
+  const contenders = activeSeats(state.seats);
+  const remaining = 5 - state.board.length;
+  if (contenders.length < 2 || remaining <= 0) {
+    return resolveShowdown({
+      ...state,
+      awaitingRunItTwiceChoice: false,
+      runItTwiceBoards: null,
+    });
+  }
+
+  const usedKeys = new Set<string>();
+  for (const c of state.board) usedKeys.add(cardKey(c));
+  for (const s of state.seats) {
+    if (s.cards) {
+      usedKeys.add(cardKey(s.cards[0]));
+      usedKeys.add(cardKey(s.cards[1]));
+    }
+  }
+  const availableDeck = state.deck.filter((c) => !usedKeys.has(cardKey(c)));
+  if (availableDeck.length < remaining * 2) {
+    return resolveShowdown({
+      ...state,
+      awaitingRunItTwiceChoice: false,
+      runItTwiceBoards: null,
+    });
+  }
+
+  const deck = [...availableDeck];
+  const runout1 = deck.splice(0, remaining);
+  const runout2 = deck.splice(0, remaining);
+  const board1: Card[] = [...state.board, ...runout1];
+  const board2: Card[] = [...state.board, ...runout2];
+
+  const seats = state.seats.map((s) => ({ ...s, stats: { ...s.stats } }));
+  const dealtFlopHere = state.board.length < 3;
+  for (const c of contenders) {
+    const seat = seats[c.seatIndex];
+    if (dealtFlopHere && !seat.didSawFlopThisHand) {
+      seat.didSawFlopThisHand = true;
+      seat.stats.sawFlopHands += 1;
+    }
+    seat.stats.wtsdHands += 1;
+  }
+
+  const evalBoard1 = new Map<number, ReturnType<typeof evaluateHand>>();
+  const evalBoard2 = new Map<number, ReturnType<typeof evaluateHand>>();
+  for (const c of contenders) {
+    evalBoard1.set(c.seatIndex, evaluateHand([...c.cards!, ...board1]));
+    evalBoard2.set(c.seatIndex, evaluateHand([...c.cards!, ...board2]));
+  }
+
+  let slices = buildSidePots(seats);
+  const totalFromSlices = roundBb(slices.reduce((sum, sl) => sum + sl.amountBb, 0));
+
+  if (slices.length === 0 && state.potBb > 0) {
+    slices = [
+      {
+        potIndex: 0,
+        amountBb: roundBb(state.potBb),
+        eligibleSeatIndices: contenders.map((c) => c.seatIndex).sort((a, b) => a - b),
+      },
+    ];
+  } else if (slices.length > 0 && Math.abs(totalFromSlices - state.potBb) >= 0.005) {
+    slices[0].amountBb = roundBb(slices[0].amountBb + (state.potBb - totalFromSlices));
+  }
+
+  const potBreakdowns: PotPayoutBreakdown[] = [];
+  const contestedWinnerSet = new Set<number>();
+  let nextPotIndex = 0;
+
+  const awardHalf = (
+    halfAmount: number,
+    eligibleSeatIndices: number[],
+    evalMap: Map<number, ReturnType<typeof evaluateHand>>,
+    runBoard: 1 | 2
+  ) => {
+    if (halfAmount <= 0) return;
+    const evaluated = eligibleSeatIndices.map((seatIndex) => ({
+      seatIndex,
+      eval: evalMap.get(seatIndex)!,
+    }));
+    const bestScore = Math.max(...evaluated.map((e) => e.eval.score));
+    const boardWinners = evaluated.filter((e) => e.eval.score === bestScore);
+    const splitShare = roundBb(halfAmount / boardWinners.length);
+    let distributed = 0;
+
+    const winnerPayouts = boardWinners.map((w, i) => {
+      const payoutBb =
+        i === boardWinners.length - 1 ? roundBb(halfAmount - distributed) : splitShare;
+      distributed = roundBb(distributed + payoutBb);
+      seats[w.seatIndex].stackBb = roundBb(seats[w.seatIndex].stackBb + payoutBb);
+      contestedWinnerSet.add(w.seatIndex);
+      return {
+        seatIndex: w.seatIndex,
+        name: seats[w.seatIndex].name,
+        isHero: seats[w.seatIndex].isHero,
+        position: seats[w.seatIndex].position,
+        payoutBb,
+      };
+    });
+
+    potBreakdowns.push({
+      potIndex: nextPotIndex++,
+      amountBb: halfAmount,
+      winners: winnerPayouts,
+      handLabel: boardWinners[0].eval.label,
+      isSplit: boardWinners.length > 1,
+      runBoard,
+    });
+  };
+
+  for (const slice of slices) {
+    if (slice.amountBb <= 0 || slice.eligibleSeatIndices.length === 0) continue;
+
+    // Uncalled excess bet returns intact without splitting across runouts
+    if (slice.eligibleSeatIndices.length === 1) {
+      const onlyIdx = slice.eligibleSeatIndices[0];
+      seats[onlyIdx].stackBb = roundBb(seats[onlyIdx].stackBb + slice.amountBb);
+      potBreakdowns.push({
+        potIndex: nextPotIndex++,
+        amountBb: slice.amountBb,
+        winners: [
+          {
+            seatIndex: onlyIdx,
+            name: seats[onlyIdx].name,
+            isHero: seats[onlyIdx].isHero,
+            position: seats[onlyIdx].position,
+            payoutBb: slice.amountBb,
+          },
+        ],
+        isSplit: false,
+        isUncalledReturn: true,
+      });
+      continue;
+    }
+
+    // Split contested slice 50/50 across Board 1 and Board 2, assigning any odd remainder cleanly to Board 1
+    const isTenthMultiple =
+      Math.abs(slice.amountBb * 10 - Math.round(slice.amountBb * 10)) < 1e-6;
+    const board2Amount = isTenthMultiple
+      ? Math.floor(Math.round(slice.amountBb * 10) / 2) / 10
+      : Math.floor(Math.round(slice.amountBb * 100) / 2) / 100;
+    const board1Amount = roundBb(slice.amountBb - board2Amount);
+
+    awardHalf(board1Amount, slice.eligibleSeatIndices, evalBoard1, 1);
+    awardHalf(board2Amount, slice.eligibleSeatIndices, evalBoard2, 2);
+  }
+
+  for (const seatIdx of contestedWinnerSet) {
+    seats[seatIdx].stats.handsWon += 1;
+  }
+
+  const contestedPots = potBreakdowns.filter((p) => !p.isUncalledReturn);
+  const winnerSeatIndices = Array.from(contestedWinnerSet);
+  const allWinnerEntries = winnerSeatIndices.map((idx) => ({
+    name: seats[idx].name,
+    isHero: seats[idx].isHero,
+    position: seats[idx].position,
+  }));
+
+  const parts = contestedPots.map((p) => {
+    const label = p.runBoard === 2 ? 'Board 2' : 'Board 1';
+    const names = p.winners.map((w) => `${w.name} (${w.position})`).join(' & ');
+    return p.isSplit
+      ? `${label} (${p.amountBb}bb): ${names} split with ${p.handLabel}`
+      : `${label} (${p.amountBb}bb): ${names} wins with ${p.handLabel}`;
+  });
+
+  const firstContested = contestedPots[0];
+  return {
+    ...state,
+    phase: 'SHOWDOWN',
+    actingSeatIndex: null,
+    awaitingRunItTwiceChoice: false,
+    runItTwiceBoards: [board1, board2],
+    board: board1,
+    deck,
+    seats,
+    winnerSeatIndices,
+    winnerSummary: `Run It Twice — ${parts.join(' · ')}.`,
+    winnerSpec: {
+      type: 'showdown',
+      winners: allWinnerEntries,
+      potBb: state.potBb,
+      handLabel: firstContested?.handLabel,
+      isSplit: winnerSeatIndices.length > 1 || contestedPots.some((p) => p.isSplit),
+      potBreakdowns,
+    },
+  };
+}
+
 function advanceStreet(state: PokerTableState): PokerTableState {
-  if (activeSeats(state.seats).length <= 1) {
+  const contenders = activeSeats(state.seats);
+  if (contenders.length <= 1) {
     return resolveShowdown(state);
   }
+
+  // Run It Twice pause: when all-in runout occurs with board < 5 and Hero contending
+  const contendersWithChips = contenders.filter((s) => !s.allIn && s.stackBb > 0);
+  const heroIsContender = contenders.some((s) => s.isHero);
+  if (
+    state.config.runItTwiceEnabled &&
+    state.board.length < 5 &&
+    !state.awaitingRunItTwiceChoice &&
+    contenders.length >= 2 &&
+    heroIsContender &&
+    contendersWithChips.length <= 1
+  ) {
+    const pausedSeats = state.seats.map((s) => ({
+      ...s,
+      streetBetBb: 0,
+      actedThisStreet: s.folded || s.allIn,
+      lastActionText: s.folded ? 'Folded' : s.allIn ? 'All-In' : '',
+      lastActionSpec: s.folded
+        ? ({ kind: 'folded' } as TableActionSpec)
+        : s.allIn
+          ? ({ kind: 'all_in' } as TableActionSpec)
+          : undefined,
+    }));
+    return {
+      ...state,
+      seats: pausedSeats,
+      currentBetBb: 0,
+      minRaiseBb: 1.0,
+      lastFullRaiseIncrementBb: 1.0,
+      callOnlySeatIndices: [],
+      flopCbetActive: false,
+      actingSeatIndex: null,
+      awaitingRunItTwiceChoice: true,
+    };
+  }
+
   const deck = [...state.deck];
   const board = [...state.board];
   let nextPhase: TablePhase = state.phase;
+  let dealingFlop = false;
 
   if (state.phase === 'PREFLOP') {
     board.push(deck.shift()!, deck.shift()!, deck.shift()!);
     nextPhase = 'FLOP';
+    dealingFlop = true;
   } else if (state.phase === 'FLOP') {
     board.push(deck.shift()!);
     nextPhase = 'TURN';
@@ -1353,17 +1812,24 @@ function advanceStreet(state: PokerTableState): PokerTableState {
     return resolveShowdown(state);
   }
 
-  const seats = state.seats.map((s) => ({
-    ...s,
-    streetBetBb: 0,
-    actedThisStreet: s.folded || s.allIn,
-    lastActionText: s.folded ? 'Folded' : s.allIn ? 'All-In' : '',
-    lastActionSpec: s.folded
-      ? ({ kind: 'folded' } as TableActionSpec)
-      : s.allIn
-        ? ({ kind: 'all_in' } as TableActionSpec)
-        : undefined,
-  }));
+  const seats = state.seats.map((s) => {
+    const incrementSawFlop = dealingFlop && !s.folded && !s.didSawFlopThisHand;
+    return {
+      ...s,
+      streetBetBb: 0,
+      actedThisStreet: s.folded || s.allIn,
+      didSawFlopThisHand: incrementSawFlop ? true : s.didSawFlopThisHand,
+      stats: incrementSawFlop
+        ? { ...s.stats, sawFlopHands: s.stats.sawFlopHands + 1 }
+        : s.stats,
+      lastActionText: s.folded ? 'Folded' : s.allIn ? 'All-In' : '',
+      lastActionSpec: s.folded
+        ? ({ kind: 'folded' } as TableActionSpec)
+        : s.allIn
+          ? ({ kind: 'all_in' } as TableActionSpec)
+          : undefined,
+    };
+  });
 
   if (canActSeats(seats).length <= 1) {
     return resolveShowdown({
@@ -1376,6 +1842,7 @@ function advanceStreet(state: PokerTableState): PokerTableState {
       minRaiseBb: 1.0,
       lastFullRaiseIncrementBb: 1.0,
       callOnlySeatIndices: [],
+      flopCbetActive: false,
     });
   }
 
@@ -1392,6 +1859,7 @@ function advanceStreet(state: PokerTableState): PokerTableState {
     minRaiseBb: 1.0,
     lastFullRaiseIncrementBb: 1.0,
     callOnlySeatIndices: [],
+    flopCbetActive: false,
     actingSeatIndex: firstActor,
   };
 }
@@ -1402,7 +1870,9 @@ export function applyPlayerAction(
   actionType: 'fold' | 'check' | 'call' | 'raise',
   raiseToBb?: number
 ): PokerTableState {
-  if (state.phase === 'IDLE' || state.phase === 'SHOWDOWN') return state;
+  if (state.phase === 'IDLE' || state.phase === 'SHOWDOWN' || state.awaitingRunItTwiceChoice) {
+    return state;
+  }
   if (state.actingSeatIndex !== seatIndex) return state;
 
   const seats = state.seats.map((s) => ({ ...s, stats: { ...s.stats } }));
@@ -1462,6 +1932,7 @@ export function applyPlayerAction(
   let callOnlySeatIndices = [...(state.callOnlySeatIndices ?? [])];
   let preflopAggressorSeatIndex = state.preflopAggressorSeatIndex;
   let preflopRaiseCount = state.preflopRaiseCount;
+  let flopCbetActive = Boolean(state.flopCbetActive);
   let actionText = '';
   let actionSpec: TableActionSpec = { kind: 'check' };
 
@@ -1474,6 +1945,38 @@ export function applyPlayerAction(
   ) {
     actor.hadThreeBetOppThisHand = true;
     actor.stats.threeBetOpps += 1;
+  }
+
+  // Record Flop C-Bet opportunity (PFR acting first on flop facing no bet) for both Hero & bots
+  if (
+    currentStreet === 'flop' &&
+    state.preflopAggressorSeatIndex === seatIndex &&
+    state.currentBetBb === 0 &&
+    legal.canBetOrRaise &&
+    !actor.hadCbetOppThisHand
+  ) {
+    actor.hadCbetOppThisHand = true;
+    actor.stats.cbetOpps += 1;
+    if (effectiveActionType === 'raise') {
+      actor.stats.cbetHands += 1;
+      flopCbetActive = true;
+    }
+  } else if (
+    // Record Fold-to-C-Bet opportunity (facing PFR's flop c-bet before any subsequent raise)
+    currentStreet === 'flop' &&
+    flopCbetActive &&
+    seatIndex !== state.preflopAggressorSeatIndex &&
+    legal.callAmountBb > 0 &&
+    !actor.hadFoldToCbetOppThisHand
+  ) {
+    actor.hadFoldToCbetOppThisHand = true;
+    actor.stats.foldToCbetOpps += 1;
+    if (effectiveActionType === 'fold') {
+      actor.stats.foldToCbetHands += 1;
+    }
+    if (effectiveActionType === 'raise') {
+      flopCbetActive = false;
+    }
   }
 
   if (effectiveActionType === 'fold') {
@@ -1609,6 +2112,7 @@ export function applyPlayerAction(
     callOnlySeatIndices,
     preflopAggressorSeatIndex,
     preflopRaiseCount,
+    flopCbetActive,
     seats,
     heroAudits,
     actionLog: [
