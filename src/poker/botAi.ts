@@ -1193,6 +1193,7 @@ export interface PostflopContext {
   streetRaiseCount: number;
   lastAggressorSeatIndex: number | null;
   lastAggressorArchetype: BotArchetype | 'Hero' | null;
+  hasCallingStationOpponent: boolean;
   effectiveStackBb: number;
   effectiveSpr: number;
   facingBetFracOfPot: number;
@@ -1360,6 +1361,9 @@ export function extractPostflopContext(
     lastAggressorSeatIndex !== null
       ? state.seats[lastAggressorSeatIndex]?.archetype ?? null
       : null;
+  const hasCallingStationOpponent = active.some(
+    (s) => s.seatIndex !== seatIndex && s.archetype === 'Calling Station'
+  );
 
   return {
     street,
@@ -1380,6 +1384,7 @@ export function extractPostflopContext(
     streetRaiseCount,
     lastAggressorSeatIndex,
     lastAggressorArchetype,
+    hasCallingStationOpponent,
     effectiveStackBb,
     effectiveSpr,
     facingBetFracOfPot,
@@ -1917,8 +1922,11 @@ function decidePostflopBotAction(
       // Thin value bet (smaller block-bet or medium bet), checks more multiway or on 4-flush/4-straight boards
       const scaryBoard = texture.isFourFlush || texture.isFourStraight;
       let valProb = scaryBoard ? 0.25 : ctx.isMultiway ? 0.42 : 0.68;
+      if (ctx.hasCallingStationOpponent && !scaryBoard && archetype !== 'Calling Station') {
+        valProb = Math.max(valProb, 0.92);
+      }
       if (archetype === 'Calling Station') valProb = 0.42;
-      if (rng() < clamp(valProb + cfg.barrelBias * 0.4, 0.1, 0.88)) {
+      if (rng() < clamp(valProb + cfg.barrelBias * 0.4, 0.1, 0.96)) {
         const intent: BetSizeIntent =
           ctx.isInPosition || scaryBoard || hand.rawStrength < 0.64 ? 'block' : 'standard';
         return {
@@ -1965,8 +1973,11 @@ function decidePostflopBotAction(
       riverBluffProb = 0.16 * cfg.riverBluffScale;
     }
     if (ctx.isMultiway) riverBluffProb *= 0.35;
-    if (ctx.lastAggressorArchetype === 'Calling Station' && archetype !== 'Maniac') {
-      riverBluffProb *= 0.35;
+    if (
+      (ctx.hasCallingStationOpponent || ctx.lastAggressorArchetype === 'Calling Station') &&
+      archetype !== 'Maniac'
+    ) {
+      riverBluffProb *= 0.08;
     }
 
     if (rng() < clamp(riverBluffProb, 0, 0.78)) {
