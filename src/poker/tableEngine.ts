@@ -46,10 +46,30 @@ export type PoolPresetId =
 
 export type HeroPositionLock = 'ROTATE' | 'BTN' | 'BB' | 'CO';
 export type BotSpeed = 'normal' | 'fast';
+export type ArenaFormat = 'cash' | 'sng_turbo_3' | 'sng_6max';
+
+export const SNG_BLIND_MULTIPLIERS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 25] as const;
+
+export function getSngBlindLevel(
+  handNumber: number,
+  format?: ArenaFormat
+): { level: number; multiplier: number; handsPerLevel: number } {
+  const handsPerLevel = format === 'sng_turbo_3' ? 3 : 5;
+  const idx = Math.min(
+    SNG_BLIND_MULTIPLIERS.length - 1,
+    Math.floor(Math.max(0, handNumber - 1) / handsPerLevel)
+  );
+  return {
+    level: idx + 1,
+    multiplier: SNG_BLIND_MULTIPLIERS[idx],
+    handsPerLevel,
+  };
+}
 
 export interface ArenaConfig {
   tableSize: ArenaSize;
   startingStackBb: 50 | 100 | 200;
+  arenaFormat?: ArenaFormat;
   sbBb?: number;
   anteBb?: number;
   straddleEnabled?: boolean;
@@ -541,22 +561,33 @@ export function startNewHand(
   const deck = shuffleDeck(createDeck(), rng);
   let cursor = 0;
 
-  // Auto top-up short stacks below 20% of starting stack for seamless practice
+  const isSng =
+    prev.config.arenaFormat === 'sng_turbo_3' || prev.config.arenaFormat === 'sng_6max';
+  const nextHandNum = prev.handNumber + 1;
+  const sngLevel = isSng ? getSngBlindLevel(nextHandNum, prev.config.arenaFormat) : null;
+  const blindMult = sngLevel ? sngLevel.multiplier : 1;
+
+  // Auto top-up short stacks below 20% of starting stack in cash mode; SNG never tops up busted seats
   const minThreshold = Math.max(15, defaultStack * 0.2);
   let seats: TableSeat[] = prev.seats.map((s) => {
-    const toppedStack = s.stackBb < minThreshold ? defaultStack : roundBb(s.stackBb);
-    const c1 = deck[cursor++];
-    const c2 = deck[cursor++];
+    const toppedStack = isSng
+      ? roundBb(Math.max(0, s.stackBb))
+      : s.stackBb < minThreshold
+        ? defaultStack
+        : roundBb(s.stackBb);
+    const busted = isSng && toppedStack <= 0;
+    const c1 = busted ? null : deck[cursor++];
+    const c2 = busted ? null : deck[cursor++];
     return {
       ...s,
       stackBb: toppedStack,
       streetBetBb: 0,
       totalInvestedBb: 0,
-      cards: [c1, c2],
-      folded: false,
+      cards: c1 && c2 ? [c1, c2] : null,
+      folded: busted,
       allIn: false,
-      actedThisStreet: false,
-      lastActionText: '',
+      actedThisStreet: busted,
+      lastActionText: busted ? 'Eliminated' : '',
       lastActionSpec: undefined,
       didVpipThisHand: false,
       didPfrThisHand: false,
@@ -567,7 +598,7 @@ export function startNewHand(
       hadFoldToCbetOppThisHand: false,
       stats: {
         ...s.stats,
-        handsDealt: s.stats.handsDealt + 1,
+        handsDealt: busted ? s.stats.handsDealt : s.stats.handsDealt + 1,
       },
     };
   });
@@ -577,11 +608,11 @@ export function startNewHand(
   const actionLog: TableActionLogItem[] = [];
   let potBb = 0;
 
-  // Optional Antes: every seat with chips posts into potBb & totalInvestedBb (NOT streetBetBb or currentBetBb)
-  const anteTarget = roundBb(prev.config.anteBb ?? 0);
+  // Optional Antes: every active seat with chips posts into potBb & totalInvestedBb (NOT streetBetBb or currentBetBb)
+  const anteTarget = roundBb((prev.config.anteBb ?? 0) * blindMult);
   if (anteTarget > 0) {
     for (const seat of seats) {
-      if (seat.stackBb <= 0) continue;
+      if (seat.folded || seat.stackBb <= 0) continue;
       const posted = roundBb(Math.min(seat.stackBb, anteTarget));
       if (posted <= 0) continue;
       seat.stackBb = roundBb(seat.stackBb - posted);
@@ -600,11 +631,17 @@ export function startNewHand(
   }
 
   // Heads-Up rule: BTN posts SB (0.5bb) and acts FIRST preflop; BB posts 1bb and acts first postflop
+  const activeSeats = seats.filter((s) => !s.folded && s.stackBb > 0);
   const sbSeat =
-    size === 2
-      ? seats.find((s) => s.position === 'BTN')!
-      : seats.find((s) => s.position === 'SB')!;
-  const bbSeat = seats.find((s) => s.position === 'BB')!;
+    (size === 2
+      ? seats.find((s) => s.position === 'BTN' && !s.folded)
+      : seats.find((s) => s.position === 'SB' && !s.folded)) ??
+    activeSeats[0] ??
+    seats[0];
+  const bbSeat =
+    seats.find((s) => s.position === 'BB' && !s.folded && s.seatIndex !== sbSeat.seatIndex) ??
+    activeSeats.find((s) => s.seatIndex !== sbSeat.seatIndex) ??
+    seats[1 % size];
 
   const postBlind = (seat: TableSeat, amount: number, kind: 'post_sb' | 'post_bb') => {
     const posted = roundBb(Math.min(seat.stackBb, amount));
@@ -617,8 +654,8 @@ export function startNewHand(
     return posted;
   };
 
-  const sbAmt = postBlind(sbSeat, roundBb(prev.config.sbBb ?? 0.5), 'post_sb');
-  const bbAmt = postBlind(bbSeat, 1.0, 'post_bb');
+  const sbAmt = postBlind(sbSeat, roundBb((prev.config.sbBb ?? 0.5) * blindMult), 'post_sb');
+  const bbAmt = postBlind(bbSeat, roundBb(1.0 * blindMult), 'post_bb');
   potBb = roundBb(potBb + sbAmt + bbAmt);
 
   actionLog.push(

@@ -1,11 +1,16 @@
 import { useMemo, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Check, Copy, Download, HardDrive, Trash2, Upload, X } from 'lucide-react';
 import type {
   DrillAttemptRecord,
   DrillModule,
   MasterySummary,
   Position,
 } from '../poker/types';
+import {
+  buildProgressBackupPayload,
+  encodeProgressBackupCode,
+  restoreProgressBackup,
+} from '../utils/progressBackup';
 import { GradeBadge } from '../components/GradeBadge';
 import { useLocale } from '../i18n/LocaleContext';
 import {
@@ -33,6 +38,45 @@ export function LeakTrackerView({
   const [gradeFilter, setGradeFilter] = useState<'all' | 'leaks'>('all');
   const [moduleFilter, setModuleFilter] = useState<DrillModule | 'all'>('all');
   const [confirmReset, setConfirmReset] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
+  const [backupCopied, setBackupCopied] = useState(false);
+  const [restoreInput, setRestoreInput] = useState('');
+  const [restoreStatus, setRestoreStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const handleCopyBackupCode = async () => {
+    try {
+      const code = encodeProgressBackupCode();
+      await navigator.clipboard.writeText(code);
+      setBackupCopied(true);
+      window.setTimeout(() => setBackupCopied(false), 1800);
+    } catch {
+      setRestoreStatus({ ok: false, msg: t('backup.copyFailed') });
+    }
+  };
+
+  const handleDownloadBackupJson = () => {
+    const payload = buildProgressBackupPayload();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `turnriver-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRestore = () => {
+    try {
+      const { restoredKeys } = restoreProgressBackup(restoreInput);
+      setRestoreStatus({
+        ok: true,
+        msg: `${t('backup.restoreOk')} (${restoredKeys.length})`,
+      });
+      window.setTimeout(() => window.location.reload(), 650);
+    } catch {
+      setRestoreStatus({ ok: false, msg: t('backup.restoreError') });
+    }
+  };
 
   const optimalRate =
     summary.totalDecisions > 0
@@ -123,6 +167,19 @@ export function LeakTrackerView({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            data-testid="open-backup-modal-btn"
+            onClick={() => {
+              setBackupOpen((v) => !v);
+              setRestoreStatus(null);
+            }}
+            className="min-h-[40px] px-3.5 py-2 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-200 hover:text-white hover:border-emerald-400/50 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+          >
+            <HardDrive className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+            <span>{t('backup.btnLabel')}</span>
+          </button>
+
           {!confirmReset ? (
             <button
               type="button"
@@ -157,6 +214,88 @@ export function LeakTrackerView({
           )}
         </div>
       </div>
+
+      {/* Zero-Account Backup / Restore Panel */}
+      {backupOpen && (
+        <section
+          data-testid="backup-restore-panel"
+          className="bg-[#0E1513] border border-emerald-400/35 rounded-xl p-5 space-y-4"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">{t('backup.title')}</h2>
+              <p className="text-xs text-slate-400 mt-0.5">{t('backup.desc')}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setBackupOpen(false)}
+              aria-label={t('common.cancel')}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#17231F] cursor-pointer"
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              data-testid="copy-backup-code-btn"
+              onClick={handleCopyBackupCode}
+              className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#04110C] inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              {backupCopied ? (
+                <Check className="w-3.5 h-3.5" aria-hidden="true" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+              )}
+              <span>{backupCopied ? t('backup.copied') : t('backup.copyCode')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadBackupJson}
+              className="px-3.5 py-2 text-xs font-medium rounded-lg bg-[#141E1B] border border-[#273A33] text-slate-200 hover:text-white inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>{t('backup.downloadJson')}</span>
+            </button>
+          </div>
+
+          <div className="space-y-2 border-t border-[#1C2A25] pt-3">
+            <label htmlFor="restore-backup-input" className="text-xs font-medium text-slate-300 block">
+              {t('backup.restoreLabel')}
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                id="restore-backup-input"
+                type="text"
+                value={restoreInput}
+                onChange={(e) => setRestoreInput(e.target.value)}
+                placeholder="TR1:..."
+                className="flex-1 rounded-lg bg-[#0A100E] border border-[#243630] px-3 py-2 text-xs font-mono text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
+              />
+              <button
+                type="button"
+                data-testid="restore-backup-btn"
+                disabled={!restoreInput.trim()}
+                onClick={handleRestore}
+                className="px-4 py-2 text-xs font-semibold rounded-lg bg-[#141E1B] border border-emerald-400/45 text-emerald-200 hover:bg-emerald-500 hover:text-[#04110C] disabled:opacity-40 inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                <Upload className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>{t('backup.restoreBtn')}</span>
+              </button>
+            </div>
+            {restoreStatus && (
+              <p
+                className={`text-xs ${
+                  restoreStatus.ok ? 'text-emerald-300' : 'text-rose-300'
+                }`}
+              >
+                {restoreStatus.msg}
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Headline Metrics */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[#1F2D28] border border-[#1F2D28] rounded-xl overflow-hidden">

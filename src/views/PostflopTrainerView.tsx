@@ -1,8 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ArrowRight,
+  Check,
   CheckCircle2,
   GitCompareArrows,
+  Link2,
   Palette,
   SlidersHorizontal,
   Volume2,
@@ -36,11 +38,14 @@ import {
   type TranslationKey,
 } from '../i18n/translations';
 import { localizePostflopSpot } from '../i18n/drillContentZh';
+import { copyShareUrl } from '../utils/shareLink';
 
 interface PostflopTrainerViewProps {
   prefs: UserPreferences;
+  initialSpotId?: string;
   onUpdatePrefs: (patch: Partial<UserPreferences>) => void;
   onRecordAttempt: (attempt: Omit<DrillAttemptRecord, 'id' | 'timestamp'>) => void;
+  onSpotEvaluated?: (spotId: string) => void;
 }
 
 const SEAT_ORDER: Position[] = ['BTN', 'SB', 'BB', 'UTG', 'HJ', 'CO'];
@@ -54,17 +59,24 @@ const DECISIVE_DETAIL_OPTIONS: { key: DecisiveDetailKey; labelKey: TranslationKe
 
 export function PostflopTrainerView({
   prefs,
+  initialSpotId,
   onUpdatePrefs,
   onRecordAttempt,
+  onSpotEvaluated,
 }: PostflopTrainerViewProps) {
   const { locale, t } = useLocale();
   const [streetFilter, setStreetFilter] = useState<Exclude<Street, 'preflop'> | 'ALL'>('ALL');
   const [potFilter, setPotFilter] = useState<PotType | 'ALL'>('ALL');
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'IP' | 'OOP'>('ALL');
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  const [spot, setSpot] = useState<PostflopDrillSpot>(() =>
-    generatePostflopSpot('ALL', 'ALL', 'ALL')
-  );
+  const [spot, setSpot] = useState<PostflopDrillSpot>(() => {
+    if (initialSpotId) {
+      const matched = generatePostflopSpotById(initialSpotId, { preserveSuits: true });
+      if (matched) return matched;
+    }
+    return generatePostflopSpot('ALL', 'ALL', 'ALL');
+  });
   const [evaluation, setEvaluation] = useState<DecisionEvaluation | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<DecisiveDetailKey | null>(null);
   const [detailNote, setDetailNote] = useState<string>('');
@@ -76,7 +88,25 @@ export function PostflopTrainerView({
     setSelectedDetail(null);
     setDetailNote('');
     setDetailError(false);
+    setCopiedLink(false);
   }, []);
+
+  useEffect(() => {
+    if (!initialSpotId) return;
+    const matched = generatePostflopSpotById(initialSpotId, { preserveSuits: true });
+    if (matched) {
+      setSpot(matched);
+      resetDecisionInputs();
+    }
+  }, [initialSpotId, resetDecisionInputs]);
+
+  const handleCopySpotLink = async () => {
+    const ok = await copyShareUrl({ view: 'postflop', spot: spot.id });
+    if (ok) {
+      setCopiedLink(true);
+      window.setTimeout(() => setCopiedLink(false), 1800);
+    }
+  };
 
   const dealNext = useCallback(
     (
@@ -129,6 +159,7 @@ export function PostflopTrainerView({
       grade: res.grade,
       accuracyScore: res.accuracyScore,
     });
+    onSpotEvaluated?.(spot.id);
   };
 
   const heroIdx = SEAT_ORDER.indexOf(spot.heroPos);
@@ -200,6 +231,20 @@ export function PostflopTrainerView({
           >
             <GitCompareArrows className="w-3.5 h-3.5" aria-hidden="true" />
             <span>{t('postflop.pairedDrillBtn')}</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="copy-postflop-link-btn"
+            onClick={handleCopySpotLink}
+            className="px-2.5 py-1.5 sm:py-2 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:border-emerald-400/50 hover:text-white inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+          >
+            {copiedLink ? (
+              <Check className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+            ) : (
+              <Link2 className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+            )}
+            <span>{copiedLink ? t('common.linkCopied') : t('common.copySpotLink')}</span>
           </button>
 
           {/* Mobile-only collapsible filter toggle (saves vertical height on <640px so table & buttons stay close) */}

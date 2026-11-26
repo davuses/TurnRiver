@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, Palette, Volume2, VolumeX } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowRight, Palette, RotateCcw, Timer, Volume2, VolumeX, Zap } from 'lucide-react';
 import type {
   DecisionEvaluation,
   DrillAttemptRecord,
@@ -29,7 +29,19 @@ interface PreflopLabViewProps {
   prefs: UserPreferences;
   onUpdatePrefs: (patch: Partial<UserPreferences>) => void;
   onRecordAttempt: (attempt: Omit<DrillAttemptRecord, 'id' | 'timestamp'>) => void;
+  onPreflopAnswered?: () => void;
 }
+
+interface BlitzRoundEntry {
+  spot: PreflopDrillSpot;
+  chosen: 'raise' | 'call' | 'fold' | 'timeout';
+  correct: boolean;
+  reactionMs: number;
+  bestAction: string;
+}
+
+const BLITZ_TOTAL_HANDS = 10;
+const BLITZ_SECONDS_PER_HAND = 6;
 
 const SCENARIO_OPTIONS: { value: PreflopScenarioType | 'ALL'; labelKey: TranslationKey }[] = [
   { value: 'ALL', labelKey: 'preflop.filterAll' },
@@ -45,6 +57,7 @@ export function PreflopLabView({
   prefs,
   onUpdatePrefs,
   onRecordAttempt,
+  onPreflopAnswered,
 }: PreflopLabViewProps) {
   const { locale, t } = useLocale();
   const [scenarioFilter, setScenarioFilter] = useState<PreflopScenarioType | 'ALL'>('ALL');
@@ -55,27 +68,52 @@ export function PreflopLabView({
   const [evaluation, setEvaluation] = useState<DecisionEvaluation | null>(null);
   const [inspectedHand, setInspectedHand] = useState<string | null>(null);
 
+  // 10-Hand Speed Blitz (Hot-or-Fold inspired 6s shot-clock mode)
+  const [blitzActive, setBlitzActive] = useState(false);
+  const [blitzEntries, setBlitzEntries] = useState<BlitzRoundEntry[]>([]);
+  const [blitzTimeLeftMs, setBlitzTimeLeftMs] = useState(BLITZ_SECONDS_PER_HAND * 1000);
+  const blitzSpotStartRef = useRef<number>(Date.now());
+  const blitzFinished = blitzActive && blitzEntries.length >= BLITZ_TOTAL_HANDS;
+
+  const startBlitz = useCallback(() => {
+    const next = generatePreflopSpot(scenarioFilter, positionFilter);
+    setSpot(next);
+    setEvaluation(null);
+    setInspectedHand(null);
+    setBlitzEntries([]);
+    setBlitzActive(true);
+    setBlitzTimeLeftMs(BLITZ_SECONDS_PER_HAND * 1000);
+    blitzSpotStartRef.current = Date.now();
+    playPokerSound('card', prefs.soundEnabled);
+  }, [scenarioFilter, positionFilter, prefs.soundEnabled]);
+
+  const stopBlitz = useCallback(() => {
+    setBlitzActive(false);
+    setBlitzEntries([]);
+    setEvaluation(null);
+  }, []);
+
   const dealNext = useCallback(
     (nextScenario = scenarioFilter, nextPos = positionFilter) => {
       const next = generatePreflopSpot(nextScenario, nextPos);
       setSpot(next);
       setEvaluation(null);
       setInspectedHand(null);
+      if (blitzActive) {
+        setBlitzTimeLeftMs(BLITZ_SECONDS_PER_HAND * 1000);
+        blitzSpotStartRef.current = Date.now();
+      }
       playPokerSound('card', prefs.soundEnabled);
     },
-    [scenarioFilter, positionFilter, prefs.soundEnabled]
+    [scenarioFilter, positionFilter, prefs.soundEnabled, blitzActive]
   );
 
   const handleAction = useCallback(
     (actionKey: 'raise' | 'call' | 'fold') => {
-      if (evaluation) return;
+      if (evaluation || blitzFinished) return;
       const result = evaluatePreflopDecision(spot, actionKey);
-      setEvaluation(result);
-      setInspectedHand(spot.handKey);
-      playPokerSound(
-        result.grade === 'Optimal' || result.grade === 'Acceptable' ? 'optimal' : 'mistake',
-        prefs.soundEnabled
-      );
+      const isGood = result.grade === 'Optimal' || result.grade === 'Acceptable';
+      playPokerSound(isGood ? 'optimal' : 'mistake', prefs.soundEnabled);
       onRecordAttempt({
         module: 'preflop',
         position: spot.template.heroPos,
@@ -88,9 +126,80 @@ export function PreflopLabView({
         grade: result.grade,
         accuracyScore: result.accuracyScore,
       });
+      onPreflopAnswered?.();
+
+      if (blitzActive) {
+        const reactionMs = Math.max(100, Date.now() - blitzSpotStartRef.current);
+        const entry: BlitzRoundEntry = {
+          spot,
+          chosen: actionKey,
+          correct: isGood,
+          reactionMs,
+          bestAction: result.bestAction,
+        };
+        setBlitzEntries((prev) => {
+          const nextEntries = [...prev, entry];
+          if (nextEntries.length < BLITZ_TOTAL_HANDS) {
+            const nextSpot = generatePreflopSpot(scenarioFilter, positionFilter);
+            setSpot(nextSpot);
+            setBlitzTimeLeftMs(BLITZ_SECONDS_PER_HAND * 1000);
+            blitzSpotStartRef.current = Date.now();
+          }
+          return nextEntries;
+        });
+        return;
+      }
+
+      setEvaluation(result);
+      setInspectedHand(spot.handKey);
     },
-    [evaluation, spot, prefs.soundEnabled, onRecordAttempt]
+    [
+      evaluation,
+      blitzFinished,
+      blitzActive,
+      spot,
+      prefs.soundEnabled,
+      onRecordAttempt,
+      onPreflopAnswered,
+      scenarioFilter,
+      positionFilter,
+    ]
   );
+
+  // Blitz 6-second shot clock
+  useEffect(() => {
+    if (!blitzActive || blitzFinished) return;
+    const id = window.setInterval(() => {
+      const elapsed = Date.now() - blitzSpotStartRef.current;
+      const remaining = Math.max(0, BLITZ_SECONDS_PER_HAND * 1000 - elapsed);
+      setBlitzTimeLeftMs(remaining);
+      if (remaining <= 0) {
+        const bestRes = evaluatePreflopDecision(spot, 'fold');
+        playPokerSound('mistake', prefs.soundEnabled);
+        setBlitzEntries((prev) => {
+          if (prev.length >= BLITZ_TOTAL_HANDS) return prev;
+          const nextEntries: BlitzRoundEntry[] = [
+            ...prev,
+            {
+              spot,
+              chosen: 'timeout',
+              correct: false,
+              reactionMs: BLITZ_SECONDS_PER_HAND * 1000,
+              bestAction: bestRes.bestAction,
+            },
+          ];
+          if (nextEntries.length < BLITZ_TOTAL_HANDS) {
+            const nextSpot = generatePreflopSpot(scenarioFilter, positionFilter);
+            setSpot(nextSpot);
+            setBlitzTimeLeftMs(BLITZ_SECONDS_PER_HAND * 1000);
+            blitzSpotStartRef.current = Date.now();
+          }
+          return nextEntries;
+        });
+      }
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [blitzActive, blitzFinished, spot, prefs.soundEnabled, scenarioFilter, positionFilter]);
 
   // Keyboard shortcuts: F = Fold, C = Call, R = Raise, Enter = Next Spot
   useEffect(() => {
@@ -223,6 +332,22 @@ export function PreflopLabView({
             </select>
           </label>
 
+          {/* Speed Blitz Toggle */}
+          <button
+            type="button"
+            data-testid="preflop-blitz-toggle"
+            aria-pressed={blitzActive}
+            onClick={() => (blitzActive ? stopBlitz() : startBlitz())}
+            className={`px-3 py-2 text-xs font-semibold rounded-lg border inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+              blitzActive
+                ? 'bg-amber-500/20 border-amber-400 text-amber-200'
+                : 'bg-[#0E1513] border-[#1F2D28] text-amber-300 hover:border-amber-400/50'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>{blitzActive ? t('preflop.exitBlitz') : t('preflop.speedBlitz')}</span>
+          </button>
+
           {/* Deck & Audio Controls */}
           <button
             type="button"
@@ -252,6 +377,116 @@ export function PreflopLabView({
           </button>
         </div>
       </div>
+
+      {/* Speed Blitz Live Shot Clock or Summary */}
+      {blitzActive && (
+        <div
+          data-testid="preflop-blitz-banner"
+          className="bg-[#0E1513] border border-amber-400/35 rounded-xl p-4 space-y-3"
+        >
+          {!blitzFinished ? (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 font-semibold text-amber-200">
+                  <Timer className="w-4 h-4 text-amber-400" aria-hidden="true" />
+                  <span>
+                    {t('preflop.speedBlitz')} · {blitzEntries.length + 1} / {BLITZ_TOTAL_HANDS}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 font-mono tabular-nums">
+                  <span className="text-emerald-300">
+                    {blitzEntries.filter((e) => e.correct).length}/{blitzEntries.length}{' '}
+                    {t('preflop.blitzHits')}
+                  </span>
+                  <span
+                    className={`font-semibold ${
+                      blitzTimeLeftMs <= 2000 ? 'text-rose-400' : 'text-amber-300'
+                    }`}
+                  >
+                    {(blitzTimeLeftMs / 1000).toFixed(1)}s
+                  </span>
+                </div>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-[#15221E] overflow-hidden">
+                <div
+                  className={`h-full transition-[width] duration-100 ${
+                    blitzTimeLeftMs <= 2000 ? 'bg-rose-500' : 'bg-amber-400'
+                  }`}
+                  style={{
+                    width: `${Math.round((blitzTimeLeftMs / (BLITZ_SECONDS_PER_HAND * 1000)) * 100)}%`,
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-white">
+                    {t('preflop.blitzComplete')} ·{' '}
+                    <span className="text-emerald-400 font-mono">
+                      {blitzEntries.filter((e) => e.correct).length} / {BLITZ_TOTAL_HANDS}
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400 font-mono tabular-nums">
+                    {t('preflop.blitzAvgTime')}:{' '}
+                    {(
+                      blitzEntries.reduce((s, e) => s + e.reactionMs, 0) /
+                      Math.max(1, blitzEntries.length) /
+                      1000
+                    ).toFixed(2)}
+                    s
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={startBlitz}
+                    className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#04110C] inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>{t('preflop.blitzAgain')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopBlitz}
+                    className="px-3 py-2 text-xs font-medium rounded-lg bg-[#141E1B] border border-[#243630] text-slate-300 hover:text-white cursor-pointer"
+                  >
+                    {t('preflop.exitBlitz')}
+                  </button>
+                </div>
+              </div>
+
+              {blitzEntries.some((e) => !e.correct) && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {blitzEntries
+                    .filter((e) => !e.correct)
+                    .map((miss, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setBlitzActive(false);
+                          setSpot(miss.spot);
+                          setEvaluation(
+                            evaluatePreflopDecision(
+                              miss.spot,
+                              miss.chosen === 'timeout' ? 'fold' : miss.chosen
+                            )
+                          );
+                          setInspectedHand(miss.spot.handKey);
+                        }}
+                        className="px-2.5 py-1 text-xs font-mono rounded-md bg-rose-500/15 border border-rose-400/40 text-rose-200 hover:border-rose-300 cursor-pointer"
+                      >
+                        {miss.spot.template.heroPos} {miss.spot.handKey} → {miss.bestAction}
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Two-Zone Studio Sandbox (65% Stage / 35% Analytics Deck) */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">

@@ -37,6 +37,7 @@ import {
   createTableFromConfig,
   DEFAULT_ARENA_CONFIG,
   getLegalActions,
+  getSngBlindLevel,
   rebuyHeroTo100,
   resolveRunItTwice,
   revealRabbitHunt,
@@ -55,7 +56,15 @@ import {
   type TableSeat,
   type WinnerSummarySpec,
 } from '../poker/tableEngine';
-import { cardKey, createDeck, describeHeroHand, shuffleDeck } from '../poker/evaluator';
+import {
+  cardKey,
+  compareShowdownCards,
+  createDeck,
+  describeHeroHand,
+  evaluateHand,
+  HandCategory,
+  shuffleDeck,
+} from '../poker/evaluator';
 import {
   ARENA_CHALLENGES,
   evaluateChallengeProgress,
@@ -75,10 +84,12 @@ import {
   type ChipDisplayUnit,
 } from '../poker/currency';
 import {
+  ALL_SHOWDOWN_STAMPS,
   COLOR_TAG_DOT,
   EMPTY_OPPONENT_NOTE,
   useArenaSessionStore,
   type HeroArenaLifetime,
+  type ShowdownHandStamp,
 } from '../store/useArenaSessionStore';
 import { PokerTableOval, type TableSeatDisplay } from '../components/PokerTableOval';
 import { Studio3DTable } from '../components/Studio3DTable';
@@ -109,8 +120,69 @@ import type { Seat3DSpec } from '../three/models';
 
 interface PlayTableViewProps {
   prefs: UserPreferences;
+  startRookieGuide?: boolean;
+  onDismissRookieGuide?: () => void;
   onUpdatePrefs: (patch: Partial<UserPreferences>) => void;
   onRecordAttempt: (attempt: Omit<DrillAttemptRecord, 'id' | 'timestamp'>) => void;
+}
+
+const STAMP_LABELS: Record<ShowdownHandStamp, { en: string; zh: string }> = {
+  high_card: { en: 'High Card', zh: '高牌' },
+  one_pair: { en: 'One Pair', zh: '一对' },
+  two_pair: { en: 'Two Pair', zh: '两对' },
+  trips: { en: 'Trips', zh: '三条' },
+  straight: { en: 'Straight', zh: '顺子' },
+  flush: { en: 'Flush', zh: '同花' },
+  full_house: { en: 'Full House', zh: '葫芦' },
+  quads: { en: 'Quads', zh: '四条' },
+  straight_flush: { en: 'Str. Flush', zh: '同花顺' },
+  royal_flush: { en: 'Royal Flush', zh: '皇家同花顺' },
+};
+
+const ROOKIE_GUIDE_STEPS: { en: string; zh: string }[] = [
+  {
+    en: 'Hand 1/5 · Your Hole Cards: Check your position (BTN/CO play wider than UTG) and pair strength before putting chips in.',
+    zh: '第 1/5 手 · 底牌与位置：先看座位（BTN/CO 可打得更宽，UTG 保持紧手），再决定入池。',
+  },
+  {
+    en: 'Hand 2/5 · Pot Odds & Price: Look at the "Need X%" badge above the action buttons—call draws when your equity beats the price.',
+    zh: '第 2/5 手 · 底池赔率：留意行动栏上方的“需胜率 X%”提示，听牌胜率高于所需赔率才值得跟注。',
+  },
+  {
+    en: 'Hand 3/5 · Board Texture: On dry boards (like K-7-2), small c-bets shine; on wet boards, protect strong pairs and respect raises.',
+    zh: '第 3/5 手 · 牌面结构：干燥面可用小尺度持续下注；湿润连张/同花面要保护成牌并尊重加注。',
+  },
+  {
+    en: 'Hand 4/5 · Best Five Cards: At showdown, the gold-ringed card shows the exact kicker or tiebreaker that decided the pot.',
+    zh: '第 4/5 手 · 最强五张牌：摊牌时，金框标注的牌就是最终打破平局的决胜踢脚。',
+  },
+  {
+    en: 'Hand 5/5 · Review & Improve: Click any opponent seat to inspect their 6-axis scouting profile, or open Replay to re-play a key spot.',
+    zh: '第 5/5 手 · 复盘提升：点击任意对手可查看六维风格画像，或在回放标签中从关键街重打。',
+  },
+];
+
+function categoryToStamp(category: HandCategory, tiebreakers: number[]): ShowdownHandStamp {
+  switch (category) {
+    case HandCategory.HighCard:
+      return 'high_card';
+    case HandCategory.OnePair:
+      return 'one_pair';
+    case HandCategory.TwoPair:
+      return 'two_pair';
+    case HandCategory.ThreeOfAKind:
+      return 'trips';
+    case HandCategory.Straight:
+      return 'straight';
+    case HandCategory.Flush:
+      return 'flush';
+    case HandCategory.FullHouse:
+      return 'full_house';
+    case HandCategory.FourOfAKind:
+      return 'quads';
+    case HandCategory.StraightFlush:
+      return tiebreakers[0] === 14 ? 'royal_flush' : 'straight_flush';
+  }
 }
 
 const ARCHETYPE_SHORT: Record<string, string> = {
@@ -267,10 +339,13 @@ function mapActionKindTo3D(kind?: TableActionKind): Seat3DSpec['actionKind'] {
 
 export function PlayTableView({
   prefs,
+  startRookieGuide = false,
+  onDismissRookieGuide,
   onUpdatePrefs,
   onRecordAttempt,
 }: PlayTableViewProps) {
   const { locale, t } = useLocale();
+  const [rookieBannerOpen, setRookieBannerOpen] = useState<boolean>(startRookieGuide);
   const chipDisplay: ChipDisplayConfig = useMemo(
     () => ({
       unit: prefs.chipDisplayUnit ?? 'bb',
@@ -285,8 +360,20 @@ export function PlayTableView({
     const initialUnit = prefs.chipDisplayUnit ?? 'bb';
     const initialSbBb =
       initialUnit === 'usd' ? getCashStakes(prefs.cashStakesId).sbBb : 0.5;
-    return startNewHand(createTableFromConfig({ ...DEFAULT_ARENA_CONFIG, sbBb: initialSbBb }));
+    const baseCfg = startRookieGuide
+      ? buildPresetConfig('microstakes', { ...DEFAULT_ARENA_CONFIG, sbBb: initialSbBb })
+      : { ...DEFAULT_ARENA_CONFIG, sbBb: initialSbBb };
+    return startNewHand(createTableFromConfig(baseCfg));
   });
+
+  useEffect(() => {
+    if (startRookieGuide) {
+      setRookieBannerOpen(true);
+      if ((prefs.coachMode ?? 'after_hand') === 'off') {
+        onUpdatePrefs({ coachMode: 'live' });
+      }
+    }
+  }, [startRookieGuide, prefs.coachMode, onUpdatePrefs]);
   const arenaStore = useArenaSessionStore();
   const coachMode: CoachMode = prefs.coachMode ?? 'after_hand';
   const rngEnabled = Boolean(prefs.rngEnabled);
@@ -380,6 +467,20 @@ export function PlayTableView({
         netBb: deltaBb,
         heroSeatDelta,
       });
+      if (!hero.folded && hero.cards && curr.board.length === 5) {
+        const evalRes = evaluateHand([...hero.cards, ...curr.board]);
+        arenaStore.recordHandStamp(categoryToStamp(evalRes.category, evalRes.tiebreakers));
+      }
+      const isSngFmt =
+        curr.config.arenaFormat === 'sng_turbo_3' || curr.config.arenaFormat === 'sng_6max';
+      if (isSngFmt) {
+        const alive = curr.seats.filter((s) => s.stackBb > 0);
+        if (hero.stackBb <= 0) {
+          arenaStore.recordSngResult(false);
+        } else if (alive.length === 1 && alive[0].isHero) {
+          arenaStore.recordSngResult(true);
+        }
+      }
       if (curr.heroAudits.length > 0) {
         const addedSum = curr.heroAudits.reduce((s, a) => s + a.accuracyScore, 0);
         setSessionAuditStats((prev) => ({
@@ -1616,6 +1717,59 @@ export function PlayTableView({
           </div>
         </div>
 
+        {/* Visual Best-5 Showdown Comparison with Gold Decider Highlight */}
+        {activeTable.board.length === 5 &&
+          activeTable.seats[0]?.cards &&
+          !activeTable.seats[0].folded &&
+          (() => {
+            const heroSeat = activeTable.seats[0];
+            const rival = activeTable.seats.find(
+              (s) => !s.isHero && !s.folded && Boolean(s.cards)
+            );
+            if (!rival || !heroSeat.cards || !rival.cards) return null;
+            const cmp = compareShowdownCards(heroSeat.cards, rival.cards, activeTable.board);
+            const decSet = new Set(cmp.decidingCardKeys);
+            return (
+              <div
+                data-testid="arena-showdown-best5"
+                className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2.5 border-t border-emerald-500/20"
+              >
+                <div className="space-y-1">
+                  <span className="text-[11px] text-emerald-300 font-medium block">
+                    {t('common.hero')} · {cmp.heroEval.label}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {cmp.heroEval.bestFive.map((c, idx) => (
+                      <PlayingCard
+                        key={idx}
+                        card={c}
+                        fourColor={prefs.fourColorDeck}
+                        size="xs"
+                        highlightState={decSet.has(cardKey(c)) ? 'decider' : 'used'}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[11px] text-sky-300 font-medium block">
+                    {rival.name} · {cmp.villainEval.label}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {cmp.villainEval.bestFive.map((c, idx) => (
+                      <PlayingCard
+                        key={idx}
+                        card={c}
+                        fourColor={prefs.fourColorDeck}
+                        size="xs"
+                        highlightState={decSet.has(cardKey(c)) ? 'decider' : 'used'}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
         {/* Run It Twice dual-board display */}
         {activeTable.runItTwiceBoards && (
           <div
@@ -2226,6 +2380,41 @@ export function PlayTableView({
             onResetBankroll={() => arenaStore.resetBankroll()}
             onLaunchChallenge={handleLaunchChallenge}
           />
+
+          {/* 10-Stamp Showdown Hand Collection & SNG Record */}
+          <div
+            data-testid="hand-stamp-collection"
+            className="mt-4 bg-[#0A100E] border border-[#1B2823] rounded-xl p-3.5 space-y-2.5"
+          >
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="font-semibold text-white">{t('arena.handStampsTitle')}</span>
+              <span className="font-mono tabular-nums text-emerald-300">
+                {arenaStore.handStamps.length} / {ALL_SHOWDOWN_STAMPS.length}
+                {arenaStore.sngPlayed > 0
+                  ? ` · SNG ${arenaStore.sngWins}/${arenaStore.sngPlayed}`
+                  : ''}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {ALL_SHOWDOWN_STAMPS.map((stamp) => {
+                const earned = arenaStore.handStamps.includes(stamp);
+                const lbl = locale === 'zh-CN' ? STAMP_LABELS[stamp].zh : STAMP_LABELS[stamp].en;
+                return (
+                  <div
+                    key={stamp}
+                    className={`px-2 py-1 rounded-md border text-[11px] flex items-center justify-between ${
+                      earned
+                        ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200 font-medium'
+                        : 'bg-[#0E1513] border-[#1A2622] text-slate-500'
+                    }`}
+                  >
+                    <span className="truncate">{lbl}</span>
+                    <span>{earned ? '✓' : '·'}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       ) : rightTab === 'feed' ? (
         /* Live or Replayed Table Action Feed Tab */
@@ -2552,6 +2741,23 @@ export function PlayTableView({
               >
                 {configBadgeText}
               </span>
+              {(activeTable.config.arenaFormat === 'sng_turbo_3' ||
+                activeTable.config.arenaFormat === 'sng_6max') && (() => {
+                const lvl = getSngBlindLevel(
+                  activeTable.handNumber,
+                  activeTable.config.arenaFormat
+                );
+                const aliveCount = activeTable.seats.filter((s) => s.stackBb > 0).length;
+                return (
+                  <span
+                    data-testid="arena-sng-badge"
+                    className="px-2 py-0.5 text-xs font-mono rounded-md bg-amber-500/15 border border-amber-400/45 text-amber-200"
+                  >
+                    SNG Lv.{lvl.level} · {lvl.multiplier}x · {aliveCount}/
+                    {activeTable.config.tableSize}
+                  </span>
+                );
+              })()}
               {sessionPnlNode}
             </div>
             <p className="hidden sm:block text-xs text-slate-400">
@@ -2760,6 +2966,32 @@ export function PlayTableView({
 
           {/* Flashback Practice Branch Banner */}
           {!theaterMode && flashbackBannerNode}
+
+          {/* 5-Hand Guided Rookie Welcome Strip */}
+          {!theaterMode && rookieBannerOpen && activeTable.handNumber <= 5 && (
+            <div
+              data-testid="rookie-guide-banner"
+              className="rounded-lg bg-amber-500/12 border border-amber-400/40 px-3.5 py-2.5 flex items-center justify-between gap-3 text-xs text-amber-100"
+            >
+              <span className="leading-relaxed">
+                {
+                  ROOKIE_GUIDE_STEPS[
+                    Math.min(ROOKIE_GUIDE_STEPS.length - 1, Math.max(0, activeTable.handNumber - 1))
+                  ][locale === 'zh-CN' ? 'zh' : 'en']
+                }
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setRookieBannerOpen(false);
+                  onDismissRookieGuide?.();
+                }}
+                className="px-2 py-1 text-[11px] font-medium rounded bg-[#0A100E]/80 border border-amber-400/35 text-amber-200 hover:text-white cursor-pointer whitespace-nowrap shrink-0"
+              >
+                {t('learn.skipTips')}
+              </button>
+            </div>
+          )}
 
           {/* Primary 3D Table (or optional 2D Classic) */}
           <div className={theaterMode ? 'flex-1 min-h-0' : ''}>

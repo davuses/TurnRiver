@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ArrowRight, BookOpen } from 'lucide-react';
+import { ArrowRight, BookOpen, CalendarCheck2, CheckCircle2, Play } from 'lucide-react';
 import type { DrillAttemptRecord, DrillModule, MasterySummary } from '../poker/types';
 import { FUNDAMENTALS_LESSONS } from '../poker/fundamentalsLessons';
+import type { DailySlotKind, DailyThreePlan } from '../poker/dailyChallenge';
 import { useFundamentalsStore } from '../store/useFundamentalsStore';
 import { useLocale } from '../i18n/LocaleContext';
 import type { TranslationKey } from '../i18n/translations';
@@ -10,7 +11,11 @@ import heroStudioImg from '../assets/images/hero_studio_table.webp';
 interface OverviewViewProps {
   summary: MasterySummary;
   attempts: DrillAttemptRecord[];
+  dailyPlan: DailyThreePlan;
+  dailyCompleted: DailySlotKind[];
   onNavigate: (view: 'learn' | DrillModule | 'leaks') => void;
+  onLaunchRookieTable: () => void;
+  onLaunchDailySlot: (slot: DailySlotKind) => void;
 }
 
 const CORE_DRILLS: {
@@ -50,7 +55,15 @@ const CORE_DRILLS: {
   },
 ];
 
-export function OverviewView({ summary, attempts, onNavigate }: OverviewViewProps) {
+export function OverviewView({
+  summary,
+  attempts,
+  dailyPlan,
+  dailyCompleted,
+  onNavigate,
+  onLaunchRookieTable,
+  onLaunchDailySlot,
+}: OverviewViewProps) {
   const [imgFailed, setImgFailed] = useState(false);
   const { t } = useLocale();
   const fundamentals = useFundamentalsStore();
@@ -247,14 +260,98 @@ export function OverviewView({ summary, attempts, onNavigate }: OverviewViewProp
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('learn')}
-            className="px-4 py-2.5 text-sm font-semibold rounded-lg bg-[#141E1B] hover:bg-emerald-500 text-[#F2F4F1] hover:text-[#04110C] border border-[#273A33] hover:border-emerald-400 inline-flex items-center gap-2 transition-colors duration-200 ease-out cursor-pointer whitespace-nowrap"
-          >
-            <span>{t('overview.learnCta')}</span>
-            <ArrowRight className="w-4 h-4" aria-hidden="true" />
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={onLaunchRookieTable}
+              data-testid="overview-rookie-table-btn"
+              className="px-4 py-2.5 text-sm font-semibold rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-400/45 inline-flex items-center gap-1.5 transition-colors duration-200 ease-out cursor-pointer whitespace-nowrap"
+            >
+              <Play className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>{t('learn.rookieTableCta')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate('learn')}
+              className="px-4 py-2.5 text-sm font-semibold rounded-lg bg-[#141E1B] hover:bg-emerald-500 text-[#F2F4F1] hover:text-[#04110C] border border-[#273A33] hover:border-emerald-400 inline-flex items-center gap-2 transition-colors duration-200 ease-out cursor-pointer whitespace-nowrap"
+            >
+              <span>{t('overview.learnCta')}</span>
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </div>
+        </section>
+
+        {/* UTC-Seeded Daily Three Workout (Zero Streak Punishment) */}
+        <section
+          data-testid="daily-three-card"
+          className="rounded-xl bg-[#0E1513] border border-[#1F2D28] p-5 sm:p-6 space-y-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <CalendarCheck2 className="w-5 h-5 text-[#E5B95C]" aria-hidden="true" />
+              <div>
+                <h2 className="text-base font-semibold text-[#F2F4F1]">
+                  {t('daily.title')}{' '}
+                  <span className="text-xs font-mono font-normal text-slate-400 ml-1">
+                    {dailyPlan.dateKey}
+                  </span>
+                </h2>
+                <p className="text-xs text-[#99A8A1]">{t('daily.subtitle')}</p>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 rounded-md text-xs font-mono tabular-nums bg-[#141E1B] border border-[#273A33] text-emerald-300">
+              {dailyCompleted.length} / 3 {t('daily.done')}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {(
+              [
+                {
+                  slot: 'preflop' as const,
+                  label: t('daily.slotPreflop'),
+                  detail: dailyPlan.preflopTitle,
+                },
+                {
+                  slot: 'postflop' as const,
+                  label: t('daily.slotPostflop'),
+                  detail: dailyPlan.postflopTitle,
+                },
+                {
+                  slot: 'showdown' as const,
+                  label: t('daily.slotShowdown'),
+                  detail: dailyPlan.showdownSlug.replace(/-/g, ' '),
+                },
+              ]
+            ).map((item) => {
+              const done = dailyCompleted.includes(item.slot);
+              return (
+                <button
+                  key={item.slot}
+                  type="button"
+                  data-testid={`daily-slot-${item.slot}`}
+                  onClick={() => onLaunchDailySlot(item.slot)}
+                  className={`text-left rounded-lg border px-4 py-3 flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                    done
+                      ? 'bg-emerald-500/12 border-emerald-400/45 text-emerald-100'
+                      : 'bg-[#0A100E] border-[#1F2D28] hover:border-emerald-400/50 text-slate-200'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-white">{item.label}</p>
+                    <p className="text-[11px] text-slate-400 truncate capitalize mt-0.5">
+                      {item.detail}
+                    </p>
+                  </div>
+                  {done ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
+                  ) : (
+                    <ArrowRight className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </section>
 
         {/* Core Gameplay Drills — Hairline Editorial Grid (zero decorative numbers or card cages) */}

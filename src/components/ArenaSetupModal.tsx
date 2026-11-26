@@ -20,6 +20,7 @@ import {
   POSITIONS_BY_SIZE,
   resizeConfigArchetypes,
   type ArenaConfig,
+  type ArenaFormat,
   type ArenaSize,
   type BotArchetype,
   type HeroPositionLock,
@@ -263,6 +264,64 @@ export function ArenaSetupModal({
                     }`}
                   >
                     {t(`arena.preset.${preset}` as TranslationKey)}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          {/* Game Format: Cash Game vs Solo Sit-and-Go Tournament */}
+          <fieldset className="border-0 p-0 m-0">
+            <legend className="text-xs font-semibold text-slate-200 mb-2 inline-flex items-center gap-1.5">
+              <Trophy className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+              {t('arena.formatTitle')}
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {(
+                [
+                  { id: 'cash' as ArenaFormat, label: t('arena.formatCash'), sub: t('arena.formatCashSub') },
+                  { id: 'sng_turbo_3' as ArenaFormat, label: t('arena.formatSng3'), sub: t('arena.formatSng3Sub') },
+                  { id: 'sng_6max' as ArenaFormat, label: t('arena.formatSng6'), sub: t('arena.formatSng6Sub') },
+                ]
+              ).map((fmt) => {
+                const active = (draft.arenaFormat ?? 'cash') === fmt.id;
+                return (
+                  <button
+                    key={fmt.id}
+                    type="button"
+                    data-testid={`format-${fmt.id}`}
+                    aria-pressed={active}
+                    onClick={() => {
+                      if (fmt.id === 'sng_turbo_3') {
+                        setDraft({
+                          ...draft,
+                          arenaFormat: 'sng_turbo_3',
+                          tableSize: 3,
+                          startingStackBb: 50,
+                          botArchetypes: resizeConfigArchetypes(draft.botArchetypes, 3),
+                          heroPositionLock: 'ROTATE',
+                        });
+                      } else if (fmt.id === 'sng_6max') {
+                        setDraft({
+                          ...draft,
+                          arenaFormat: 'sng_6max',
+                          tableSize: 6,
+                          startingStackBb: 100,
+                          botArchetypes: resizeConfigArchetypes(draft.botArchetypes, 6),
+                          heroPositionLock: 'ROTATE',
+                        });
+                      } else {
+                        setDraft({ ...draft, arenaFormat: 'cash' });
+                      }
+                    }}
+                    className={`px-3 py-2 text-left rounded-lg border transition-colors cursor-pointer ${
+                      active
+                        ? 'bg-amber-500/15 border-amber-400 text-amber-100'
+                        : 'bg-[#111917] border-[#22332D] text-slate-300 hover:border-slate-500'
+                    }`}
+                  >
+                    <span className="text-xs font-semibold block">{fmt.label}</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">{fmt.sub}</span>
                   </button>
                 );
               })}

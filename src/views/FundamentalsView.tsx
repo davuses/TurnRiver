@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { ArrowRight, BookOpen, CheckCircle2, RotateCcw } from 'lucide-react';
+import { ArrowRight, BookOpen, CheckCircle2, Play, RotateCcw } from 'lucide-react';
 import type { DrillModule, UserPreferences } from '../poker/types';
 import {
   FUNDAMENTALS_LESSONS,
   type FundamentalsLessonId,
 } from '../poker/fundamentalsLessons';
+import type { ShowdownPuzzleSlug } from '../poker/showdownPuzzles';
 import { useFundamentalsStore } from '../store/useFundamentalsStore';
 import { LessonInteractiveWidget } from '../components/fundamentals/LessonInteractiveWidget';
 import { PlayingCard } from '../components/PlayingCard';
@@ -14,10 +15,19 @@ import { translateModuleLabel } from '../i18n/translations';
 
 interface FundamentalsViewProps {
   prefs: UserPreferences;
+  initialPuzzleSlug?: string;
+  onSolvedPuzzle?: (slug: ShowdownPuzzleSlug) => void;
+  onLaunchRookieTable?: () => void;
   onNavigateDrill: (mod: DrillModule) => void;
 }
 
-export function FundamentalsView({ prefs, onNavigateDrill }: FundamentalsViewProps) {
+export function FundamentalsView({
+  prefs,
+  initialPuzzleSlug,
+  onSolvedPuzzle,
+  onLaunchRookieTable,
+  onNavigateDrill,
+}: FundamentalsViewProps) {
   const { locale, t } = useLocale();
   const store = useFundamentalsStore();
   const [activeId, setActiveId] = useState<FundamentalsLessonId>(FUNDAMENTALS_LESSONS[0].id);
@@ -175,7 +185,12 @@ export function FundamentalsView({ prefs, onNavigateDrill }: FundamentalsViewPro
           </div>
 
           {/* Tailored Interactive Visual Sandbox */}
-          <LessonInteractiveWidget lessonId={lesson.id} fourColor={prefs.fourColorDeck} />
+          <LessonInteractiveWidget
+            lessonId={lesson.id}
+            fourColor={prefs.fourColorDeck}
+            initialPuzzleSlug={initialPuzzleSlug}
+            onSolvedPuzzle={onSolvedPuzzle}
+          />
 
           {/* 3 Key Takeaways */}
           <div className="space-y-2.5 border-t border-[#1C2A25] pt-5">
@@ -294,16 +309,30 @@ export function FundamentalsView({ prefs, onNavigateDrill }: FundamentalsViewPro
 
           {/* Footer Bridge Actions */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#1C2A25] pt-5">
-            <button
-              type="button"
-              onClick={() => onNavigateDrill(lesson.targetModule)}
-              className="px-5 py-2.5 text-sm font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#04110C] inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
-            >
-              <span>
-                {t('learn.practiceNow')} {translateModuleLabel(locale, lesson.targetModule)}
-              </span>
-              <ArrowRight className="w-4 h-4" aria-hidden="true" />
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => onNavigateDrill(lesson.targetModule)}
+                className="px-5 py-2.5 text-sm font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#04110C] inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <span>
+                  {t('learn.practiceNow')} {translateModuleLabel(locale, lesson.targetModule)}
+                </span>
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              </button>
+
+              {onLaunchRookieTable && (
+                <button
+                  type="button"
+                  data-testid="launch-rookie-table-btn"
+                  onClick={onLaunchRookieTable}
+                  className="px-4 py-2.5 text-sm font-medium rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/45 text-amber-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <Play className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>{t('learn.rookieTableCta')}</span>
+                </button>
+              )}
+            </div>
 
             <button
               type="button"

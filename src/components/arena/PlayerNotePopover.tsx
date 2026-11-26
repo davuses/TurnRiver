@@ -33,6 +33,18 @@ const COLOR_TAGS: { id: PlayerColorTag; labelEn: string; labelZh: string; swatch
 
 const BLIND_READ_MIN_HANDS = 5;
 
+const BOT_TENDENCY_PROFILE: Record<
+  BotArchetype,
+  { open: number; threeBet: number; cbet: number; bluff: number; callDown: number; trap: number }
+> = {
+  'Balanced Reg': { open: 62, threeBet: 60, cbet: 66, bluff: 55, callDown: 58, trap: 48 },
+  'Tight-Aggressive': { open: 48, threeBet: 55, cbet: 72, bluff: 42, callDown: 46, trap: 36 },
+  'Loose-Aggressive': { open: 84, threeBet: 82, cbet: 78, bluff: 80, callDown: 56, trap: 52 },
+  'Calling Station': { open: 76, threeBet: 16, cbet: 34, bluff: 18, callDown: 92, trap: 24 },
+  'Tight Nit': { open: 26, threeBet: 24, cbet: 52, bluff: 15, callDown: 30, trap: 44 },
+  Maniac: { open: 95, threeBet: 94, cbet: 88, bluff: 92, callDown: 64, trap: 30 },
+};
+
 export function PlayerNotePopover({
   seat,
   note,
@@ -164,6 +176,43 @@ export function PlayerNotePopover({
               </div>
             ))}
           </div>
+
+          {/* 6-Axis Bot Tendency Profile (revealed when Blind Read is off or after guessing) */}
+          {!seat.isHero && revealArchetype && seat.archetype !== 'Hero' && (
+            <div
+              data-testid="bot-6axis-profile"
+              className="bg-[#0A100E] border border-[#1B2823] rounded-lg p-3 space-y-2"
+            >
+              <p className="text-[11px] font-semibold text-emerald-300">
+                {t('arena.scoutingProfileTitle')}
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                {(
+                  [
+                    { label: t('arena.axisOpen'), val: BOT_TENDENCY_PROFILE[seat.archetype].open },
+                    { label: t('arena.axis3Bet'), val: BOT_TENDENCY_PROFILE[seat.archetype].threeBet },
+                    { label: t('arena.axisCbet'), val: BOT_TENDENCY_PROFILE[seat.archetype].cbet },
+                    { label: t('arena.axisBluff'), val: BOT_TENDENCY_PROFILE[seat.archetype].bluff },
+                    { label: t('arena.axisCallDown'), val: BOT_TENDENCY_PROFILE[seat.archetype].callDown },
+                    { label: t('arena.axisTrap'), val: BOT_TENDENCY_PROFILE[seat.archetype].trap },
+                  ]
+                ).map((axis) => (
+                  <div key={axis.label} className="space-y-0.5">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-slate-400">{axis.label}</span>
+                      <span className="font-mono text-slate-300 tabular-nums">{axis.val}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-[#15221E] overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-emerald-400/80"
+                        style={{ width: `${axis.val}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Color Tag Picker */}
           <fieldset className="border-0 p-0 m-0 space-y-2">

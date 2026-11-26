@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { ArrowRight, Check, RotateCcw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, Check, Link2, RotateCcw } from 'lucide-react';
 import type { DrillAttemptRecord, UserPreferences } from '../poker/types';
 import {
   evaluateHandReading,
@@ -15,19 +15,44 @@ import { playPokerSound } from '../utils/sound';
 import { useLocale } from '../i18n/LocaleContext';
 import { translateQuickPreset } from '../i18n/translations';
 import { localizeHandReadingSpot } from '../i18n/drillContentZh';
+import { copyShareUrl } from '../utils/shareLink';
 
 interface HandReadingViewProps {
   prefs: UserPreferences;
+  initialSpotId?: string;
   onRecordAttempt: (attempt: Omit<DrillAttemptRecord, 'id' | 'timestamp'>) => void;
 }
 
-export function HandReadingView({ prefs, onRecordAttempt }: HandReadingViewProps) {
+export function HandReadingView({
+  prefs,
+  initialSpotId,
+  onRecordAttempt,
+}: HandReadingViewProps) {
   const { locale, t } = useLocale();
-  const [spotIndex, setSpotIndex] = useState(0);
+  const [spotIndex, setSpotIndex] = useState(() => {
+    if (initialSpotId) {
+      const idx = HAND_READING_SPOTS.findIndex((s) => s.id === initialSpotId);
+      if (idx >= 0) return idx;
+    }
+    return 0;
+  });
   const [selectedHands, setSelectedHands] = useState<Set<string>>(() => new Set());
   const [result, setResult] = useState<HandReadingResult | null>(null);
   const [matrixViewMode, setMatrixViewMode] = useState<'diff' | 'solver' | 'mine'>('diff');
   const [validationMsg, setValidationMsg] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  useEffect(() => {
+    if (!initialSpotId) return;
+    const idx = HAND_READING_SPOTS.findIndex((s) => s.id === initialSpotId);
+    if (idx >= 0) {
+      setSpotIndex(idx);
+      setSelectedHands(new Set());
+      setResult(null);
+      setValidationMsg(null);
+      setMatrixViewMode('diff');
+    }
+  }, [initialSpotId]);
 
   const spot = HAND_READING_SPOTS[spotIndex];
   const displaySpot = localizeHandReadingSpot(locale, spot);
@@ -132,6 +157,25 @@ export function HandReadingView({ prefs, onRecordAttempt }: HandReadingViewProps
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          data-testid="copy-reading-link-btn"
+          onClick={async () => {
+            const ok = await copyShareUrl({ view: 'reading', spot: spot.id });
+            if (ok) {
+              setCopiedLink(true);
+              window.setTimeout(() => setCopiedLink(false), 1800);
+            }
+          }}
+          className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:border-emerald-400/50 hover:text-white inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+        >
+          {copiedLink ? (
+            <Check className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+          ) : (
+            <Link2 className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+          )}
+          <span>{copiedLink ? t('common.linkCopied') : t('common.copySpotLink')}</span>
+        </button>
       </div>
 
       {/* Two-Zone Layout */}

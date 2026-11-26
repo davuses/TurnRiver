@@ -1,94 +1,24 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Check, ChevronLeft, ChevronRight, Link2, RotateCcw } from 'lucide-react';
 import type { Card, Position } from '../../poker/types';
 import type { FundamentalsLessonId } from '../../poker/fundamentalsLessons';
-import { evaluateHand } from '../../poker/evaluator';
+import { cardKey, compareShowdownCards } from '../../poker/evaluator';
 import { PREFLOP_TEMPLATES } from '../../poker/preflopRanges';
-import { PlayingCard } from '../PlayingCard';
+import {
+  SHOWDOWN_PUZZLES,
+  type ShowdownPuzzleSlug,
+} from '../../poker/showdownPuzzles';
+import { copyShareUrl } from '../../utils/shareLink';
+import { PlayingCard, type CardHighlightState } from '../PlayingCard';
 import { RangeMatrix13x13 } from '../RangeMatrix13x13';
 import { useLocale } from '../../i18n/LocaleContext';
 
 interface LessonInteractiveWidgetProps {
   lessonId: FundamentalsLessonId;
   fourColor: boolean;
+  initialPuzzleSlug?: string;
+  onSolvedPuzzle?: (slug: ShowdownPuzzleSlug) => void;
 }
-
-const SHOWDOWN_EXAMPLES: {
-  id: string;
-  labelEn: string;
-  labelZh: string;
-  board: Card[];
-  hero: [Card, Card];
-  villain: [Card, Card];
-  noteEn: string;
-  noteZh: string;
-}[] = [
-  {
-    id: 'kicker',
-    labelEn: 'Kicker Trap',
-    labelZh: '踢脚压制',
-    board: [
-      { rank: 'A', suit: 'c' },
-      { rank: '9', suit: 's' },
-      { rank: '9', suit: 'd' },
-      { rank: '4', suit: 'c' },
-      { rank: '2', suit: 'h' },
-    ],
-    hero: [
-      { rank: 'A', suit: 's' },
-      { rank: 'K', suit: 'd' },
-    ],
-    villain: [
-      { rank: 'A', suit: 'h' },
-      { rank: 'J', suit: 'c' },
-    ],
-    noteEn: 'Both make A-A-9-9, so the 5th card (K vs J) decides the pot.',
-    noteZh: '双方都是 A-A-9-9 两对，第 5 张牌（K 对 J）决定胜负。',
-  },
-  {
-    id: 'counterfeit',
-    labelEn: 'Board Counterfeit',
-    labelZh: '牌面反超',
-    board: [
-      { rank: 'Q', suit: 's' },
-      { rank: 'Q', suit: 'd' },
-      { rank: '8', suit: 'c' },
-      { rank: '8', suit: 'h' },
-      { rank: '3', suit: 's' },
-    ],
-    hero: [
-      { rank: '5', suit: 'c' },
-      { rank: '5', suit: 'd' },
-    ],
-    villain: [
-      { rank: 'A', suit: 'h' },
-      { rank: '4', suit: 'd' },
-    ],
-    noteEn: 'Pocket 5s get counterfeited: best 5 cards are Q-Q-8-8-A vs Q-Q-8-8-5.',
-    noteZh: '口袋 5 被牌面两对覆盖：最强 5 张是 Q-Q-8-8-A 击败 Q-Q-8-8-5。',
-  },
-  {
-    id: 'flush_vs_straight',
-    labelEn: 'Flush vs Straight',
-    labelZh: '同花压顺子',
-    board: [
-      { rank: 'J', suit: 'h' },
-      { rank: 'T', suit: 'h' },
-      { rank: '8', suit: 'c' },
-      { rank: '4', suit: 'h' },
-      { rank: '2', suit: 's' },
-    ],
-    hero: [
-      { rank: '9', suit: 'h' },
-      { rank: '7', suit: 'h' },
-    ],
-    villain: [
-      { rank: 'Q', suit: 'd' },
-      { rank: '9', suit: 's' },
-    ],
-    noteEn: 'Even a low Flush (J-high) beats a Queen-high Straight.',
-    noteZh: '即使是 J 高同花，也稳稳击败 Q 高顺子。',
-  },
-];
 
 const SEAT_GUIDE: {
   pos: Position;
@@ -213,12 +143,37 @@ const ARCHETYPE_CARDS: {
   },
 ];
 
-export function LessonInteractiveWidget({ lessonId, fourColor }: LessonInteractiveWidgetProps) {
+export function LessonInteractiveWidget({
+  lessonId,
+  fourColor,
+  initialPuzzleSlug,
+  onSolvedPuzzle,
+}: LessonInteractiveWidgetProps) {
   const { locale } = useLocale();
   const isZh = locale === 'zh-CN';
 
-  // Widget 1 state
-  const [showdownIdx, setShowdownIdx] = useState(0);
+  // Widget 1 state (10-puzzle Showdown Pack + Tap-the-Decider)
+  const [showdownIdx, setShowdownIdx] = useState(() => {
+    if (initialPuzzleSlug) {
+      const found = SHOWDOWN_PUZZLES.findIndex((p) => p.slug === initialPuzzleSlug);
+      if (found >= 0) return found;
+    }
+    return 0;
+  });
+  const [showdownGuess, setShowdownGuess] = useState<'hero' | 'villain' | 'split' | null>(null);
+  const [solvedSlugs, setSolvedSlugs] = useState<Set<ShowdownPuzzleSlug>>(() => new Set());
+  const [tappedCardKey, setTappedCardKey] = useState<string | null>(null);
+  const [copiedPuzzleLink, setCopiedPuzzleLink] = useState(false);
+
+  useEffect(() => {
+    if (!initialPuzzleSlug) return;
+    const found = SHOWDOWN_PUZZLES.findIndex((p) => p.slug === initialPuzzleSlug);
+    if (found >= 0) {
+      setShowdownIdx(found);
+      setShowdownGuess(null);
+      setTappedCardKey(null);
+    }
+  }, [initialPuzzleSlug]);
   // Widget 2 state
   const [selectedPos, setSelectedPos] = useState<Position>('BTN');
   // Widget 3 state
@@ -254,95 +209,435 @@ export function LessonInteractiveWidget({ lessonId, fourColor }: LessonInteracti
   }, [utgTemplate.matrix, matrixFilter]);
 
   if (lessonId === 'hand_rankings') {
-    const ex = SHOWDOWN_EXAMPLES[showdownIdx];
-    const heroEval = evaluateHand([...ex.hero, ...ex.board]);
-    const villainEval = evaluateHand([...ex.villain, ...ex.board]);
-    const heroWins = heroEval.score > villainEval.score;
+    const puzzle = SHOWDOWN_PUZZLES[showdownIdx] ?? SHOWDOWN_PUZZLES[0];
+    const comparison = compareShowdownCards(puzzle.hero, puzzle.villain, puzzle.board);
+    const isAnswered = showdownGuess !== null;
+    const isCorrect = showdownGuess === comparison.winner;
+    const decidingSet = new Set(comparison.decidingCardKeys);
+    const heroBestSet = new Set(comparison.heroBestKeys);
+    const villainBestSet = new Set(comparison.villainBestKeys);
+
+    const selectPuzzle = (idx: number) => {
+      const wrapped = (idx + SHOWDOWN_PUZZLES.length) % SHOWDOWN_PUZZLES.length;
+      setShowdownIdx(wrapped);
+      setShowdownGuess(null);
+      setTappedCardKey(null);
+      setCopiedPuzzleLink(false);
+    };
+
+    const handleGuess = (pick: 'hero' | 'villain' | 'split') => {
+      if (isAnswered) return;
+      setShowdownGuess(pick);
+      setTappedCardKey(null);
+      if (pick === comparison.winner) {
+        setSolvedSlugs((prev) => new Set(prev).add(puzzle.slug));
+        onSolvedPuzzle?.(puzzle.slug);
+      }
+    };
+
+    const handleCopyLink = async () => {
+      const ok = await copyShareUrl({ view: 'learn', puzzle: puzzle.slug });
+      if (ok) {
+        setCopiedPuzzleLink(true);
+        window.setTimeout(() => setCopiedPuzzleLink(false), 1800);
+      }
+    };
+
+    const cardStateFor = (
+      key: string,
+      sideBestSet: Set<string>
+    ): CardHighlightState => {
+      if (!isAnswered) return 'none';
+      if (decidingSet.has(key)) return 'decider';
+      return sideBestSet.has(key) ? 'used' : 'dimmed';
+    };
+
+    const showTapDecider =
+      isAnswered && Boolean(puzzle.tapDeciderTarget && puzzle.tapDeciderCardKey);
+    const tapTargetCards =
+      puzzle.tapDeciderTarget === 'hero' ? puzzle.hero : puzzle.villain;
+    const tapCorrect = tappedCardKey === puzzle.tapDeciderCardKey;
 
     return (
-      <div className="felt-surface rounded-xl border border-emerald-400/20 p-4 sm:p-5 space-y-4">
+      <div
+        data-testid="showdown-puzzle-pack"
+        className="felt-surface rounded-xl border border-emerald-400/20 p-4 sm:p-5 space-y-4"
+      >
+        {/* Top Bar: Stepper + Share Link */}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-xs font-semibold text-[#E5B95C]">
-            {isZh ? '交互演示 · 对比最佳 5 张成牌' : 'Interactive · Compare Best 5-Card Hands'}
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {SHOWDOWN_EXAMPLES.map((item, idx) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setShowdownIdx(idx)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer ${
-                  idx === showdownIdx
-                    ? 'bg-emerald-500 text-[#04110C] border-emerald-400 font-semibold'
-                    : 'bg-[#0A100E]/85 text-slate-300 border-[#22332D] hover:text-white'
-                }`}
-              >
-                {isZh ? item.labelZh : item.labelEn}
-              </button>
-            ))}
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-[#E5B95C]">
+                {isZh
+                  ? `摊牌谜题 ${showdownIdx + 1} / ${SHOWDOWN_PUZZLES.length}`
+                  : `Showdown Puzzle ${showdownIdx + 1} / ${SHOWDOWN_PUZZLES.length}`}
+              </span>
+              <span className="text-[11px] font-mono tabular-nums text-emerald-300">
+                {solvedSlugs.size}/{SHOWDOWN_PUZZLES.length}{' '}
+                {isZh ? '已破解' : 'solved'}
+              </span>
+            </div>
+            <p className="text-sm font-semibold text-white">
+              {puzzle.title[locale]}{' '}
+              <span className="text-xs font-normal text-slate-300">
+                — {puzzle.hook[locale]}
+              </span>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              data-testid="copy-puzzle-link-btn"
+              onClick={handleCopyLink}
+              className="px-2.5 py-1 text-xs font-medium rounded-md bg-[#0A100E]/90 border border-[#243630] text-slate-200 hover:border-emerald-400/60 hover:text-white inline-flex items-center gap-1 cursor-pointer whitespace-nowrap"
+            >
+              {copiedPuzzleLink ? (
+                <Check className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+              ) : (
+                <Link2 className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+              )}
+              <span>
+                {copiedPuzzleLink
+                  ? isZh
+                    ? '已复制链接'
+                    : 'Link Copied'
+                  : isZh
+                    ? '复制谜题链接'
+                    : 'Copy Link'}
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-label={isZh ? '上一题' : 'Previous puzzle'}
+              onClick={() => selectPuzzle(showdownIdx - 1)}
+              className="p-1.5 rounded-md bg-[#0A100E]/90 border border-[#243630] text-slate-300 hover:text-white cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label={isZh ? '下一题' : 'Next puzzle'}
+              onClick={() => selectPuzzle(showdownIdx + 1)}
+              className="p-1.5 rounded-md bg-[#0A100E]/90 border border-[#243630] text-slate-300 hover:text-white cursor-pointer"
+            >
+              <ChevronRight className="w-4 h-4" aria-hidden="true" />
+            </button>
           </div>
         </div>
 
+        {/* 10-Puzzle Quick Selector Strip */}
+        <div className="no-scrollbar flex items-center gap-1 overflow-x-auto pb-0.5">
+          {SHOWDOWN_PUZZLES.map((item, idx) => {
+            const active = idx === showdownIdx;
+            const done = solvedSlugs.has(item.slug);
+            return (
+              <button
+                key={item.slug}
+                type="button"
+                onClick={() => selectPuzzle(idx)}
+                className={`px-2 py-1 text-[11px] font-mono rounded border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  active
+                    ? 'bg-emerald-500 text-[#04110C] border-emerald-400 font-semibold'
+                    : done
+                      ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/40'
+                      : 'bg-[#0A100E]/80 text-slate-400 border-[#1F2D28] hover:text-white'
+                }`}
+              >
+                {idx + 1}
+                {done ? ' ✓' : ''}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Community Board */}
         <div className="flex flex-col items-center gap-3">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {ex.board.map((c, i) => (
-              <PlayingCard key={i} card={c} fourColor={fourColor} size="sm" />
-            ))}
+          <div className="space-y-1 text-center">
+            <span className="text-[11px] font-mono text-amber-200/80">
+              {isZh ? '公共牌 (5 张)' : 'Community Board'}
+            </span>
+            <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+              {puzzle.board.map((c, i) => {
+                const ck = cardKey(c);
+                const boardState: CardHighlightState = !isAnswered
+                  ? 'none'
+                  : decidingSet.has(ck)
+                    ? 'decider'
+                    : heroBestSet.has(ck) || villainBestSet.has(ck)
+                      ? 'used'
+                      : 'dimmed';
+                return (
+                  <PlayingCard
+                    key={i}
+                    card={c}
+                    fourColor={fourColor}
+                    size="sm"
+                    highlightState={boardState}
+                  />
+                );
+              })}
+            </div>
           </div>
 
+          {/* Hero vs Villain Hole Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
             <div
               className={`rounded-lg border p-3 flex items-center justify-between gap-3 ${
-                heroWins
+                isAnswered && comparison.winner === 'hero'
                   ? 'bg-emerald-500/15 border-emerald-400/60'
                   : 'bg-[#0A100E]/80 border-[#1F2D28]'
               }`}
             >
               <div className="space-y-1">
                 <span className="text-xs font-semibold text-white block">
-                  {isZh ? '我方 Hero' : 'Hero'}{' '}
-                  {heroWins && (
-                    <span className="text-emerald-300 ml-1">
+                  {isZh ? '我方 Hero' : 'Hero'}
+                  {isAnswered && comparison.winner === 'hero' && (
+                    <span className="text-emerald-300 ml-1.5">
                       {isZh ? '✓ 获胜' : '✓ Wins'}
                     </span>
                   )}
                 </span>
-                <span className="text-xs text-slate-300">{heroEval.label}</span>
+                <span className="text-xs text-slate-300">
+                  {isAnswered
+                    ? comparison.heroEval.label
+                    : isZh
+                      ? '先判断谁赢'
+                      : 'Who wins?'}
+                </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <PlayingCard card={ex.hero[0]} fourColor={fourColor} size="xs" highlighted={heroWins} />
-                <PlayingCard card={ex.hero[1]} fourColor={fourColor} size="xs" highlighted={heroWins} />
+                {puzzle.hero.map((c, i) => (
+                  <PlayingCard
+                    key={i}
+                    card={c}
+                    fourColor={fourColor}
+                    size="sm"
+                    highlightState={cardStateFor(cardKey(c), heroBestSet)}
+                  />
+                ))}
               </div>
             </div>
 
             <div
               className={`rounded-lg border p-3 flex items-center justify-between gap-3 ${
-                !heroWins
+                isAnswered && comparison.winner === 'villain'
                   ? 'bg-emerald-500/15 border-emerald-400/60'
                   : 'bg-[#0A100E]/80 border-[#1F2D28]'
               }`}
             >
               <div className="space-y-1">
                 <span className="text-xs font-semibold text-white block">
-                  {isZh ? '对手 Villain' : 'Villain'}{' '}
-                  {!heroWins && (
-                    <span className="text-emerald-300 ml-1">
+                  {isZh ? '对手 Villain' : 'Villain'}
+                  {isAnswered && comparison.winner === 'villain' && (
+                    <span className="text-emerald-300 ml-1.5">
                       {isZh ? '✓ 获胜' : '✓ Wins'}
                     </span>
                   )}
                 </span>
-                <span className="text-xs text-slate-300">{villainEval.label}</span>
+                <span className="text-xs text-slate-300">
+                  {isAnswered
+                    ? comparison.villainEval.label
+                    : isZh
+                      ? '先判断谁赢'
+                      : 'Who wins?'}
+                </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <PlayingCard card={ex.villain[0]} fourColor={fourColor} size="xs" highlighted={!heroWins} />
-                <PlayingCard card={ex.villain[1]} fourColor={fourColor} size="xs" highlighted={!heroWins} />
+                {puzzle.villain.map((c, i) => (
+                  <PlayingCard
+                    key={i}
+                    card={c}
+                    fourColor={fourColor}
+                    size="sm"
+                    highlightState={cardStateFor(cardKey(c), villainBestSet)}
+                  />
+                ))}
               </div>
             </div>
           </div>
 
-          <p className="text-xs text-emerald-100/90 text-center">
-            {isZh ? ex.noteZh : ex.noteEn}
-          </p>
+          {/* Active Guess Buttons */}
+          <div className="grid grid-cols-3 gap-2 w-full">
+            {(
+              [
+                { id: 'hero', en: 'Hero Wins', zh: '我方赢' },
+                { id: 'split', en: 'Split Pot', zh: '平分底池' },
+                { id: 'villain', en: 'Villain Wins', zh: '对手赢' },
+              ] as const
+            ).map((opt) => {
+              const picked = showdownGuess === opt.id;
+              const right = comparison.winner === opt.id;
+              let cls =
+                'bg-[#0A100E]/90 border-[#243630] text-slate-200 hover:border-emerald-400/60 hover:text-white';
+              if (isAnswered) {
+                if (right) {
+                  cls = 'bg-emerald-500/20 border-emerald-400 text-emerald-200 font-semibold';
+                } else if (picked) {
+                  cls = 'bg-rose-500/20 border-rose-400 text-rose-200';
+                } else {
+                  cls = 'bg-[#0A100E]/60 border-[#1B2823] text-slate-500';
+                }
+              }
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  data-testid={`showdown-guess-${opt.id}`}
+                  disabled={isAnswered}
+                  onClick={() => handleGuess(opt.id)}
+                  className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors cursor-pointer disabled:cursor-default ${cls}`}
+                >
+                  {isZh ? opt.zh : opt.en}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Post-Answer: Best-5 Side-by-Side Diff + Tap Deciding Card + Rule Takeaway */}
+          {isAnswered && (
+            <div className="w-full space-y-3 pt-1">
+              <div
+                className={`rounded-lg border px-3.5 py-2.5 text-xs leading-relaxed ${
+                  isCorrect
+                    ? 'bg-emerald-500/12 border-emerald-400/40 text-emerald-100'
+                    : 'bg-amber-500/12 border-amber-400/40 text-amber-100'
+                }`}
+              >
+                <span className="font-semibold mr-1.5">
+                  {isCorrect
+                    ? isZh
+                      ? '判断正确！'
+                      : 'Spot on!'
+                    : isZh
+                      ? '差一点——'
+                      : 'Not quite —'}
+                </span>
+                <span>{puzzle.explanation[locale]}</span>
+              </div>
+
+              {/* Best-5 Visual Comparison with Gold Decider Ring */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-[#08100D]/85 border border-[#1E2E28] rounded-lg p-3">
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-medium text-slate-300">
+                    {isZh ? '我方最佳 5 张' : 'Hero’s Best Five'} ·{' '}
+                    <span className="text-emerald-300">{comparison.heroEval.label}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {comparison.heroEval.bestFive.map((c, idx) => (
+                      <PlayingCard
+                        key={idx}
+                        card={c}
+                        fourColor={fourColor}
+                        size="xs"
+                        highlightState={decidingSet.has(cardKey(c)) ? 'decider' : 'used'}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-medium text-slate-300">
+                    {isZh ? '对手最佳 5 张' : 'Villain’s Best Five'} ·{' '}
+                    <span className="text-sky-300">{comparison.villainEval.label}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {comparison.villainEval.bestFive.map((c, idx) => (
+                      <PlayingCard
+                        key={idx}
+                        card={c}
+                        fourColor={fourColor}
+                        size="xs"
+                        highlightState={decidingSet.has(cardKey(c)) ? 'decider' : 'used'}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive "Tap the Deciding Card" Check */}
+              {showTapDecider && (
+                <div
+                  data-testid="tap-deciding-card-box"
+                  className="bg-[#0A100E]/90 border border-amber-400/35 rounded-lg p-3 flex flex-wrap items-center justify-between gap-3"
+                >
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-semibold text-amber-300">
+                      {isZh
+                        ? '加试：点击赢家手牌中打破平局的那张牌'
+                        : 'Bonus: Tap the winning side’s deciding card'}
+                    </p>
+                    {tappedCardKey && (
+                      <p
+                        className={`text-[11px] ${
+                          tapCorrect ? 'text-emerald-300' : 'text-rose-300'
+                        }`}
+                      >
+                        {tapCorrect
+                          ? isZh
+                            ? '✓ 找对了！就是这张关键牌决出胜负。'
+                            : '✓ Exact match — that card breaks the tie.'
+                          : isZh
+                            ? '不是这张，再点另一张试试。'
+                            : 'Not that one — tap the other hole card.'}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {tapTargetCards.map((c) => {
+                      const ck = cardKey(c);
+                      const pickedThis = tappedCardKey === ck;
+                      return (
+                        <PlayingCard
+                          key={ck}
+                          card={c}
+                          fourColor={fourColor}
+                          size="xs"
+                          highlightState={
+                            pickedThis && tapCorrect
+                              ? 'decider'
+                              : pickedThis
+                                ? 'dimmed'
+                                : 'none'
+                          }
+                          onClick={() => setTappedCardKey(ck)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Progressive Disclosure Rule Takeaway + Retry / Next */}
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-[#0A100E]/80 border border-[#1B2823] rounded-lg px-3 py-2">
+                <p className="text-[11px] text-slate-300">
+                  <span className="font-semibold text-[#E5B95C] mr-1">
+                    {isZh ? '决胜规则：' : 'What decides this hand:'}
+                  </span>
+                  {puzzle.ruleTakeaway[locale]}
+                </p>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowdownGuess(null);
+                      setTappedCardKey(null);
+                    }}
+                    className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-[#141E1B] border border-[#243630] text-slate-300 hover:text-white inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" aria-hidden="true" />
+                    <span>{isZh ? '重做' : 'Retry'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectPuzzle(showdownIdx + 1)}
+                    className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-500 hover:bg-emerald-400 text-[#04110C] cursor-pointer"
+                  >
+                    {isZh ? '下一题 →' : 'Next Puzzle →'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );

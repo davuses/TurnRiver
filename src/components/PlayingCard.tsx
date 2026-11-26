@@ -2,12 +2,16 @@ import type { Card, Suit } from '../poker/types';
 import { SUIT_SYMBOL } from '../poker/evaluator';
 import { useLocale } from '../i18n/LocaleContext';
 
+export type CardHighlightState = 'none' | 'used' | 'dimmed' | 'decider';
+
 interface PlayingCardProps {
   card?: Card;
   faceDown?: boolean;
   fourColor: boolean;
   size?: 'xs' | 'sm' | 'md' | 'lg';
   highlighted?: boolean;
+  highlightState?: CardHighlightState;
+  onClick?: () => void;
 }
 
 function suitColorClass(suit: Suit, fourColor: boolean): string {
@@ -53,6 +57,8 @@ export function PlayingCard({
   fourColor,
   size = 'md',
   highlighted = false,
+  highlightState = 'none',
+  onClick,
 }: PlayingCardProps) {
   const { locale, t } = useLocale();
   const s = SIZE_STYLES[size];
@@ -88,15 +94,36 @@ export function PlayingCard({
   const cardAriaLabel =
     locale === 'zh-CN' ? `${suitLabel} ${rankDisplay}` : `${rankDisplay} of ${suitLabel}`;
 
-  return (
-    <div
-      aria-label={cardAriaLabel}
-      className={`${s.box} playing-card-shadow relative bg-[#F8FAFC] border ${
-        highlighted
+  const stateClass =
+    highlightState === 'decider'
+      ? 'border-amber-400 ring-2 ring-amber-400/85 shadow-[0_0_12px_rgba(251,191,36,0.45)] -translate-y-0.5'
+      : highlightState === 'dimmed'
+        ? 'border-slate-300/60 opacity-40 saturate-50'
+        : highlightState === 'used' || highlighted
           ? 'border-emerald-400 ring-2 ring-emerald-400/50'
-          : 'border-slate-300'
-      } select-none shrink-0 flex flex-col justify-between p-1.5 transition-transform duration-150`}
-    >
+          : 'border-slate-300';
+
+  const baseClass = `${s.box} playing-card-shadow relative bg-[#F8FAFC] border ${stateClass} select-none shrink-0 flex flex-col justify-between p-1.5 transition-all duration-150 ${
+    onClick ? 'cursor-pointer hover:-translate-y-1 hover:ring-2 hover:ring-amber-300/80' : ''
+  }`;
+
+  if (onClick) {
+    return (
+      <button type="button" aria-label={cardAriaLabel} onClick={onClick} className={baseClass}>
+        <div className={`flex flex-col items-start ${colorClass}`}>
+          <span className={`${s.rank} font-mono tabular-nums tracking-tighter`}>
+            {rankDisplay}
+          </span>
+          <span className={s.cornerSuit}>{symbol}</span>
+        </div>
+        <div className={`self-center ${s.centerSuit} ${colorClass} -mt-1`}>{symbol}</div>
+        <div className="h-1" />
+      </button>
+    );
+  }
+
+  return (
+    <div aria-label={cardAriaLabel} className={baseClass}>
       <div className={`flex flex-col items-start ${colorClass}`}>
         <span className={`${s.rank} font-mono tabular-nums tracking-tighter`}>
           {rankDisplay}

@@ -1,8 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FUNDAMENTALS_LESSONS } from './fundamentalsLessons';
+import { SHOWDOWN_PUZZLES } from './showdownPuzzles';
+import { getDailyThreePlan } from './dailyChallenge';
+import { encodeProgressBackupCode, restoreProgressBackup } from '../utils/progressBackup';
 import {
   canonicalHandKey,
+  cardKey,
+  compareShowdownCards,
   createSuitRotation,
   describeHeroHand,
   evaluateHand,
@@ -43,6 +48,7 @@ import { evaluateMathAnswer, generateMathQuestion } from './mathDrills';
 import {
   ALL_BOT_ARCHETYPES,
   applyPlayerAction,
+  getSngBlindLevel,
   buildPresetConfig,
   buildSidePots,
   chooseBotAction,
@@ -2028,4 +2034,77 @@ test('FUNDAMENTALS_LESSONS have 6 bilingual lessons, valid options, zero duplica
       }
     }
   }
+});
+
+test('SHOWDOWN_PUZZLES have 10 unique bilingual puzzles with exact bestFive, accurate winners, and valid deciding cards', () => {
+  assert.equal(SHOWDOWN_PUZZLES.length, 10);
+  const slugs = new Set<string>();
+  for (const p of SHOWDOWN_PUZZLES) {
+    assert.ok(!slugs.has(p.slug), `Duplicate puzzle slug ${p.slug}`);
+    slugs.add(p.slug);
+    const allCards = [...p.board, ...p.hero, ...p.villain];
+    assert.equal(new Set(allCards.map(cardKey)).size, 9, `Duplicate card in puzzle ${p.slug}`);
+    const cmp = compareShowdownCards(p.hero, p.villain, p.board);
+    assert.equal(cmp.heroEval.bestFive.length, 5, `Hero bestFive length in ${p.slug}`);
+    assert.equal(cmp.villainEval.bestFive.length, 5, `Villain bestFive length in ${p.slug}`);
+    assert.equal(cmp.winner, p.winner, `Winner mismatch in puzzle ${p.slug}`);
+    if (p.winner !== 'split') {
+      assert.ok(cmp.decidingCardKeys.length > 0, `Expected decidingCardKeys in ${p.slug}`);
+    }
+    if (p.tapDeciderTarget && p.tapDeciderCardKey) {
+      const targetCards = p.tapDeciderTarget === 'hero' ? p.hero : p.villain;
+      assert.ok(
+        targetCards.some((c) => cardKey(c) === p.tapDeciderCardKey),
+        `tapDeciderCardKey ${p.tapDeciderCardKey} not in ${p.tapDeciderTarget} hole cards for ${p.slug}`
+      );
+    }
+  }
+});
+
+test('getDailyThreePlan is deterministic per UTC date and backup code round-trips cleanly', () => {
+  const a = getDailyThreePlan('2026-11-27');
+  const b = getDailyThreePlan('2026-11-27');
+  assert.deepEqual(a, b);
+  assert.ok(a.preflopTemplateId.length > 0 && a.postflopSpotId.length > 0 && a.showdownSlug.length > 0);
+
+  const mockStore = new Map<string, string>([
+    ['feltlab_summary_v1', JSON.stringify({ totalDecisions: 12, optimalCount: 10 })],
+    ['turnriver_daily_v1', JSON.stringify({ dateKey: '2026-11-27', completed: ['preflop'] })],
+  ]);
+  const code = encodeProgressBackupCode({ getItem: (k) => mockStore.get(k) ?? null });
+  assert.ok(code.startsWith('TR1:'));
+
+  const restored = new Map<string, string>();
+  const { restoredKeys } = restoreProgressBackup(code, {
+    setItem: (k, v) => {
+      restored.set(k, v);
+    },
+  });
+  assert.equal(restoredKeys.length, 2);
+  assert.equal(restored.get('feltlab_summary_v1'), mockStore.get('feltlab_summary_v1'));
+});
+
+test('SNG tournament mode escalates blinds by hand count and eliminates busted seats without rebuys', () => {
+  assert.equal(getSngBlindLevel(1, 'sng_turbo_3').multiplier, 1);
+  assert.equal(getSngBlindLevel(4, 'sng_turbo_3').multiplier, 1.5);
+  assert.equal(getSngBlindLevel(6, 'sng_6max').multiplier, 1.5);
+
+  const base = createTableFromConfig({
+    ...DEFAULT_ARENA_CONFIG,
+    arenaFormat: 'sng_turbo_3',
+    tableSize: 3,
+    startingStackBb: 50,
+    botArchetypes: ['Balanced Reg', 'Loose-Aggressive'],
+  });
+  const withBust: PokerTableState = {
+    ...base,
+    handNumber: 3, // Next hand is #4 -> Level 2 (1.5x blinds)
+    seats: base.seats.map((s, idx) => (idx === 2 ? { ...s, stackBb: 0 } : s)),
+  };
+  const next = startNewHand(withBust, () => 0.42);
+  assert.equal(next.seats[2].stackBb, 0, 'Busted SNG seat must not be auto topped up');
+  assert.equal(next.seats[2].folded, true, 'Busted SNG seat must start folded');
+  assert.equal(next.seats[2].cards, null, 'Busted SNG seat must not be dealt hole cards');
+  // Level 2 blinds: SB 0.75 (rounded 0.8), BB 1.5 -> potBb = 2.3
+  assert.ok(next.potBb >= 2.2, `Expected escalated SNG blinds pot >= 2.2bb, got ${next.potBb}`);
 });

@@ -75,6 +75,31 @@ export const EMPTY_OPPONENT_NOTE: OpponentScoutingNote = {
   note: '',
 };
 
+export type ShowdownHandStamp =
+  | 'high_card'
+  | 'one_pair'
+  | 'two_pair'
+  | 'trips'
+  | 'straight'
+  | 'flush'
+  | 'full_house'
+  | 'quads'
+  | 'straight_flush'
+  | 'royal_flush';
+
+export const ALL_SHOWDOWN_STAMPS: ShowdownHandStamp[] = [
+  'high_card',
+  'one_pair',
+  'two_pair',
+  'trips',
+  'straight',
+  'flush',
+  'full_house',
+  'quads',
+  'straight_flush',
+  'royal_flush',
+];
+
 interface PersistedArenaSession {
   bankrollBb: number;
   sessionPoints: SessionPoint[];
@@ -82,6 +107,9 @@ interface PersistedArenaSession {
   sessionHands: number;
   heroLifetime: HeroArenaLifetime;
   completedChallengeIds: ArenaChallengeId[];
+  handStamps: ShowdownHandStamp[];
+  sngWins: number;
+  sngPlayed: number;
 }
 
 const DEFAULT_PERSISTED_SESSION: PersistedArenaSession = {
@@ -91,6 +119,9 @@ const DEFAULT_PERSISTED_SESSION: PersistedArenaSession = {
   sessionHands: 0,
   heroLifetime: EMPTY_HERO_LIFETIME,
   completedChallengeIds: [],
+  handStamps: [],
+  sngWins: 0,
+  sngPlayed: 0,
 };
 
 function roundTenth(val: number): number {
@@ -140,6 +171,12 @@ function loadPersistedSession(): PersistedArenaSession {
     const completedChallengeIds = Array.isArray(parsed.completedChallengeIds)
       ? (parsed.completedChallengeIds.filter((id) => typeof id === 'string') as ArenaChallengeId[])
       : [];
+    const validStampSet = new Set<string>(ALL_SHOWDOWN_STAMPS);
+    const handStamps = Array.isArray(parsed.handStamps)
+      ? (parsed.handStamps.filter(
+          (s): s is ShowdownHandStamp => typeof s === 'string' && validStampSet.has(s)
+        ))
+      : [];
 
     return {
       bankrollBb: roundTenth(safeFinite(parsed.bankrollBb, DEFAULT_BANKROLL_BB)),
@@ -148,6 +185,9 @@ function loadPersistedSession(): PersistedArenaSession {
       sessionHands: safeFinite(parsed.sessionHands, 0),
       heroLifetime,
       completedChallengeIds,
+      handStamps,
+      sngWins: safeFinite(parsed.sngWins, 0),
+      sngPlayed: safeFinite(parsed.sngPlayed, 0),
     };
   } catch {
     return DEFAULT_PERSISTED_SESSION;
@@ -303,6 +343,24 @@ export function useArenaSessionStore() {
     });
   }, []);
 
+  const recordHandStamp = useCallback((stamp: ShowdownHandStamp) => {
+    setSession((prev) => {
+      if (prev.handStamps.includes(stamp)) return prev;
+      return {
+        ...prev,
+        handStamps: [...prev.handStamps, stamp],
+      };
+    });
+  }, []);
+
+  const recordSngResult = useCallback((won: boolean) => {
+    setSession((prev) => ({
+      ...prev,
+      sngPlayed: prev.sngPlayed + 1,
+      sngWins: prev.sngWins + (won ? 1 : 0),
+    }));
+  }, []);
+
   return {
     bankrollBb: session.bankrollBb,
     sessionPoints: session.sessionPoints,
@@ -311,10 +369,15 @@ export function useArenaSessionStore() {
     heroLifetime: session.heroLifetime,
     opponentNotes,
     completedChallengeIds: session.completedChallengeIds,
+    handStamps: session.handStamps,
+    sngWins: session.sngWins,
+    sngPlayed: session.sngPlayed,
     recordHandOutcome,
     resetSession,
     resetBankroll,
     updateOpponentNote,
     markChallengeCompleted,
+    recordHandStamp,
+    recordSngResult,
   };
 }

@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowRight, Check } from 'lucide-react';
-import type { DrillAttemptRecord, UserPreferences } from '../poker/types';
+import type { Card, DrillAttemptRecord, UserPreferences } from '../poker/types';
+import { cardKey, createDeck, RANK_VALUE } from '../poker/evaluator';
+import { computeHandVsHandEquity } from '../poker/math';
 import {
   evaluateMathAnswer,
   generateMathQuestion,
@@ -37,6 +39,57 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
   const [answerInput, setAnswerInput] = useState<string>(String(question.defaultVal));
   const [result, setResult] = useState<MathDrillResult | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
+  const [villainAssumption, setVillainAssumption] = useState<'top_pair' | 'two_pair' | 'set'>('top_pair');
+
+  const sensitivityPreview = useMemo(() => {
+    if (!result || !question.board || !question.heroCards || question.board.length < 3 || question.board.length > 4) {
+      return null;
+    }
+    const dead = new Set([...question.board, ...question.heroCards].map(cardKey));
+    const avail = createDeck().filter((c) => !dead.has(cardKey(c)));
+    const sortedBoard = [...question.board].sort((a, b) => RANK_VALUE[b.rank] - RANK_VALUE[a.rank]);
+    const hiRank = sortedBoard[0].rank;
+    const midRank = sortedBoard[1]?.rank ?? sortedBoard[0].rank;
+
+    const pickByRank = (r: Card['rank'], count: number, exclude: Set<string>): Card[] => {
+      const found: Card[] = [];
+      for (const c of avail) {
+        const k = cardKey(c);
+        if (c.rank === r && !exclude.has(k)) {
+          found.push(c);
+          exclude.add(k);
+          if (found.length === count) break;
+        }
+      }
+      return found;
+    };
+
+    const pickKicker = (exclude: Set<string>): Card | null =>
+      avail.find((c) => !exclude.has(cardKey(c)) && c.rank !== hiRank && c.rank !== midRank) ?? null;
+
+    let villainHand: [Card, Card] | null = null;
+    const used = new Set<string>();
+    if (villainAssumption === 'set') {
+      const pair = pickByRank(midRank, 2, used);
+      if (pair.length === 2) villainHand = [pair[0], pair[1]];
+    } else if (villainAssumption === 'two_pair') {
+      const c1 = pickByRank(hiRank, 1, used)[0];
+      const c2 = pickByRank(midRank, 1, used)[0];
+      if (c1 && c2) villainHand = [c1, c2];
+    } else {
+      const c1 = pickByRank(hiRank, 1, used)[0];
+      const c2 = pickKicker(used);
+      if (c1 && c2) villainHand = [c1, c2];
+    }
+    if (!villainHand) return null;
+
+    const eq = computeHandVsHandEquity(question.heroCards, villainHand, question.board);
+    return {
+      villainHand,
+      equityPct: Math.round(eq.heroEquityPct * 10) / 10,
+      tiePct: Math.round(eq.tiePct * 10) / 10,
+    };
+  }, [result, question.board, question.heroCards, villainAssumption]);
 
   const loadNext = (nextCat = category) => {
     const nextQ = generateMathQuestion(nextCat);
@@ -455,6 +508,64 @@ export function MathLabView({ prefs, onRecordAttempt }: MathLabViewProps) {
               <div className="bg-[#0C1814] border border-emerald-500/25 rounded-lg p-3 text-xs text-slate-200 leading-relaxed">
                 {displayQuestion.takeaway}
               </div>
+
+              {/* Villain Range Sensitivity Explorer (Dirty Outs / Reverse Implied Odds) */}
+              {sensitivityPreview && (
+                <div
+                  data-testid="math-range-sensitivity"
+                  className="bg-[#0A100E] border border-[#1E2E28] rounded-lg p-3.5 space-y-2.5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-[#E5B95C]">
+                      {t('math.sensitivityTitle')}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {(
+                        [
+                          { id: 'top_pair', label: t('math.vsTopPair') },
+                          { id: 'two_pair', label: t('math.vsTwoPair') },
+                          { id: 'set', label: t('math.vsSet') },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setVillainAssumption(opt.id)}
+                          className={`px-2 py-1 text-[11px] font-medium rounded border cursor-pointer transition-colors ${
+                            villainAssumption === opt.id
+                              ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200 font-semibold'
+                              : 'bg-[#0E1513] border-[#22332D] text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <PlayingCard
+                        card={sensitivityPreview.villainHand[0]}
+                        fourColor={prefs.fourColorDeck}
+                        size="xs"
+                      />
+                      <PlayingCard
+                        card={sensitivityPreview.villainHand[1]}
+                        fourColor={prefs.fourColorDeck}
+                        size="xs"
+                      />
+                    </div>
+                    <div className="text-right font-mono tabular-nums text-xs">
+                      <span className="text-slate-400 block text-[11px] font-sans">
+                        {t('math.liveHeroEquity')}
+                      </span>
+                      <span className="text-base font-semibold text-emerald-300">
+                        {sensitivityPreview.equityPct}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

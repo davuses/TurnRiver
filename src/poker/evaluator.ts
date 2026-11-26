@@ -214,6 +214,16 @@ export interface EvaluatedHand {
   score: number;
   label: string;
   tiebreakers: number[];
+  bestFive: Card[];
+}
+
+export interface ShowdownCardComparison {
+  heroEval: EvaluatedHand;
+  villainEval: EvaluatedHand;
+  winner: 'hero' | 'villain' | 'split';
+  heroBestKeys: string[];
+  villainBestKeys: string[];
+  decidingCardKeys: string[];
 }
 
 function encodeScore(category: HandCategory, kickers: number[]): number {
@@ -317,16 +327,36 @@ export function evaluateHand(cards: Card[]): EvaluatedHand {
     suitGroups[card.suit].push(val);
   }
 
+  // Helper: pick best N cards of a given rank (or straight sequence) preserving exact Card objects
+  const cardsByRank = (rankVal: number, limit?: number): Card[] => {
+    const matched = cards.filter((c) => RANK_VALUE[c.rank] === rankVal);
+    return typeof limit === 'number' ? matched.slice(0, limit) : matched;
+  };
+  const pickStraightCards = (pool: Card[], highVal: number): Card[] => {
+    const seq =
+      highVal === 5
+        ? [5, 4, 3, 2, 14]
+        : [highVal, highVal - 1, highVal - 2, highVal - 3, highVal - 4];
+    return seq
+      .map((rv) => pool.find((c) => RANK_VALUE[c.rank] === rv))
+      .filter((c): c is Card => Boolean(c));
+  };
+
   // Check Flush & Straight Flush
+  let flushSuit: Suit | null = null;
   let flushValues: number[] | null = null;
   for (const suit of SUITS) {
     if (suitGroups[suit].length >= 5) {
+      flushSuit = suit;
       flushValues = [...suitGroups[suit]].sort((a, b) => b - a);
       break;
     }
   }
 
-  if (flushValues) {
+  if (flushValues && flushSuit) {
+    const flushPool = cards
+      .filter((c) => c.suit === flushSuit)
+      .sort((a, b) => RANK_VALUE[b.rank] - RANK_VALUE[a.rank]);
     const uniqueFlush = Array.from(new Set(flushValues));
     const sfHigh = findStraightHigh(uniqueFlush);
     if (sfHigh > 0) {
@@ -335,6 +365,7 @@ export function evaluateHand(cards: Card[]): EvaluatedHand {
         score: encodeScore(HandCategory.StraightFlush, [sfHigh]),
         label: sfHigh === 14 ? 'Royal Flush' : `Straight Flush, ${RANK_NAME_SINGULAR[sfHigh]}-high`,
         tiebreakers: [sfHigh],
+        bestFive: pickStraightCards(flushPool, sfHigh),
       };
     }
   }
@@ -357,6 +388,7 @@ export function evaluateHand(cards: Card[]): EvaluatedHand {
       score: encodeScore(HandCategory.FourOfAKind, [quadRank, kicker]),
       label: `Four of a Kind, ${RANK_NAME_PLURAL[quadRank]}`,
       tiebreakers: [quadRank, kicker],
+      bestFive: [...cardsByRank(quadRank, 4), ...cardsByRank(kicker, 1)],
     };
   }
 
@@ -371,17 +403,23 @@ export function evaluateHand(cards: Card[]): EvaluatedHand {
       score: encodeScore(HandCategory.FullHouse, [tripRank, pairRank]),
       label: `Full House, ${RANK_NAME_PLURAL[tripRank]} full of ${RANK_NAME_PLURAL[pairRank]}`,
       tiebreakers: [tripRank, pairRank],
+      bestFive: [...cardsByRank(tripRank, 3), ...cardsByRank(pairRank, 2)],
     };
   }
 
   // Flush
-  if (flushValues) {
+  if (flushValues && flushSuit) {
     const top5 = flushValues.slice(0, 5);
+    const bestFive = cards
+      .filter((c) => c.suit === flushSuit)
+      .sort((a, b) => RANK_VALUE[b.rank] - RANK_VALUE[a.rank])
+      .slice(0, 5);
     return {
       category: HandCategory.Flush,
       score: encodeScore(HandCategory.Flush, top5),
       label: `Flush, ${RANK_NAME_SINGULAR[top5[0]]}-high`,
       tiebreakers: top5,
+      bestFive,
     };
   }
 
@@ -394,6 +432,7 @@ export function evaluateHand(cards: Card[]): EvaluatedHand {
       score: encodeScore(HandCategory.Straight, [straightHigh]),
       label: `Straight, ${RANK_NAME_SINGULAR[straightHigh]}-high`,
       tiebreakers: [straightHigh],
+      bestFive: pickStraightCards(cards, straightHigh),
     };
   }
 
@@ -406,6 +445,10 @@ export function evaluateHand(cards: Card[]): EvaluatedHand {
       score: encodeScore(HandCategory.ThreeOfAKind, [tripRank, ...kickers]),
       label: `Three of a Kind, ${RANK_NAME_PLURAL[tripRank]}`,
       tiebreakers: [tripRank, ...kickers],
+      bestFive: [
+        ...cardsByRank(tripRank, 3),
+        ...kickers.flatMap((k) => cardsByRank(k, 1)),
+      ],
     };
   }
 
@@ -419,6 +462,11 @@ export function evaluateHand(cards: Card[]): EvaluatedHand {
       score: encodeScore(HandCategory.TwoPair, [highPair, lowPair, kicker]),
       label: `Two Pair, ${RANK_NAME_PLURAL[highPair]} & ${RANK_NAME_PLURAL[lowPair]}`,
       tiebreakers: [highPair, lowPair, kicker],
+      bestFive: [
+        ...cardsByRank(highPair, 2),
+        ...cardsByRank(lowPair, 2),
+        ...cardsByRank(kicker, 1),
+      ],
     };
   }
 
@@ -431,6 +479,10 @@ export function evaluateHand(cards: Card[]): EvaluatedHand {
       score: encodeScore(HandCategory.OnePair, [pairRank, ...kickers]),
       label: `Pair of ${RANK_NAME_PLURAL[pairRank]}`,
       tiebreakers: [pairRank, ...kickers],
+      bestFive: [
+        ...cardsByRank(pairRank, 2),
+        ...kickers.flatMap((k) => cardsByRank(k, 1)),
+      ],
     };
   }
 
@@ -441,6 +493,70 @@ export function evaluateHand(cards: Card[]): EvaluatedHand {
     score: encodeScore(HandCategory.HighCard, top5),
     label: `${RANK_NAME_SINGULAR[top5[0]]}-high`,
     tiebreakers: top5,
+    bestFive: top5.flatMap((r) => cardsByRank(r, 1)),
+  };
+}
+
+/**
+ * Compares Hero's and Villain's best 5-card hands and identifies the exact
+ * deciding card keys (e.g., winning kicker or tiebreaker rank) for visual highlighting.
+ */
+export function compareShowdownCards(
+  heroHole: [Card, Card],
+  villainHole: [Card, Card],
+  board: Card[]
+): ShowdownCardComparison {
+  const heroEval = evaluateHand([...heroHole, ...board]);
+  const villainEval = evaluateHand([...villainHole, ...board]);
+  const winner: 'hero' | 'villain' | 'split' =
+    heroEval.score > villainEval.score
+      ? 'hero'
+      : villainEval.score > heroEval.score
+        ? 'villain'
+        : 'split';
+
+  const heroBestKeys = heroEval.bestFive.map(cardKey);
+  const villainBestKeys = villainEval.bestFive.map(cardKey);
+  const decidingSet = new Set<string>();
+
+  if (winner !== 'split') {
+    if (heroEval.category === villainEval.category) {
+      // Same category: find the first tiebreaker rank that differs and highlight those cards in both hands
+      const maxLen = Math.max(heroEval.tiebreakers.length, villainEval.tiebreakers.length);
+      for (let i = 0; i < maxLen; i++) {
+        const hv = heroEval.tiebreakers[i] ?? 0;
+        const vv = villainEval.tiebreakers[i] ?? 0;
+        if (hv !== vv) {
+          for (const c of heroEval.bestFive) {
+            if (RANK_VALUE[c.rank] === hv) decidingSet.add(cardKey(c));
+          }
+          for (const c of villainEval.bestFive) {
+            if (RANK_VALUE[c.rank] === vv) decidingSet.add(cardKey(c));
+          }
+          break;
+        }
+      }
+    } else {
+      // Different categories: highlight winning player's hole cards that participate in bestFive
+      const winEval = winner === 'hero' ? heroEval : villainEval;
+      const winHole = winner === 'hero' ? heroHole : villainHole;
+      const winBestSet = new Set(winEval.bestFive.map(cardKey));
+      for (const c of winHole) {
+        if (winBestSet.has(cardKey(c))) decidingSet.add(cardKey(c));
+      }
+      if (decidingSet.size === 0 && winEval.bestFive.length > 0) {
+        decidingSet.add(cardKey(winEval.bestFive[0]));
+      }
+    }
+  }
+
+  return {
+    heroEval,
+    villainEval,
+    winner,
+    heroBestKeys,
+    villainBestKeys,
+    decidingCardKeys: Array.from(decidingSet),
   };
 }
 

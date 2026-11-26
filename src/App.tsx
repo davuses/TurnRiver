@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Globe } from 'lucide-react';
 import type { DrillModule } from './poker/types';
 import { useMasteryStore } from './store/useMasteryStore';
+import { useDailyChallengeStore, type DailySlotKind } from './poker/dailyChallenge';
 import { LocaleProvider, useLocale } from './i18n/LocaleContext';
 import type { TranslationKey } from './i18n/translations';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -84,11 +85,42 @@ function getInitialView(): AppView {
   return 'overview';
 }
 
+function getInitialRouteParams() {
+  if (typeof window === 'undefined') {
+    return { puzzle: undefined, spot: undefined, rookie: false };
+  }
+  const params = new URLSearchParams(window.location.search);
+  return {
+    puzzle: params.get('puzzle') ?? undefined,
+    spot: params.get('spot') ?? undefined,
+    rookie: params.get('start') === 'rookie',
+  };
+}
+
 function TurnRiverShell() {
   const [activeView, setActiveView] = useState<AppView>(getInitialView);
+  const [routeParams, setRouteParams] = useState(getInitialRouteParams);
   const [scrolled, setScrolled] = useState(false);
   const store = useMasteryStore();
+  const daily = useDailyChallengeStore();
   const { locale, toggleLocale, t } = useLocale();
+
+  const handleLaunchRookieTable = () => {
+    setRouteParams((prev) => ({ ...prev, rookie: true }));
+    setActiveView('table');
+  };
+
+  const handleLaunchDailySlot = (slot: DailySlotKind) => {
+    if (slot === 'preflop') {
+      setActiveView('preflop');
+    } else if (slot === 'postflop') {
+      setRouteParams((prev) => ({ ...prev, spot: daily.plan.postflopSpotId }));
+      setActiveView('postflop');
+    } else {
+      setRouteParams((prev) => ({ ...prev, puzzle: daily.plan.showdownSlug }));
+      setActiveView('learn');
+    }
+  };
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -227,7 +259,11 @@ function TurnRiverShell() {
           <OverviewView
             summary={store.summary}
             attempts={store.attempts}
+            dailyPlan={daily.plan}
+            dailyCompleted={daily.completed}
             onNavigate={(view) => setActiveView(view)}
+            onLaunchRookieTable={handleLaunchRookieTable}
+            onLaunchDailySlot={handleLaunchDailySlot}
           />
         </main>
       ) : (
@@ -240,6 +276,13 @@ function TurnRiverShell() {
             {activeView === 'learn' && (
               <FundamentalsView
                 prefs={store.prefs}
+                initialPuzzleSlug={routeParams.puzzle}
+                onSolvedPuzzle={(slug) => {
+                  if (slug === daily.plan.showdownSlug) {
+                    daily.markDailyDone('showdown');
+                  }
+                }}
+                onLaunchRookieTable={handleLaunchRookieTable}
                 onNavigateDrill={(mod) => setActiveView(mod)}
               />
             )}
@@ -249,14 +292,21 @@ function TurnRiverShell() {
                 prefs={store.prefs}
                 onUpdatePrefs={store.updatePrefs}
                 onRecordAttempt={store.recordAttempt}
+                onPreflopAnswered={() => daily.markDailyDone('preflop')}
               />
             )}
 
             {activeView === 'postflop' && (
               <PostflopTrainerView
                 prefs={store.prefs}
+                initialSpotId={routeParams.spot}
                 onUpdatePrefs={store.updatePrefs}
                 onRecordAttempt={store.recordAttempt}
+                onSpotEvaluated={(spotId) => {
+                  if (spotId === daily.plan.postflopSpotId) {
+                    daily.markDailyDone('postflop');
+                  }
+                }}
               />
             )}
 
@@ -270,6 +320,7 @@ function TurnRiverShell() {
             {activeView === 'reading' && (
               <HandReadingView
                 prefs={store.prefs}
+                initialSpotId={routeParams.spot}
                 onRecordAttempt={store.recordAttempt}
               />
             )}
@@ -277,6 +328,10 @@ function TurnRiverShell() {
             {activeView === 'table' && (
               <PlayTableView
                 prefs={store.prefs}
+                startRookieGuide={routeParams.rookie}
+                onDismissRookieGuide={() =>
+                  setRouteParams((prev) => ({ ...prev, rookie: false }))
+                }
                 onUpdatePrefs={store.updatePrefs}
                 onRecordAttempt={store.recordAttempt}
               />
