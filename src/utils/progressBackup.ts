@@ -6,6 +6,7 @@ export const BACKUP_STORAGE_KEYS = [
   'turnriver_opponent_notes_v1',
   'turnriver_fundamentals_v1',
   'turnriver_daily_v1',
+  'turnriver_live_table_v1',
 ] as const;
 
 export interface ProgressBackupPayload {

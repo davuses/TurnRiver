@@ -205,6 +205,39 @@ const ARCHETYPE_SHORT_ZH: Record<string, string> = {
 
 const REPLAY_HISTORY_KEY = 'turnriver_arena_history_v1';
 const REPLAY_HISTORY_LIMIT = 15;
+const LIVE_TABLE_STORAGE_KEY = 'turnriver_live_table_v1';
+
+function loadSavedLiveTable(): PokerTableState | null {
+  try {
+    const raw = window.localStorage.getItem(LIVE_TABLE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PokerTableState> | null;
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      !Array.isArray(parsed.seats) ||
+      parsed.seats.length < 2 ||
+      !Array.isArray(parsed.board) ||
+      !Array.isArray(parsed.deck) ||
+      !parsed.config ||
+      typeof parsed.handNumber !== 'number' ||
+      typeof parsed.phase !== 'string'
+    ) {
+      return null;
+    }
+    return parsed as PokerTableState;
+  } catch {
+    return null;
+  }
+}
+
+function saveLiveTable(state: PokerTableState) {
+  try {
+    window.localStorage.setItem(LIVE_TABLE_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
 const REPLAY_STREETS: TablePhase[] = ['PREFLOP', 'FLOP', 'TURN', 'RIVER', 'SHOWDOWN'];
 const SUIT_GLYPH: Record<string, string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
 
@@ -357,6 +390,10 @@ export function PlayTableView({
   const autoTopUp = Boolean(prefs.autoTopUp);
 
   const [table, setTable] = useState<PokerTableState>(() => {
+    if (!startRookieGuide) {
+      const saved = loadSavedLiveTable();
+      if (saved) return saved;
+    }
     const initialUnit = prefs.chipDisplayUnit ?? 'bb';
     const initialSbBb =
       initialUnit === 'usd' ? getCashStakes(prefs.cashStakesId).sbBb : 0.5;
@@ -365,6 +402,11 @@ export function PlayTableView({
       : { ...DEFAULT_ARENA_CONFIG, sbBb: initialSbBb };
     return startNewHand(createTableFromConfig(baseCfg));
   });
+
+  // Persist live ongoing hand, hole cards, board, stacks & config across tab switches and reloads
+  useEffect(() => {
+    saveLiveTable(table);
+  }, [table]);
 
   useEffect(() => {
     if (startRookieGuide) {
@@ -409,17 +451,22 @@ export function PlayTableView({
     frames: HandReplayFrame[];
     startStackBb: number;
     saved: boolean;
-  }>({ hand: -1, frames: [], startStackBb: 0, saved: false });
+  }>({
+    hand: table.handNumber,
+    frames: [],
+    startStackBb: roundBb((table.seats[0]?.stackBb ?? 100) + (table.seats[0]?.totalInvestedBb ?? 0)),
+    saved: table.phase === 'SHOWDOWN',
+  });
   const handAccountingRef = useRef<{
     handNumber: number;
     startStackBb: number;
     startHeroStats: SeatHudStats;
     settledHandNumber: number;
   }>({
-    handNumber: -1,
-    startStackBb: 0,
-    startHeroStats: createEmptyHudStats(),
-    settledHandNumber: 0,
+    handNumber: table.handNumber,
+    startStackBb: roundBb((table.seats[0]?.stackBb ?? 100) + (table.seats[0]?.totalInvestedBb ?? 0)),
+    startHeroStats: table.seats[0]?.stats ? { ...table.seats[0].stats } : createEmptyHudStats(),
+    settledHandNumber: table.phase === 'SHOWDOWN' ? table.handNumber : Math.max(0, table.handNumber - 1),
   });
   const tableRef = useRef<PokerTableState>(table);
   tableRef.current = table;
@@ -430,7 +477,7 @@ export function PlayTableView({
   const autoTopUpRef = useRef<boolean>(autoTopUp);
   autoTopUpRef.current = autoTopUp;
   const arenaRootRef = useRef<HTMLDivElement | null>(null);
-  const loggedHandRef = useRef<number>(0);
+  const loggedHandRef = useRef<number>(table.phase === 'SHOWDOWN' ? table.handNumber : 0);
 
   const updateActiveTable = useCallback(
     (updater: (curr: PokerTableState) => PokerTableState) => {

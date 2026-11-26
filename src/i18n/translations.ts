@@ -513,7 +513,7 @@ const en = {
   // Fundamentals Track
   'overview.learnTitle': 'New to 6-Max? Start the Fundamentals Track',
   'overview.learnDesc':
-    'Six 2-minute interactive lessons covering kickers, position power, 13×13 matrices, pot odds, board textures, and opponent HUD profiles.',
+    'Nine 2-minute interactive lessons from Day-1 rules (streets, 5 actions, 10 hand rankings) up to kickers, position power, 13×13 matrices, pot odds, and opponent HUDs.',
   'overview.learnCta': 'Start Fundamentals',
   'learn.title': '6-Max Fundamentals Track',
   'learn.subtitle': 'Interactive 2-minute lessons that bridge straight into live drills and the Bot Arena',
@@ -1091,7 +1091,7 @@ const zhCN: Record<TranslationKey, string> = {
   // Fundamentals Track
   'overview.learnTitle': '刚接触 6 人桌？从入门课堂开始',
   'overview.learnDesc':
-    '6 节 2 分钟互动微课，涵盖踢脚陷阱、位置优势、13×13 范围矩阵、底池赔率、牌面结构与对手 HUD 识别。',
+    '9 节 2 分钟互动微课，从零基础规则（发牌流程、五个按钮、十级牌型）循序进阶至踢脚陷阱、位置优势、13×13 范围矩阵、底池赔率与 HUD 读人。',
   'overview.learnCta': '进入入门课堂',
   'learn.title': '6 人桌互动入门课堂',
   'learn.subtitle': '每节 2 分钟动手演示 + 随堂测验，学完一键进入对应实战训练',

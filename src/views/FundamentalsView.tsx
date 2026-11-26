@@ -30,7 +30,9 @@ export function FundamentalsView({
 }: FundamentalsViewProps) {
   const { locale, t } = useLocale();
   const store = useFundamentalsStore();
-  const [activeId, setActiveId] = useState<FundamentalsLessonId>(FUNDAMENTALS_LESSONS[0].id);
+  const [activeId, setActiveId] = useState<FundamentalsLessonId>(() =>
+    initialPuzzleSlug ? 'hand_rankings' : FUNDAMENTALS_LESSONS[0].id
+  );
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
   const activeIdx = FUNDAMENTALS_LESSONS.findIndex((l) => l.id === activeId);

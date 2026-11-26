@@ -152,6 +152,12 @@ export function LessonInteractiveWidget({
   const { locale } = useLocale();
   const isZh = locale === 'zh-CN';
 
+  // Day-1 Beginner Widgets state
+  const [streetStep, setStreetStep] = useState<0 | 1 | 2 | 3>(0);
+  const [facingBetDemo, setFacingBetDemo] = useState<boolean>(false);
+  const [demoActionMsg, setDemoActionMsg] = useState<string | null>(null);
+  const [ladderIdx, setLadderIdx] = useState<number>(0);
+
   // Widget 1 state (10-puzzle Showdown Pack + Tap-the-Decider)
   const [showdownIdx, setShowdownIdx] = useState(() => {
     if (initialPuzzleSlug) {
@@ -207,6 +213,445 @@ export function LessonInteractiveWidget({
     }
     return out;
   }, [utgTemplate.matrix, matrixFilter]);
+
+  if (lessonId === 'how_holdem_works') {
+    const heroHole: [Card, Card] = [
+      { rank: 'A', suit: 's' },
+      { rank: 'K', suit: 'h' },
+    ];
+    const fullBoard: Card[] = [
+      { rank: 'K', suit: 'd' },
+      { rank: '9', suit: 's' },
+      { rank: '4', suit: 'c' },
+      { rank: 'J', suit: 'h' },
+      { rank: 'A', suit: 'c' },
+    ];
+    const stages = [
+      {
+        labelEn: '1. Preflop',
+        labelZh: '1. 翻前',
+        visibleCount: 0,
+        noteEn: 'Blinds are posted ($1 / $2). Everyone gets 2 private hole cards. First betting round!',
+        noteZh: '大小盲下注（$1 / $2），每人发 2 张私有底牌，开始第一轮下注。',
+      },
+      {
+        labelEn: '2. Flop (3)',
+        labelZh: '2. 翻牌 (3张)',
+        visibleCount: 3,
+        noteEn: '3 shared community cards hit the felt. Your A♠ K♥ pairs the K♦ for Top Pair, Top Kicker!',
+        noteZh: '一次性发出 3 张公共牌！你的 A♠ K♥ 击中 K♦，组成顶对顶踢脚。',
+      },
+      {
+        labelEn: '3. Turn (+1)',
+        labelZh: '3. 转牌 (+1张)',
+        visibleCount: 4,
+        noteEn: 'A 4th community card (J♥) is dealt, followed by the third betting round.',
+        noteZh: '发出第 4 张公共牌（J♥），进入第三轮下注。',
+      },
+      {
+        labelEn: '4. River (+1)',
+        labelZh: '4. 河牌 (+1张)',
+        visibleCount: 5,
+        noteEn: 'Final 5th card (A♣)! You now make Two Pair (Aces & Kings) — best 5 of 7 cards wins at showdown.',
+        noteZh: '第 5 张公共牌（A♣）落地！你升级成 AA-KK 两对，7 选 5 摊牌决胜。',
+      },
+    ];
+    const stage = stages[streetStep];
+    return (
+      <div
+        data-testid="lesson-widget-streets"
+        className="felt-surface rounded-xl border border-emerald-400/20 p-4 sm:p-5 space-y-4"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-semibold text-[#E5B95C]">
+            {isZh ? '动手体验 · 点击四条街看发牌流程' : 'Interactive · Step Through All 4 Streets'}
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {stages.map((st, idx) => (
+              <button
+                key={st.labelEn}
+                type="button"
+                onClick={() => setStreetStep(idx as 0 | 1 | 2 | 3)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md border cursor-pointer transition-colors ${
+                  streetStep === idx
+                    ? 'bg-emerald-500 text-[#04110C] border-emerald-400 font-semibold'
+                    : 'bg-[#0A100E]/85 text-slate-300 border-[#22332D] hover:text-white'
+                }`}
+              >
+                {isZh ? st.labelZh : st.labelEn}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center gap-4 py-1">
+          <div className="space-y-1.5 text-center">
+            <span className="text-[11px] font-mono text-amber-200/80">
+              {isZh ? '5 张共享公共牌' : '5 Shared Community Cards'}
+            </span>
+            <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+              {fullBoard.map((c, idx) => (
+                <PlayingCard
+                  key={idx}
+                  card={idx < stage.visibleCount ? c : undefined}
+                  faceDown={idx >= stage.visibleCount}
+                  fourColor={fourColor}
+                  size="sm"
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 bg-[#0A100E]/85 border border-[#1F2D28] rounded-lg px-4 py-2.5">
+            <span className="text-xs font-semibold text-emerald-300">
+              {isZh ? '你的 2 张底牌' : 'Your 2 Hole Cards'}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <PlayingCard card={heroHole[0]} fourColor={fourColor} size="xs" />
+              <PlayingCard card={heroHole[1]} fourColor={fourColor} size="xs" />
+            </div>
+          </div>
+
+          <p className="text-xs text-emerald-100/95 text-center max-w-lg leading-relaxed">
+            {isZh ? stage.noteZh : stage.noteEn}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (lessonId === 'five_actions') {
+    return (
+      <div
+        data-testid="lesson-widget-actions"
+        className="felt-surface rounded-xl border border-emerald-400/20 p-4 sm:p-5 space-y-4"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-semibold text-[#E5B95C]">
+            {isZh ? '互动演练 · 切换局面看哪些按钮合法' : 'Interactive · Toggle Situation to Test Legal Buttons'}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setFacingBetDemo(false);
+                setDemoActionMsg(null);
+              }}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md border cursor-pointer ${
+                !facingBetDemo
+                  ? 'bg-emerald-500 text-[#04110C] border-emerald-400 font-semibold'
+                  : 'bg-[#0A100E]/85 text-slate-300 border-[#22332D]'
+              }`}
+            >
+              {isZh ? '没人下注（轮到你）' : 'No Bet Yet'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFacingBetDemo(true);
+                setDemoActionMsg(null);
+              }}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md border cursor-pointer ${
+                facingBetDemo
+                  ? 'bg-amber-400 text-[#04110C] border-amber-300 font-semibold'
+                  : 'bg-[#0A100E]/85 text-slate-300 border-[#22332D]'
+              }`}
+            >
+              {isZh ? '对手下注 $10（你已投 $2）' : 'Opponent Bet $10 (You have $2 in)'}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {!facingBetDemo ? (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  setDemoActionMsg(
+                    isZh
+                      ? '过牌（Check）：不花一分钱，把行动权交给下家，免费看下一张牌。'
+                      : 'Check: Costs $0 — passes action to the next player and lets you see the next card for free.'
+                  )
+                }
+                className="px-3 py-2.5 rounded-lg bg-sky-500/20 border border-sky-400/50 text-xs font-semibold text-sky-200 cursor-pointer"
+              >
+                {isZh ? '过牌 Check ($0)' : 'Check ($0)'}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setDemoActionMsg(
+                    isZh
+                      ? '下注（Bet $10）：主动把 $10 推入底池，逼迫对手决定弃牌、跟注或加注。'
+                      : 'Bet $10: Opens the betting on this street, forcing your opponent to Fold, Call, or Raise.'
+                  )
+                }
+                className="px-3 py-2.5 rounded-lg bg-emerald-500 text-xs font-semibold text-[#04110C] cursor-pointer"
+              >
+                {isZh ? '下注 Bet $10' : 'Bet $10'}
+              </button>
+              <button
+                type="button"
+                disabled
+                className="px-3 py-2.5 rounded-lg bg-[#0A100E]/60 border border-[#1B2823] text-xs text-slate-500 cursor-not-allowed"
+              >
+                {isZh ? '跟注不可用' : 'Call (N/A)'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  setDemoActionMsg(
+                    isZh
+                      ? '弃牌（Fold）：放弃底池里的 $2，但保住你剩下的全部筹码，立刻结束本手牌。'
+                      : 'Fold: Gives up the $2 already in the pot, but protects the rest of your stack.'
+                  )
+                }
+                className="px-3 py-2.5 rounded-lg bg-[#141E1B] border border-[#2B3E37] text-xs font-semibold text-slate-200 cursor-pointer"
+              >
+                {isZh ? '弃牌 Fold' : 'Fold'}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setDemoActionMsg(
+                    isZh
+                      ? '跟注（Call $8）：因为你本街已投 $2，只需再补 $8 就能跟平对手的 $10！'
+                      : 'Call $8: You already put $2 in this street, so matching $10 costs just $8 more!'
+                  )
+                }
+                className="px-3 py-2.5 rounded-lg bg-sky-500/20 border border-sky-400/50 text-xs font-semibold text-sky-200 cursor-pointer"
+              >
+                {isZh ? '跟注 Call $8' : 'Call $8'}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setDemoActionMsg(
+                    isZh
+                      ? '加注（Raise 到 $25）：先补齐 $10，再额外加注 $15，把压力反推给对手。'
+                      : 'Raise to $25: Matches the $10 bet and increases the price to $25 total.'
+                  )
+                }
+                className="px-3 py-2.5 rounded-lg bg-emerald-500 text-xs font-semibold text-[#04110C] cursor-pointer"
+              >
+                {isZh ? '加注 Raise $25' : 'Raise to $25'}
+              </button>
+            </>
+          )}
+        </div>
+
+        <p className="text-xs text-emerald-100/95 bg-[#0A100E]/80 border border-[#1E2E28] rounded-lg px-3.5 py-2.5 leading-relaxed">
+          {demoActionMsg ??
+            (isZh
+              ? '点击上方任意按钮，查看它的真实含义与筹码计算方式。'
+              : 'Click any button above to see what it does and how much it costs.')}
+        </p>
+      </div>
+    );
+  }
+
+  if (lessonId === 'hand_ladder') {
+    const LADDER: {
+      rank: number;
+      en: string;
+      zh: string;
+      noteEn: string;
+      noteZh: string;
+      cards: Card[];
+    }[] = [
+      {
+        rank: 1,
+        en: 'Royal Flush',
+        zh: '皇家同花顺',
+        noteEn: 'A-K-Q-J-10 all in the same suit — unbeatable.',
+        noteZh: '同花色的 A-K-Q-J-10，全场最大无法被击败。',
+        cards: [
+          { rank: 'A', suit: 's' },
+          { rank: 'K', suit: 's' },
+          { rank: 'Q', suit: 's' },
+          { rank: 'J', suit: 's' },
+          { rank: 'T', suit: 's' },
+        ],
+      },
+      {
+        rank: 2,
+        en: 'Straight Flush',
+        zh: '同花顺',
+        noteEn: 'Five consecutive cards of the same suit.',
+        noteZh: '五张点数连续且花色完全相同的牌。',
+        cards: [
+          { rank: '9', suit: 'h' },
+          { rank: '8', suit: 'h' },
+          { rank: '7', suit: 'h' },
+          { rank: '6', suit: 'h' },
+          { rank: '5', suit: 'h' },
+        ],
+      },
+      {
+        rank: 3,
+        en: 'Four of a Kind',
+        zh: '四条',
+        noteEn: 'All four cards of one rank plus any 5th kicker.',
+        noteZh: '四张相同点数加任意一张第 5 张牌。',
+        cards: [
+          { rank: 'Q', suit: 's' },
+          { rank: 'Q', suit: 'h' },
+          { rank: 'Q', suit: 'd' },
+          { rank: 'Q', suit: 'c' },
+          { rank: 'A', suit: 's' },
+        ],
+      },
+      {
+        rank: 4,
+        en: 'Full House',
+        zh: '葫芦',
+        noteEn: 'Three of a kind plus a pair — beats any Flush.',
+        noteZh: '三条加一对——稳压任何同花。',
+        cards: [
+          { rank: 'K', suit: 's' },
+          { rank: 'K', suit: 'h' },
+          { rank: 'K', suit: 'd' },
+          { rank: '8', suit: 'c' },
+          { rank: '8', suit: 's' },
+        ],
+      },
+      {
+        rank: 5,
+        en: 'Flush',
+        zh: '同花',
+        noteEn: 'Any 5 cards of the same suit — always beats a Straight.',
+        noteZh: '任意 5 张同花色牌——永远大于顺子。',
+        cards: [
+          { rank: 'A', suit: 'd' },
+          { rank: 'J', suit: 'd' },
+          { rank: '8', suit: 'd' },
+          { rank: '5', suit: 'd' },
+          { rank: '2', suit: 'd' },
+        ],
+      },
+      {
+        rank: 6,
+        en: 'Straight',
+        zh: '顺子',
+        noteEn: 'Five consecutive ranks in mixed suits (A-2-3-4-5 is lowest).',
+        noteZh: '五张连续点数、花色不限（A-2-3-4-5 最小）。',
+        cards: [
+          { rank: 'T', suit: 's' },
+          { rank: '9', suit: 'h' },
+          { rank: '8', suit: 'd' },
+          { rank: '7', suit: 'c' },
+          { rank: '6', suit: 's' },
+        ],
+      },
+      {
+        rank: 7,
+        en: 'Three of a Kind',
+        zh: '三条',
+        noteEn: 'Three cards of the same rank plus two kickers.',
+        noteZh: '三张相同点数加两张踢脚。',
+        cards: [
+          { rank: '7', suit: 's' },
+          { rank: '7', suit: 'h' },
+          { rank: '7', suit: 'd' },
+          { rank: 'A', suit: 'c' },
+          { rank: 'K', suit: 's' },
+        ],
+      },
+      {
+        rank: 8,
+        en: 'Two Pair',
+        zh: '两对',
+        noteEn: 'Two different pairs plus one 5th-card kicker.',
+        noteZh: '两组不同对子加一张第 5 张踢脚。',
+        cards: [
+          { rank: 'A', suit: 's' },
+          { rank: 'A', suit: 'h' },
+          { rank: '9', suit: 'd' },
+          { rank: '9', suit: 'c' },
+          { rank: 'K', suit: 'd' },
+        ],
+      },
+      {
+        rank: 9,
+        en: 'One Pair',
+        zh: '一对',
+        noteEn: 'Two cards of the same rank plus three kickers.',
+        noteZh: '两张相同点数加三张单张踢脚。',
+        cards: [
+          { rank: 'J', suit: 's' },
+          { rank: 'J', suit: 'c' },
+          { rank: 'A', suit: 'h' },
+          { rank: '8', suit: 'd' },
+          { rank: '4', suit: 's' },
+        ],
+      },
+      {
+        rank: 10,
+        en: 'High Card',
+        zh: '高牌',
+        noteEn: 'No pair, straight, or flush — highest card plays.',
+        noteZh: '无对子、无顺子、无同花——按最大单张比大小。',
+        cards: [
+          { rank: 'A', suit: 's' },
+          { rank: 'Q', suit: 'd' },
+          { rank: '9', suit: 'c' },
+          { rank: '6', suit: 'h' },
+          { rank: '2', suit: 's' },
+        ],
+      },
+    ];
+    const active = LADDER[ladderIdx] ?? LADDER[0];
+    return (
+      <div
+        data-testid="lesson-widget-ladder"
+        className="felt-surface rounded-xl border border-emerald-400/20 p-4 sm:p-5 space-y-4"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-semibold text-[#E5B95C]">
+            {isZh ? '十级牌型图谱 · 点击任意等级查看示例' : '10-Tier Hand Rankings · Click Any Rank'}
+          </span>
+          <span className="text-xs font-mono text-emerald-300">
+            #{active.rank} / 10
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+          {LADDER.map((item, idx) => (
+            <button
+              key={item.rank}
+              type="button"
+              onClick={() => setLadderIdx(idx)}
+              className={`px-2 py-1.5 text-[11px] font-medium rounded-md border text-left transition-colors cursor-pointer truncate ${
+                idx === ladderIdx
+                  ? 'bg-emerald-500 text-[#04110C] border-emerald-400 font-semibold'
+                  : 'bg-[#0A100E]/85 text-slate-300 border-[#22332D] hover:text-white'
+              }`}
+            >
+              {item.rank}. {isZh ? item.zh : item.en}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-col items-center gap-2.5 bg-[#0A100E]/80 border border-[#1E2E28] rounded-lg p-3.5">
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+            {active.cards.map((c, idx) => (
+              <PlayingCard key={idx} card={c} fourColor={fourColor} size="sm" />
+            ))}
+          </div>
+          <p className="text-xs text-slate-200 text-center">
+            <span className="font-semibold text-emerald-300 mr-1.5">
+              #{active.rank} {isZh ? active.zh : active.en}:
+            </span>
+            {isZh ? active.noteZh : active.noteEn}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (lessonId === 'hand_rankings') {
     const puzzle = SHOWDOWN_PUZZLES[showdownIdx] ?? SHOWDOWN_PUZZLES[0];

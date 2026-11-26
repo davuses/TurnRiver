@@ -2000,8 +2000,8 @@ test('ARENA_CHALLENGES and evaluateChallengeProgress evaluate all 4 Arena challe
   );
 });
 
-test('FUNDAMENTALS_LESSONS have 6 bilingual lessons, valid options, zero duplicate cards, and accurate hand-ranking showdowns', () => {
-  assert.equal(FUNDAMENTALS_LESSONS.length, 6);
+test('FUNDAMENTALS_LESSONS have 9 bilingual lessons, valid options, zero duplicate cards, and accurate hand-ranking showdowns', () => {
+  assert.equal(FUNDAMENTALS_LESSONS.length, 9);
   const seenIds = new Set<string>();
   for (const lesson of FUNDAMENTALS_LESSONS) {
     assert.ok(!seenIds.has(lesson.id), `Duplicate lesson id ${lesson.id}`);

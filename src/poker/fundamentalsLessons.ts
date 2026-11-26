@@ -1,6 +1,9 @@
 import type { Card, DrillModule } from './types';
 
 export type FundamentalsLessonId =
+  | 'how_holdem_works'
+  | 'five_actions'
+  | 'hand_ladder'
   | 'hand_rankings'
   | 'position_power'
   | 'matrix_basics'
@@ -43,13 +46,217 @@ export interface FundamentalsLesson {
 
 export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
   {
-    id: 'hand_rankings',
+    id: 'how_holdem_works',
     order: 1,
     durationMin: 2,
     targetModule: 'table',
     title: {
-      en: 'Hand Rankings & Kicker Traps',
-      'zh-CN': '牌型大小与踢脚陷阱',
+      en: 'How a Hand Works (Blinds, 2+5 Cards & Streets)',
+      'zh-CN': '零基础入门：盲注、底牌与四条街流程',
+    },
+    subtitle: {
+      en: 'Start here · From your 2 private cards to the 5 shared board cards',
+      'zh-CN': '从零开始 · 看懂 2 张底牌 + 5 张公共牌如何推进一整手牌',
+    },
+    summary: {
+      en: 'Every hand of Texas Hold’em starts with two forced bets—the Small Blind (SB) and Big Blind (BB)—so there is always a pot to fight for. You get 2 private hole cards, then 5 shared community cards are dealt across four betting rounds: Preflop, Flop (3 cards), Turn (1 card), and River (1 card).',
+      'zh-CN': '每一手德州扑克都从两笔强制盲注开始——小盲（SB）与大盲（BB），保证底池里始终有筹码可争夺。每人发 2 张私有底牌，随后牌面分四轮发出 5 张公共牌：翻前、翻牌（3 张）、转牌（1 张）与河牌（1 张）。',
+    },
+    keyTakeaways: [
+      {
+        en: 'You win a pot in two ways: either make the best 5-card hand at showdown, or get everyone else to fold.',
+        'zh-CN': '赢得底池只有两种方式：摊牌时亮出最强 5 张牌，或在之前让所有对手弃牌。',
+      },
+      {
+        en: 'You combine your 2 private cards with the 5 shared board cards—you may use 2, 1, or even 0 of your hole cards.',
+        'zh-CN': '用你的 2 张底牌和 5 张公共牌凑出最强 5 张牌——可以用 2 张、1 张，甚至 0 张底牌。',
+      },
+      {
+        en: 'The Dealer Button (D) rotates clockwise by one seat after every hand so everyone pays blinds equally.',
+        'zh-CN': '庄位按钮（D）每手牌顺时针移动一格，确保每位玩家轮流公平地支付盲注。',
+      },
+    ],
+    questions: [
+      {
+        id: 'hw-q1',
+        prompt: {
+          en: 'How many shared community cards are dealt face-up on the Flop?',
+          'zh-CN': '翻牌圈（Flop）会一次性发出几张明面的公共牌？',
+        },
+        options: [
+          { id: '1', label: { en: '1 card', 'zh-CN': '1 张' } },
+          { id: '3', label: { en: '3 cards', 'zh-CN': '3 张' } },
+          { id: '5', label: { en: '5 cards', 'zh-CN': '5 张' } },
+        ],
+        correctOptionId: '3',
+        explanation: {
+          en: 'The Flop deals 3 community cards at once, followed by 1 card on the Turn and 1 final card on the River (5 total).',
+          'zh-CN': '翻牌圈一次发 3 张公共牌，随后转牌发第 4 张、河牌发第 5 张。',
+        },
+      },
+      {
+        id: 'hw-q2',
+        prompt: {
+          en: 'Must you always use both of your private hole cards to make your final 5-card hand?',
+          'zh-CN': '组成最终的 5 张成牌时，必须同时用到手里的两张底牌吗？',
+        },
+        options: [
+          { id: 'yes', label: { en: 'Yes, always both cards', 'zh-CN': '必须两张全用' } },
+          { id: 'no', label: { en: 'No — any best 5 from the 7 cards', 'zh-CN': '不必——7 张牌里任选最强 5 张' } },
+          { id: 'only_river', label: { en: 'Only on the River', 'zh-CN': '仅河牌圈可以只用一张' } },
+        ],
+        correctOptionId: 'no',
+        explanation: {
+          en: 'In Texas Hold’em, your best 5-card hand can use 2, 1, or 0 of your hole cards (known as “playing the board”).',
+          'zh-CN': '德州扑克只看 7 张牌里的最强 5 张，可以使用 2 张、1 张或 0 张底牌。',
+        },
+      },
+    ],
+  },
+  {
+    id: 'five_actions',
+    order: 2,
+    durationMin: 2,
+    targetModule: 'table',
+    title: {
+      en: 'Your 5 Actions (Check, Bet, Call, Raise & Fold)',
+      'zh-CN': '认识五个核心按钮：过牌、下注、跟注、加注与弃牌',
+    },
+    subtitle: {
+      en: 'What each button means, when Check is legal, and how Call math works',
+      'zh-CN': '什么时候能免费过牌、面对加注要补多少筹码',
+    },
+    summary: {
+      en: 'When it is your turn, your legal options depend on one question: has anyone bet yet on this street? If nobody has bet, you can Check (pass for free) or Bet. If someone already bet, you must Fold (give up), Call (match the current bet), or Raise (increase it).',
+      'zh-CN': '轮到你行动时，可选按钮只取决于一件事：本条街有没有人先下注？如果没人下注，你可以过牌（免费看下一张）或主动下注；如果已经有人下注，你必须弃牌、跟注（补齐差额）或加注。',
+    },
+    keyTakeaways: [
+      {
+        en: 'Check is free, but only legal when no bet is facing you (including in the Big Blind preflop if nobody raised).',
+        'zh-CN': '过牌不花筹码，但只有在无人下注时才合法（包括翻前没人加注时的大盲位）。',
+      },
+      {
+        en: 'Calling only pays the difference: if you already put in $2 (Big Blind) and someone raises to $6, calling costs $4 more.',
+        'zh-CN': '跟注只需补差额：例如你大盲已投 $2，对手加注到 $6，你只需再补 $4 即可跟注。',
+      },
+      {
+        en: 'Folding forfeits the chips already in the pot, but saves every chip still in your stack—good players fold most hands!',
+        'zh-CN': '弃牌会放弃已投入底池的筹码，但能保住剩余筹码——优秀玩家大部分手牌都会果断弃牌。',
+      },
+    ],
+    questions: [
+      {
+        id: 'fa-q1',
+        prompt: {
+          en: 'You posted the $2 Big Blind. An opponent raises to $6. How much more do you pay to Call?',
+          'zh-CN': '你在大盲位已投入 $2，对手加注到 $6，此时你点“跟注”需要再投入多少？',
+        },
+        options: [
+          { id: '4', label: { en: '$4 more (match $6 total)', 'zh-CN': '再补 $4（凑足 $6）' } },
+          { id: '6', label: { en: '$6 more ($8 total)', 'zh-CN': '再投 $6（共 $8）' } },
+          { id: '2', label: { en: '$2 more', 'zh-CN': '再投 $2' } },
+        ],
+        correctOptionId: '4',
+        explanation: {
+          en: 'Your $2 blind already counts toward this street’s bet, so matching $6 only costs $4 more.',
+          'zh-CN': '你已投入的 $2 大盲算作本轮已下注额，因此只需再补 $4 就能跟平 $6。',
+        },
+      },
+      {
+        id: 'fa-q2',
+        prompt: {
+          en: 'On the Flop, your opponent bets $10 into a $15 pot. Can you click Check?',
+          'zh-CN': '翻牌圈底池 $15，对手率先下注 $10，此时你可以点击“过牌”吗？',
+        },
+        options: [
+          { id: 'yes', label: { en: 'Yes, Check is always available', 'zh-CN': '可以，随时都能过牌' } },
+          { id: 'no', label: { en: 'No — you must Fold, Call $10, or Raise', 'zh-CN': '不行——必须弃牌、跟注 $10 或加注' } },
+          { id: 'only_pair', label: { en: 'Only if you have a pair', 'zh-CN': '只有拿到对子才能过牌' } },
+        ],
+        correctOptionId: 'no',
+        explanation: {
+          en: 'Once a bet is on the table, Check is unavailable. To stay in the hand you must at least Call the $10 bet.',
+          'zh-CN': '一旦有人下注，过牌按钮就会消失；想继续留在底池至少要跟注 $10。',
+        },
+      },
+    ],
+  },
+  {
+    id: 'hand_ladder',
+    order: 3,
+    durationMin: 2,
+    targetModule: 'table',
+    title: {
+      en: 'The 10 Poker Hands (High Card → Royal Flush)',
+      'zh-CN': '十种成牌大小阶梯（高牌 → 皇家同花顺）',
+    },
+    subtitle: {
+      en: 'Memorize the complete ranking ladder before learning kicker tiebreakers',
+      'zh-CN': '先熟记完整的 10 级牌型大小，再进阶学习踢脚与摊牌细节',
+    },
+    summary: {
+      en: 'All Texas Hold’em hands fall into 10 categories ranked from rarest (#1 Royal Flush) to most common (#10 High Card). The #1 beginner mistake is confusing Straight vs. Flush—remember: a Flush always beats a Straight, and a Full House always beats a Flush.',
+      'zh-CN': '德州扑克所有成牌分为 10 个等级，从最稀有的 #1 皇家同花顺到最常见的 #10 高牌。新手最容易记混顺子与同花——牢记：任何同花都大于顺子，任何葫芦都大于同花。',
+    },
+    keyTakeaways: [
+      {
+        en: 'Suits (♠ ♥ ♦ ♣) have equal value in Hold’em—a Spade flush does NOT beat an equal-rank Heart flush.',
+        'zh-CN': '德州扑克四种花色完全平等——黑桃同花并不会因为花色而赢过同等大小的红桃同花。',
+      },
+      {
+        en: 'Memorize the middle battleground: Three of a Kind < Straight < Flush < Full House.',
+        'zh-CN': '牢记实战最常碰撞的中段顺序：三条 < 顺子 < 同花 < 葫芦。',
+      },
+      {
+        en: 'A Straight needs 5 consecutive ranks (A-2-3-4-5 is the lowest); a Flush needs 5 cards of the same suit.',
+        'zh-CN': '顺子是 5 张连续点数（A-2-3-4-5 最小）；同花是 5 张相同花色，点数不必连续。',
+      },
+    ],
+    questions: [
+      {
+        id: 'hl-q1',
+        prompt: {
+          en: 'Which hand wins at showdown: a 9-high Flush or an Ace-high Straight?',
+          'zh-CN': '摊牌时，9 高同花与 A 高顺子谁更大？',
+        },
+        options: [
+          { id: 'flush', label: { en: '9-high Flush wins', 'zh-CN': '9 高同花赢' } },
+          { id: 'straight', label: { en: 'Ace-high Straight wins', 'zh-CN': 'A 高顺子赢' } },
+          { id: 'split', label: { en: 'Split pot', 'zh-CN': '平分底池' } },
+        ],
+        correctOptionId: 'flush',
+        explanation: {
+          en: 'Even the lowest Flush beats the highest Straight (A-K-Q-J-10) because a Flush is rarer.',
+          'zh-CN': '哪怕是最小的同花也一定击败最大的 A-K-Q-J-10 顺子，因为同花更稀有。',
+        },
+      },
+      {
+        id: 'hl-q2',
+        prompt: {
+          en: 'Which hand ranks higher: Three of a Kind or Two Pair?',
+          'zh-CN': '三条与两对，哪一种牌型更大？',
+        },
+        options: [
+          { id: 'two_pair', label: { en: 'Two Pair', 'zh-CN': '两对' } },
+          { id: 'trips', label: { en: 'Three of a Kind', 'zh-CN': '三条' } },
+          { id: 'equal', label: { en: 'Depends on the suits', 'zh-CN': '取决于花色' } },
+        ],
+        correctOptionId: 'trips',
+        explanation: {
+          en: 'Three of a Kind (#7) always beats Two Pair (#8), even Three Twos beats Aces and Kings.',
+          'zh-CN': '三条永远大于两对，哪怕是三条 2 也能轻松击败 AA-KK 两对。',
+        },
+      },
+    ],
+  },
+  {
+    id: 'hand_rankings',
+    order: 4,
+    durationMin: 2,
+    targetModule: 'table',
+    title: {
+      en: 'Kicker Traps & Showdown Puzzles',
+      'zh-CN': '踢脚陷阱与 10 道经典摊牌谜题',
     },
     subtitle: {
       en: 'Best 5-card hand wins · Why kickers & board pairs change everything',
@@ -142,7 +349,7 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
   },
   {
     id: 'position_power',
-    order: 2,
+    order: 5,
     durationMin: 2,
     targetModule: 'preflop',
     title: {
@@ -214,7 +421,7 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
   },
   {
     id: 'matrix_basics',
-    order: 3,
+    order: 6,
     durationMin: 2,
     targetModule: 'preflop',
     title: {
@@ -282,7 +489,7 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
   },
   {
     id: 'pot_odds_2_4',
-    order: 4,
+    order: 7,
     durationMin: 2,
     targetModule: 'math',
     title: {
@@ -360,7 +567,7 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
   },
   {
     id: 'board_texture_cbet',
-    order: 5,
+    order: 8,
     durationMin: 2,
     targetModule: 'postflop',
     title: {
@@ -438,7 +645,7 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
   },
   {
     id: 'player_archetypes',
-    order: 6,
+    order: 9,
     durationMin: 2,
     targetModule: 'table',
     title: {
