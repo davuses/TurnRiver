@@ -1710,9 +1710,9 @@ const POSTFLOP_ARCHETYPE_CONFIG: Record<BotArchetype, PostflopArchetypeConfig> =
     cbetBias: 0.34,
     barrelBias: 0.28,
     donkFreq: 0.24,
-    raiseAggression: 1.82,
+    raiseAggression: 2.15,
     riverBluffScale: 2.15,
-    callEquitySlack: -0.14,
+    callEquitySlack: -0.09,
     pureAirFoldGuard: true, // Aggressive & sticky, yet still folds worst pure air to big bets when not raising!
   },
 };
@@ -2138,7 +2138,8 @@ function decidePostflopBotAction(
     ctx.street !== 'flop' &&
     ctx.lastAggressorArchetype !== 'Maniac'
   ) {
-    const baseTighten = ctx.street === 'turn' ? 0.06 : 0.11;
+    const riverBase = archetype === 'Tight Nit' ? 0.11 : 0.155;
+    const baseTighten = ctx.street === 'turn' ? 0.06 : riverBase;
     streetCallTighten = ctx.lastAggressorArchetype === 'Loose-Aggressive' ? baseTighten * 0.5 : baseTighten;
   }
   const threshold = reqEq + cfg.callEquitySlack + streetCallTighten;
