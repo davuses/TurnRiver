@@ -1327,7 +1327,7 @@ export class PokerScene3D {
       }
 
       // Seat plaque mounted flush atop the padded leather bolster crown, gently angled toward Hero for effortless reading
-      const plaque = createSeatPlaqueMesh(seat);
+      const plaque = createSeatPlaqueMesh(seat, data.fourColorDeck);
       plaque.position.set(anchor.x * 1.1, FELT_Y + 0.212, anchor.z * 1.1);
       plaque.lookAt(0, FELT_Y + 0.212, isSideSeat ? 1.55 : 0);
       if (seat.isHero) {
@@ -1499,7 +1499,7 @@ export class PokerScene3D {
         if (seat.revealCards) {
           nextRevealedSeats.add(seat.seatIndex);
         }
-        const cardScale = seat.isHero ? 1.18 : 0.96;
+        const cardScale = seat.isHero ? 1.18 : reveal ? 1.18 : 0.96;
         const cardSig = `${seat.cards[0].rank}${seat.cards[0].suit}-${seat.cards[1].rank}${seat.cards[1].suit}|${reveal ? 1 : 0}|${data.fourColorDeck ? 4 : 2}|${cardStyle}|${seat.isHero ? 1 : 0}`;
         // Showdown winner spotlight: revealed winning hand rises slightly and tilts toward the camera
         const spot = Boolean(seat.isWinner && reveal);
@@ -1516,6 +1516,15 @@ export class PokerScene3D {
           rot1 = new THREE.Euler(0.22 + liftRot, 0.09, 0);
           pos2 = new THREE.Vector3(0.24, FELT_Y + 0.115 + liftY, 1.24);
           rot2 = new THREE.Euler(0.22 + liftRot, -0.09, 0);
+        } else if (reveal) {
+          // Showdown opponent reveal: pull clear of the far rail/puck, spread side-by-side, lift & tilt upright toward Hero
+          const cx = isTopCenter ? 0 : anchor.x * 0.66;
+          const cz = isTopCenter ? anchor.z * 0.54 : anchor.z * 0.44;
+          const tiltX = (isTopCenter ? 0.48 : 0.36) + liftRot;
+          pos1 = new THREE.Vector3(cx - 0.23, FELT_Y + 0.13 + liftY, cz);
+          rot1 = new THREE.Euler(tiltX, 0.06, 0);
+          pos2 = new THREE.Vector3(cx + 0.23, FELT_Y + 0.13 + liftY, cz);
+          rot2 = new THREE.Euler(tiltX, -0.06, 0);
         } else {
           const cx = sideHoleX;
           const cz = sideHoleZ;
@@ -1681,35 +1690,39 @@ export class PokerScene3D {
             }
           );
         } else if (newlyRevealedOpponent) {
-          // Snappy showdown flip-in-place when an opponent turns over their hole cards
+          // Snappy showdown flip-and-lift from face-down felt position into upright viewer-facing pose
           const pan = this.panForX(sideHoleX);
+          const startPos1 = new THREE.Vector3(sideHoleX - 0.14, FELT_Y + 0.005, sideHoleZ);
+          const startPos2 = new THREE.Vector3(sideHoleX + 0.14, FELT_Y + 0.006, sideHoleZ + 0.02);
           const flipStart1 = new THREE.Euler(0, rot1.y, Math.PI);
           const flipStart2 = new THREE.Euler(0, rot2.y, Math.PI);
+          c1.position.copy(startPos1);
+          c2.position.copy(startPos2);
           c1.rotation.copy(flipStart1);
           c2.rotation.copy(flipStart2);
           this.activeTweens.push(
             {
               obj: c1,
-              fromPos: pos1.clone(),
+              fromPos: startPos1,
               toPos: pos1,
               curveOffset: new THREE.Vector3(0, 0, 0),
-              arcHeight: 0.11,
+              arcHeight: 0.14,
               bounceHeight: 0.015,
               fromRot: flipStart1,
               toRot: rot1,
               flipCard: true,
               delay: 0,
               elapsed: 0,
-              duration: this.isSoftwareGl ? 0.18 : 0.34,
+              duration: this.isSoftwareGl ? 0.18 : 0.36,
               onFlip: () => this.soundEngine.playCardFlipSnap(pan),
               onLand: () => this.soundEngine.playCardFeltSlap(pan),
             },
             {
               obj: c2,
-              fromPos: pos2.clone(),
+              fromPos: startPos2,
               toPos: pos2,
               curveOffset: new THREE.Vector3(0, 0, 0),
-              arcHeight: 0.11,
+              arcHeight: 0.14,
               bounceHeight: 0.015,
               fromRot: flipStart2,
               toRot: rot2,

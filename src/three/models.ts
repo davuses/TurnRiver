@@ -1538,8 +1538,9 @@ export function getAnchorsForSeatCount(count: number): { x: number; z: number; r
 /**
  * Luxury brass-trimmed obsidian casino seat nameplate mounted cleanly along the outer bolster
  */
-export function createSeatPlaqueMesh(seat: Seat3DSpec): THREE.Group {
+export function createSeatPlaqueMesh(seat: Seat3DSpec, fourColor = true): THREE.Group {
   const group = new THREE.Group();
+  const revealedCards = !seat.isHero && !seat.folded && seat.revealCards && seat.cards ? seat.cards : undefined;
   const tex = createSeatPlaqueTexture(
     seat.position,
     seat.label,
@@ -1554,7 +1555,9 @@ export function createSeatPlaqueMesh(seat: Seat3DSpec): THREE.Group {
     seat.isAggressiveAction,
     seat.actionKind,
     seat.isAllIn,
-    seat.stackText
+    seat.stackText,
+    revealedCards,
+    fourColor
   );
 
   // Sleek tapered brushed-brass or emerald active-turn pedestal base sitting cleanly atop the leather rail

@@ -1449,7 +1449,9 @@ export function createSeatPlaqueTexture(
   isAggressiveAction?: boolean,
   actionKind?: 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'all_in' | 'post_blind',
   isAllIn?: boolean,
-  stackText?: string
+  stackText?: string,
+  revealedCards?: [Card, Card],
+  fourColor = true
 ): THREE.CanvasTexture {
   const w = 512;
   const h = 220;
@@ -1493,6 +1495,39 @@ export function createSeatPlaqueTexture(
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
   ctx.fillText(position, 90, 55);
+
+  // Crisp mini-card badges in the open top-center slot when an opponent reveals their showdown hand
+  if (!isHero && !folded && revealedCards) {
+    revealedCards.forEach((rc, idx) => {
+      const bx = 166 + idx * 68;
+      const by = 22;
+      const bw = 60;
+      const bh = 78;
+      ctx.save();
+      ctx.fillStyle = '#f6f2e9';
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw, bh, 8);
+      ctx.fill();
+      ctx.strokeStyle = isWinner ? '#f59e0b' : '#cbd5e1';
+      ctx.lineWidth = isWinner ? 3.5 : 2;
+      ctx.stroke();
+
+      const cHex = suitHex(rc.suit, fourColor);
+      const rTxt = rc.rank === 'T' ? '10' : rc.rank;
+      ctx.fillStyle = cHex;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.save();
+      ctx.translate(bx + bw / 2, by + 24);
+      if (rc.rank === 'T') ctx.scale(0.72, 1);
+      ctx.font = '800 32px "JetBrains Mono", monospace';
+      ctx.fillText(rTxt, 0, 0);
+      ctx.restore();
+
+      drawVectorSuitPip(ctx, rc.suit, bx + bw / 2, by + 56, 13, cHex);
+      ctx.restore();
+    });
+  }
 
   // Player label (top-right)
   ctx.fillStyle = folded ? '#64748b' : '#f8f5ee';
