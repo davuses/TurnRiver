@@ -1279,9 +1279,9 @@ export class PokerScene3D {
           ? anchor.z * 0.65
           : anchor.z * 0.9;
       const sideHoleX = isSideSeat ? anchor.x * 0.75 : anchor.x * 0.72;
-      const sideHoleZ = isSideSeat ? anchor.z * 0.46 : anchor.z * 0.72;
+      const sideHoleZ = isSideSeat ? anchor.z * 0.46 : anchor.z * 0.54;
       const seatFxX = seat.isHero ? 0 : sideHoleX;
-      const seatFxZ = seat.isHero ? 1.24 : sideHoleZ;
+      const seatFxZ = seat.isHero ? 1.12 : sideHoleZ;
 
       if (seat.folded) {
         nextFoldedSeats.add(seat.seatIndex);
@@ -1463,7 +1463,9 @@ export class PokerScene3D {
       // Dealer button puck near BTN seat (smoothly glides when dealer button moves!)
       if (seat.isDealer) {
         const puck = createDealerPuckGroup(this.contactShadowTex, this.dealerPuckTex);
-        const puckTarget = new THREE.Vector3(anchor.x * 0.54 + 0.34, FELT_Y + 0.002, anchor.z * 0.52);
+        const puckTarget = isTopCenter
+          ? new THREE.Vector3(0.56, FELT_Y + 0.002, anchor.z * 0.48)
+          : new THREE.Vector3(anchor.x * 0.54 + 0.34, FELT_Y + 0.002, anchor.z * 0.52);
         nextDealerSeatIdx = seat.seatIndex;
         nextDealerPos = puckTarget.clone();
 
@@ -1512,14 +1514,14 @@ export class PokerScene3D {
         let rot2: THREE.Euler;
 
         if (seat.isHero) {
-          pos1 = new THREE.Vector3(-0.24, FELT_Y + 0.115 + liftY, 1.24);
+          pos1 = new THREE.Vector3(-0.24, FELT_Y + 0.115 + liftY, 1.12);
           rot1 = new THREE.Euler(0.22 + liftRot, 0.09, 0);
-          pos2 = new THREE.Vector3(0.24, FELT_Y + 0.115 + liftY, 1.24);
+          pos2 = new THREE.Vector3(0.24, FELT_Y + 0.115 + liftY, 1.12);
           rot2 = new THREE.Euler(0.22 + liftRot, -0.09, 0);
         } else if (reveal) {
           // Showdown opponent reveal: rest flat on the felt, pulled clear of the far rail/puck and oriented upright
           const cx = isTopCenter ? 0 : anchor.x * 0.66;
-          const cz = isTopCenter ? anchor.z * 0.56 : anchor.z * 0.46;
+          const cz = isTopCenter ? anchor.z * 0.54 : anchor.z * 0.46;
           pos1 = new THREE.Vector3(cx - 0.21, FELT_Y + 0.005 + liftY, cz);
           rot1 = new THREE.Euler(liftRot, 0.05, 0);
           pos2 = new THREE.Vector3(cx + 0.21, FELT_Y + 0.006 + liftY, cz);
