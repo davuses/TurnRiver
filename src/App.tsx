@@ -7,6 +7,9 @@ import type { TranslationKey } from './i18n/translations';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { OverviewView } from './views/OverviewView';
 
+const FundamentalsView = lazy(() =>
+  import('./views/FundamentalsView').then((m) => ({ default: m.FundamentalsView }))
+);
 const PreflopLabView = lazy(() =>
   import('./views/PreflopLabView').then((m) => ({ default: m.PreflopLabView }))
 );
@@ -49,9 +52,10 @@ function ViewLoadingSkeleton() {
   );
 }
 
-export type AppView = 'overview' | DrillModule | 'leaks';
+export type AppView = 'overview' | 'learn' | DrillModule | 'leaks';
 
-const NAV_LINKS: { id: DrillModule; labelKey: TranslationKey }[] = [
+const NAV_LINKS: { id: 'learn' | DrillModule; labelKey: TranslationKey }[] = [
+  { id: 'learn', labelKey: 'nav.learn' },
   { id: 'preflop', labelKey: 'nav.preflop' },
   { id: 'postflop', labelKey: 'nav.postflop' },
   { id: 'math', labelKey: 'nav.math' },
@@ -66,6 +70,7 @@ function getInitialView(): AppView {
     const viewParam = params.get('view');
     if (viewParam === 'studio3d') return 'table';
     if (
+      viewParam === 'learn' ||
       viewParam === 'preflop' ||
       viewParam === 'postflop' ||
       viewParam === 'math' ||
@@ -232,6 +237,13 @@ function TurnRiverShell() {
           className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 focus:outline-none"
         >
           <Suspense fallback={<ViewLoadingSkeleton />}>
+            {activeView === 'learn' && (
+              <FundamentalsView
+                prefs={store.prefs}
+                onNavigateDrill={(mod) => setActiveView(mod)}
+              />
+            )}
+
             {activeView === 'preflop' && (
               <PreflopLabView
                 prefs={store.prefs}

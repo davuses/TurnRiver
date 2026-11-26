@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { FUNDAMENTALS_LESSONS } from './fundamentalsLessons';
 import {
   canonicalHandKey,
   createSuitRotation,
@@ -1991,4 +1992,40 @@ test('ARENA_CHALLENGES and evaluateChallengeProgress evaluate all 4 Arena challe
     }).completed,
     false
   );
+});
+
+test('FUNDAMENTALS_LESSONS have 6 bilingual lessons, valid options, zero duplicate cards, and accurate hand-ranking showdowns', () => {
+  assert.equal(FUNDAMENTALS_LESSONS.length, 6);
+  const seenIds = new Set<string>();
+  for (const lesson of FUNDAMENTALS_LESSONS) {
+    assert.ok(!seenIds.has(lesson.id), `Duplicate lesson id ${lesson.id}`);
+    seenIds.add(lesson.id);
+    assert.ok(lesson.title.en.trim().length > 0 && lesson.title['zh-CN'].trim().length > 0);
+    assert.ok(lesson.summary.en.trim().length > 0 && lesson.summary['zh-CN'].trim().length > 0);
+    assert.equal(lesson.questions.length, 2, `${lesson.id} must have 2 interactive questions`);
+    for (const q of lesson.questions) {
+      assert.ok(
+        q.options.some((o) => o.id === q.correctOptionId),
+        `Missing correctOptionId ${q.correctOptionId} in ${q.id}`
+      );
+      const cards = [...(q.board ?? []), ...(q.heroCards ?? []), ...(q.villainCards ?? [])];
+      const keys = cards.map((c) => `${c.rank}${c.suit}`);
+      assert.equal(new Set(keys).size, keys.length, `Duplicate card in lesson question ${q.id}`);
+      if (q.board && q.board.length === 5 && q.heroCards && q.villainCards) {
+        const heroEval = evaluateHand([...q.heroCards, ...q.board]);
+        const villainEval = evaluateHand([...q.villainCards, ...q.board]);
+        const expectedWinner =
+          heroEval.score > villainEval.score
+            ? 'hero'
+            : villainEval.score > heroEval.score
+              ? 'villain'
+              : 'split';
+        assert.equal(
+          q.correctOptionId,
+          expectedWinner,
+          `Showdown winner mismatch in ${q.id}: expected ${expectedWinner}`
+        );
+      }
+    }
+  }
 });

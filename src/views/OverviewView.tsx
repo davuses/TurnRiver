@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, BookOpen } from 'lucide-react';
 import type { DrillAttemptRecord, DrillModule, MasterySummary } from '../poker/types';
+import { FUNDAMENTALS_LESSONS } from '../poker/fundamentalsLessons';
+import { useFundamentalsStore } from '../store/useFundamentalsStore';
 import { useLocale } from '../i18n/LocaleContext';
 import type { TranslationKey } from '../i18n/translations';
 import heroStudioImg from '../assets/images/hero_studio_table.webp';
@@ -8,7 +10,7 @@ import heroStudioImg from '../assets/images/hero_studio_table.webp';
 interface OverviewViewProps {
   summary: MasterySummary;
   attempts: DrillAttemptRecord[];
-  onNavigate: (view: DrillModule | 'leaks') => void;
+  onNavigate: (view: 'learn' | DrillModule | 'leaks') => void;
 }
 
 const CORE_DRILLS: {
@@ -51,6 +53,7 @@ const CORE_DRILLS: {
 export function OverviewView({ summary, attempts, onNavigate }: OverviewViewProps) {
   const [imgFailed, setImgFailed] = useState(false);
   const { t } = useLocale();
+  const fundamentals = useFundamentalsStore();
 
   const optimalRate =
     summary.totalDecisions > 0
@@ -224,6 +227,34 @@ export function OverviewView({ summary, attempts, onNavigate }: OverviewViewProp
               </div>
             </button>
           </div>
+        </section>
+
+        {/* Optional Fundamentals Track On-Ramp */}
+        <section className="rounded-xl bg-[#0E1513] border border-[#1F2D28] px-6 py-5 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5 max-w-2xl">
+            <BookOpen className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" aria-hidden="true" />
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h2 className="text-base font-semibold text-[#F2F4F1]">
+                  {t('overview.learnTitle')}
+                </h2>
+                <span className="text-xs tabular-nums text-emerald-300">
+                  {fundamentals.completedCount} / {FUNDAMENTALS_LESSONS.length} {t('learn.progress')}
+                </span>
+              </div>
+              <p className="text-sm text-[#99A8A1] leading-relaxed">
+                {t('overview.learnDesc')}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('learn')}
+            className="px-4 py-2.5 text-sm font-semibold rounded-lg bg-[#141E1B] hover:bg-emerald-500 text-[#F2F4F1] hover:text-[#04110C] border border-[#273A33] hover:border-emerald-400 inline-flex items-center gap-2 transition-colors duration-200 ease-out cursor-pointer whitespace-nowrap"
+          >
+            <span>{t('overview.learnCta')}</span>
+            <ArrowRight className="w-4 h-4" aria-hidden="true" />
+          </button>
         </section>
 
         {/* Core Gameplay Drills — Hairline Editorial Grid (zero decorative numbers or card cages) */}

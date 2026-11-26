@@ -9,6 +9,7 @@ const en = {
   'meta.pageTitle': "TurnRiver | 6-Max Texas Hold'em Training Studio",
 
   // Navigation & Global
+  'nav.learn': 'Learn',
   'nav.preflop': 'Preflop',
   'nav.postflop': 'Postflop',
   'nav.math': 'Odds & EV',
@@ -507,6 +508,24 @@ const en = {
   'studio3d.webglErrorTitle': '3D WebGL Unavailable',
   'studio3d.webglErrorFallback': 'Unable to initialize WebGL 3D scene.',
 
+  // Fundamentals Track
+  'overview.learnTitle': 'New to 6-Max? Start the Fundamentals Track',
+  'overview.learnDesc':
+    'Six 2-minute interactive lessons covering kickers, position power, 13×13 matrices, pot odds, board textures, and opponent HUD profiles.',
+  'overview.learnCta': 'Start Fundamentals',
+  'learn.title': '6-Max Fundamentals Track',
+  'learn.subtitle': 'Interactive 2-minute lessons that bridge straight into live drills and the Bot Arena',
+  'learn.progress': 'completed',
+  'learn.minRead': 'min',
+  'learn.takeaways': 'Key Takeaways',
+  'learn.quickCheck': 'Quick Check',
+  'learn.correct': 'Correct!',
+  'learn.tryAgain': 'Not quite —',
+  'learn.nextLesson': 'Next Lesson',
+  'learn.practiceNow': 'Practice in',
+  'learn.completedBadge': 'Completed',
+  'learn.resetProgress': 'Reset lesson progress',
+
   // Error Boundary
   'error.title': 'Session Interrupted',
   'error.desc': 'Something went wrong while rendering the table. Your saved local progress is intact.',
@@ -520,6 +539,7 @@ const zhCN: Record<TranslationKey, string> = {
   'meta.pageTitle': 'TurnRiver — 6人桌德州扑克训练与复盘',
 
   // Navigation & Global
+  'nav.learn': '入门',
   'nav.preflop': '翻前',
   'nav.postflop': '翻后',
   'nav.math': '赔率与 EV',
@@ -1014,6 +1034,24 @@ const zhCN: Record<TranslationKey, string> = {
   'studio3d.exitTheater': '退出大屏',
   'studio3d.webglErrorTitle': '当前环境暂不支持 3D WebGL',
   'studio3d.webglErrorFallback': '无法初始化 3D 牌桌画面。',
+
+  // Fundamentals Track
+  'overview.learnTitle': '刚接触 6 人桌？从入门课堂开始',
+  'overview.learnDesc':
+    '6 节 2 分钟互动微课，涵盖踢脚陷阱、位置优势、13×13 范围矩阵、底池赔率、牌面结构与对手 HUD 识别。',
+  'overview.learnCta': '进入入门课堂',
+  'learn.title': '6 人桌互动入门课堂',
+  'learn.subtitle': '每节 2 分钟动手演示 + 随堂测验，学完一键进入对应实战训练',
+  'learn.progress': '已完成',
+  'learn.minRead': '分钟',
+  'learn.takeaways': '核心要点',
+  'learn.quickCheck': '随堂检验',
+  'learn.correct': '回答正确！',
+  'learn.tryAgain': '差一点——',
+  'learn.nextLesson': '下一节',
+  'learn.practiceNow': '立即去练：',
+  'learn.completedBadge': '已完成',
+  'learn.resetProgress': '重置课程进度',
 
   // Error Boundary
   'error.title': '页面渲染中断',
