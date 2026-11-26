@@ -1,15 +1,21 @@
 import type { Card, DecisionGrade, Position, Street } from './types';
-import { accuracyFromGrade } from './types';
+import { accuracyFromGrade, gradeFromFrequency } from './types';
 import {
   canonicalHandKey,
   createDeck,
   evaluateHand,
-  HandCategory,
   handStrengthScore,
-  RANK_VALUE,
   shuffleDeck,
 } from './evaluator';
 import { requiredEquityPct } from './math';
+import {
+  analyzeHeroDraws,
+  decideBotAction,
+  evaluatePostflopGtoFreqs,
+  extractPostflopContext,
+  extractPreflopContext,
+  getGtoPreflopFreqs,
+} from './botAi';
 
 export type BotArchetype =
   | 'Balanced Reg'
@@ -43,6 +49,7 @@ export type BotSpeed = 'normal' | 'fast';
 export interface ArenaConfig {
   tableSize: ArenaSize;
   startingStackBb: 50 | 100 | 200;
+  sbBb?: number;
   poolPreset: PoolPresetId;
   botArchetypes: BotArchetype[]; // Length = tableSize - 1
   heroPositionLock: HeroPositionLock;
@@ -527,7 +534,7 @@ export function startNewHand(
     return posted;
   };
 
-  const sbAmt = postBlind(sbSeat, 0.5, 'post_sb');
+  const sbAmt = postBlind(sbSeat, roundBb(prev.config.sbBb ?? 0.5), 'post_sb');
   const bbAmt = postBlind(bbSeat, 1.0, 'post_bb');
 
   // First preflop actor: seat immediately left of BB (in 2-max that wraps to BTN/SB!)
@@ -683,21 +690,6 @@ export function getLegalActions(state: PokerTableState, seatIndex: number): Lega
   };
 }
 
-function highestStraightRank(ranks: Set<number>): number {
-  for (let high = 14; high >= 5; high--) {
-    let ok = true;
-    for (let offset = 0; offset < 5; offset++) {
-      const needed = high - offset === 1 ? 14 : high - offset;
-      if (!ranks.has(needed)) {
-        ok = false;
-        break;
-      }
-    }
-    if (ok) return high;
-  }
-  return 0;
-}
-
 /**
  * Computes effective call amount and effective pot size by capping against the seat's
  * remaining stack and excluding uncallable opponent excess above `streetBetBb + stackBb`.
@@ -741,67 +733,35 @@ export function computeEffectivePotOdds(
 }
 
 /**
- * Fast draw & board-texture detector for smarter postflop bot strategy & EV audits.
+ * Draw detector delegating to analyzeHeroDraws (distinguishes nut/non-nut FD, OESD vs gutshot,
+ * and scales flop vs turn equity properly).
  */
 export function detectDrawBonus(hole: [Card, Card], board: Card[]): {
   flushDraw: boolean;
   straightDraw: boolean;
   bonus: number;
 } {
-  if (board.length < 3 || board.length >= 5) {
-    return { flushDraw: false, straightDraw: false, bonus: 0 };
-  }
-  const all = [...hole, ...board];
-  const suitCounts: Record<string, number> = { s: 0, h: 0, d: 0, c: 0 };
-  for (const c of all) suitCounts[c.suit]++;
-  const flushDraw =
-    (suitCounts[hole[0].suit] === 4 && board.filter((b) => b.suit === hole[0].suit).length >= 2) ||
-    (suitCounts[hole[1].suit] === 4 && board.filter((b) => b.suit === hole[1].suit).length >= 2);
-
-  // Straight draw check: ignore already-made straights (or better) and board-only 4-straights
-  const allRanks = new Set(all.map((c) => RANK_VALUE[c.rank]));
-  const boardRanks = new Set(board.map((c) => RANK_VALUE[c.rank]));
-  let straightDraw = false;
-  if (
-    evaluateHand(all).category < HandCategory.Straight &&
-    highestStraightRank(allRanks) === 0
-  ) {
-    for (let r = 2; r <= 14; r++) {
-      if (allRanks.has(r)) continue;
-      const heroStraight = highestStraightRank(new Set([...allRanks, r]));
-      if (heroStraight === 0) continue;
-      const boardStraight =
-        board.length >= 4 ? highestStraightRank(new Set([...boardRanks, r])) : 0;
-      if (heroStraight > boardStraight) {
-        straightDraw = true;
-        break;
-      }
-    }
-  }
-
-  let bonus = 0;
-  if (flushDraw) bonus += 0.14;
-  if (straightDraw) bonus += 0.1;
-  return { flushDraw, straightDraw, bonus };
-}
-
-function isBoardWet(board: Card[]): boolean {
-  if (board.length < 3) return false;
-  const suitCounts: Record<string, number> = { s: 0, h: 0, d: 0, c: 0 };
-  for (const c of board) suitCounts[c.suit]++;
-  const twoToneOrMonotone = Object.values(suitCounts).some((n) => n >= 2);
-  const vals = Array.from(new Set(board.map((c) => RANK_VALUE[c.rank]))).sort((a, b) => a - b);
-  let connected = false;
-  for (let i = 0; i < vals.length - 1; i++) {
-    if (vals[i + 1] - vals[i] <= 2) {
-      connected = true;
-      break;
-    }
-  }
-  return twoToneOrMonotone && connected;
+  const info = analyzeHeroDraws(hole, board);
+  return {
+    flushDraw: info.flushDraw,
+    straightDraw: info.straightDraw,
+    bonus: info.drawEquityBoost,
+  };
 }
 
 function getPrimaryVillain(state: PokerTableState): TableSeat | null {
+  // Postflop: prioritize the actual current street aggressor!
+  if (state.phase !== 'PREFLOP' && state.phase !== 'IDLE') {
+    const ctx = extractPostflopContext(state, 0);
+    if (
+      ctx.lastAggressorSeatIndex !== null &&
+      ctx.lastAggressorSeatIndex !== 0 &&
+      !state.seats[ctx.lastAggressorSeatIndex]?.folded
+    ) {
+      return state.seats[ctx.lastAggressorSeatIndex];
+    }
+  }
+
   if (
     state.preflopAggressorSeatIndex !== null &&
     state.preflopAggressorSeatIndex !== 0 &&
@@ -811,7 +771,10 @@ function getPrimaryVillain(state: PokerTableState): TableSeat | null {
   }
   const activeBots = state.seats.filter((s) => !s.isHero && !s.folded);
   if (activeBots.length === 0) return null;
-  return activeBots.sort((a, b) => b.totalInvestedBb - a.totalInvestedBb)[0];
+  return activeBots.sort((a, b) => {
+    if (b.streetBetBb !== a.streetBetBb) return b.streetBetBb - a.streetBetBb;
+    return b.totalInvestedBb - a.totalInvestedBb;
+  })[0];
 }
 
 function buildExploitativeTip(
@@ -872,6 +835,12 @@ function buildExploitativeTip(
   }
 }
 
+function downgradeGrade(grade: DecisionGrade, steps = 1): DecisionGrade {
+  const order: DecisionGrade[] = ['Optimal', 'Acceptable', 'Inaccuracy', 'Mistake', 'Blunder'];
+  const idx = order.indexOf(grade);
+  return order[Math.min(order.length - 1, Math.max(0, idx + steps))];
+}
+
 function evaluateHeroActionForAudit(
   state: PokerTableState,
   seat: TableSeat,
@@ -888,101 +857,144 @@ function evaluateHeroActionForAudit(
           : 'river';
   const cards = seat.cards!;
   const handKey = canonicalHandKey(cards[0], cards[1]);
-  const baseStrength = handStrengthScore(cards, state.board);
-  const drawInfo = detectDrawBonus(cards, state.board);
-  const strength = Math.min(1, baseStrength + drawInfo.bonus * 0.65);
-  const { effectiveToCall, reqEq, reqEqPct: rawReqEqPct } = computeEffectivePotOdds(state, seat);
+  const legal = getLegalActions(state, seat.seatIndex);
+  const effPotOdds = computeEffectivePotOdds(state, seat);
+  const { effectiveToCall, effectivePotBb, reqEqPct: rawReqEqPct } = effPotOdds;
   const reqEqPct = Math.round(rawReqEqPct);
   const villain = getPrimaryVillain(state);
-
-  // Subtle exploitative threshold shifts vs extreme bot archetypes
-  let villainCallAdjust = 0;
-  if (villain?.archetype === 'Tight Nit' && effectiveToCall > 2) villainCallAdjust = 0.08;
-  if (villain?.archetype === 'Maniac' || villain?.archetype === 'Loose-Aggressive') {
-    villainCallAdjust = -0.05;
-  }
+  const chosenAmount = roundBb(raiseToBb ?? state.minRaiseBb);
 
   let recommended: 'fold' | 'check' | 'call' | 'raise' = 'check';
   let note = '';
   let reason: AuditBaseReason = 'pot_control';
+  let grade: DecisionGrade = 'Optimal';
+  let strengthForTip = handStrengthScore(cards, state.board);
 
-  if (effectiveToCall === 0) {
-    if (strength >= 0.62) {
-      recommended = 'raise';
-      reason = 'strong_value';
-      note = `Strong holding (${handKey}) builds value by betting/raising on ${street}.`;
-    } else if (drawInfo.flushDraw && state.preflopAggressorSeatIndex === 0 && street !== 'river') {
-      recommended = 'raise';
-      reason = 'semi_bluff_cbet';
-      note = `High-equity draw with preflop initiative makes a strong semi-bluff c-bet on ${street}.`;
-    } else if (strength <= 0.28 && street !== 'preflop') {
-      recommended = 'check';
-      reason = 'weak_showdown';
-      note = `Weak showdown value prefers checking or selective bluffing rather than thin betting.`;
-    } else {
-      recommended = 'check';
-      reason = 'pot_control';
-      note = `Medium strength hand plays cleanly as a check for pot control on ${street}.`;
+  if (street === 'preflop') {
+    // 100% aligned with TurnRiver's PREFLOP_TEMPLATES via shared GTO preflop solver
+    const preCtx = extractPreflopContext(state, seat.seatIndex, legal);
+    const freqs = getGtoPreflopFreqs(preCtx);
+
+    const actionFreqs: Record<'fold' | 'check' | 'call' | 'raise', number> = legal.canCheck
+      ? { fold: 0, check: freqs.call + freqs.fold, call: 0, raise: freqs.raise }
+      : { fold: freqs.fold, check: 0, call: freqs.call, raise: freqs.raise };
+
+    const entries = (Object.entries(actionFreqs) as [('fold' | 'check' | 'call' | 'raise'), number][])
+      .sort((a, b) => b[1] - a[1]);
+    recommended = entries[0][0];
+    const bestFreq = entries[0][1];
+    const chosenFreq = actionFreqs[actionType];
+    grade = gradeFromFrequency(chosenFreq, bestFreq);
+
+    // Preflop sizing sanity check (catches absurd 100bb open-shoves / massive over-raises)
+    if (actionType === 'raise') {
+      if (state.preflopRaiseCount === 0 && chosenAmount >= 15 && seat.stackBb >= 35) {
+        grade = chosenFreq === 0 ? 'Blunder' : downgradeGrade(grade, chosenAmount >= 30 ? 2 : 1);
+      } else if (state.preflopRaiseCount === 1 && chosenAmount >= 35 && seat.stackBb >= 60 && chosenFreq < 50) {
+        grade = chosenFreq === 0 ? 'Blunder' : downgradeGrade(grade, 1);
+      }
     }
-  } else if (street === 'preflop' && state.preflopRaiseCount === 0) {
-    // Unopened preflop pot: prefer RFI raise with playable range instead of open-limping
-    const openThreshold = 0.56 - preflopPositionShift(seat.position, state.config.tableSize);
-    if (strength >= openThreshold) {
-      recommended = 'raise';
-      reason = 'strong_value';
-      note = `Strong holding (${handKey}) opens for value and initiative from ${seat.position}.`;
-    } else if (strength >= openThreshold - 0.10 && seat.position === 'SB') {
-      recommended = 'call';
+
+    if (recommended === 'raise') {
+      reason = state.preflopRaiseCount === 0 ? 'strong_value' : 'value_protect_raise';
+      note =
+        state.preflopRaiseCount === 0
+          ? `Strong holding (${handKey}) opens for value and initiative from ${seat.position}.`
+          : `Strong holding (${handKey}) supports raising for value and initiative from ${seat.position}.`;
+    } else if (recommended === 'call') {
       reason = 'pot_odds_call';
-      note = `Facing ${effectiveToCall}bb from SB requires ${reqEqPct}% equity; completing is playable.`;
+      note = `Facing ${effectiveToCall}bb requires ${reqEqPct}% equity; ${handKey} continues cleanly with a call.`;
+    } else if (recommended === 'check') {
+      reason = 'pot_control';
+      note = `Medium strength hand (${handKey}) checks cleanly to realize equity from ${seat.position}.`;
     } else {
-      recommended = 'fold';
       reason = 'pot_odds_fold';
-      note = `Marginal off-range hand (${handKey}) prefers folding from ${seat.position} rather than open-limping.`;
+      note =
+        state.preflopRaiseCount === 0
+          ? `Marginal off-range hand (${handKey}) prefers folding from ${seat.position} rather than open-limping.`
+          : `Facing ${effectiveToCall}bb requires ${reqEqPct}% equity; folding ${handKey} preserves stack.`;
     }
   } else {
-    if (strength >= Math.max(0.72, reqEq + 0.32)) {
-      recommended = 'raise';
-      reason = 'value_protect_raise';
-      note = `High equity vs current bet supports raising for value and protection.`;
-    } else if (strength >= reqEq - 0.04 + villainCallAdjust) {
-      recommended = 'call';
-      reason = 'pot_odds_call';
-      note = `Facing ${effectiveToCall}bb requires ${reqEqPct}% equity; this holding is strong enough to continue with a call.`;
+    // Postflop: realistic range-equity & GTO frequency distribution
+    const pf = evaluatePostflopGtoFreqs(state, seat, effPotOdds);
+    strengthForTip = pf.hand.rawStrength;
+
+    // Apply light exploitative adjustment against extreme known archetypes
+    let { fold, check, call, raise } = pf;
+    if (!state.config.blindReadMode && villain && villain.archetype !== 'Hero') {
+      if (villain.archetype === 'Tight Nit' && effectiveToCall > 0 && call > 0 && fold > 0) {
+        const shift = Math.min(call, 12);
+        call -= shift;
+        fold += shift;
+      } else if (
+        (villain.archetype === 'Maniac' || villain.archetype === 'Loose-Aggressive') &&
+        effectiveToCall > 0 &&
+        pf.hand.isRealPairOrBetter &&
+        fold > 0
+      ) {
+        const shift = Math.min(fold, 14);
+        fold -= shift;
+        call += shift;
+      } else if (villain.archetype === 'Calling Station' && effectiveToCall === 0) {
+        if (pf.hand.bucket === 'pure_air' && raise > 0) {
+          const shift = Math.min(raise, 15);
+          raise -= shift;
+          check += shift;
+        }
+      }
+    }
+
+    const actionFreqs: Record<'fold' | 'check' | 'call' | 'raise', number> = {
+      fold,
+      check,
+      call,
+      raise,
+    };
+    const entries = (Object.entries(actionFreqs) as [('fold' | 'check' | 'call' | 'raise'), number][])
+      .sort((a, b) => b[1] - a[1]);
+    recommended = entries[0][0];
+    const bestFreq = entries[0][1];
+    const chosenFreq = actionFreqs[actionType];
+    grade = gradeFromFrequency(chosenFreq, bestFreq);
+
+    // Postflop sizing sanity check (penalize absurd 3x+ pot overbets with non-nuts at deep SPR)
+    if (
+      actionType === 'raise' &&
+      pf.ctx.effectiveSpr > 2.0 &&
+      chosenAmount > Math.max(effectivePotBb * 2.5, state.currentBetBb * 5) &&
+      pf.hand.bucket !== 'nuts_strong_value'
+    ) {
+      grade = downgradeGrade(grade, 1);
+    }
+
+    reason = pf.primaryReason;
+    if (effectiveToCall === 0) {
+      if (recommended === 'raise') {
+        note =
+          reason === 'semi_bluff_cbet'
+            ? `Strong draw or dry-board range advantage (${handKey}) supports betting/c-betting on ${street}.`
+            : `Strong holding (${handKey}) builds value by betting on ${street}.`;
+      } else if (reason === 'weak_showdown') {
+        note = `Weak showdown value (${handKey}) prefers checking or selective blocker bluffing rather than thin betting.`;
+      } else {
+        note = `Medium strength hand (${handKey}) plays cleanly as a check for pot control on ${street}.`;
+      }
+    } else if (recommended === 'raise') {
+      note = `High equity (~${pf.estEquityPct}%) vs current bet supports raising for value and protection.`;
+    } else if (recommended === 'call') {
+      note = `Facing ${effectiveToCall}bb requires ${reqEqPct}% equity (~${pf.estEquityPct}% est.); calling is profitable.`;
     } else {
-      recommended = 'fold';
-      reason = 'pot_odds_fold';
-      note = `Facing ${effectiveToCall}bb requires ${reqEqPct}% equity; folding preserves stack.`;
+      note = `Facing ${effectiveToCall}bb requires ${reqEqPct}% equity (~${pf.estEquityPct}% est.); folding preserves stack.`;
     }
   }
 
   let exploitTipKind: AuditExploitTipKind | undefined;
   if (!state.config.blindReadMode) {
-    const tip = buildExploitativeTip(villain, recommended, strength);
+    const tip = buildExploitativeTip(villain, recommended, strengthForTip);
     note += tip.text;
     exploitTipKind = tip.kind;
   }
 
-  const chosenAmount = roundBb(raiseToBb ?? state.minRaiseBb);
-
-  let grade: DecisionGrade = 'Optimal';
-  if (actionType !== recommended) {
-    if (actionType === 'fold' && strength > reqEq + 0.34) {
-      grade = 'Blunder';
-    } else if (actionType === 'fold' && strength > reqEq + 0.2) {
-      grade = 'Mistake';
-    } else if (actionType === 'call' && strength < reqEq - 0.24) {
-      grade = 'Blunder';
-    } else if (actionType === 'call' && strength < reqEq - 0.14) {
-      grade = 'Mistake';
-    } else if (actionType === 'raise' && strength < 0.32 && (chosenAmount >= 15 || effectiveToCall > 2)) {
-      grade = 'Blunder';
-    } else if (actionType === 'raise' && strength < 0.42 && (chosenAmount >= 8 || effectiveToCall > 2)) {
-      grade = 'Mistake';
-    } else {
-      grade = 'Inaccuracy';
-    }
-  }
   const chosenLabel =
     actionType === 'fold'
       ? 'Fold'
@@ -1453,8 +1465,13 @@ export function applyPlayerAction(
   let actionText = '';
   let actionSpec: TableActionSpec = { kind: 'check' };
 
-  // Record 3-bet opportunity when facing a single open raise preflop
-  if (currentStreet === 'preflop' && preflopRaiseCount === 1 && !actor.hadThreeBetOppThisHand) {
+  // Record 3-bet opportunity when facing a single open raise preflop (only if legally able to raise)
+  if (
+    currentStreet === 'preflop' &&
+    preflopRaiseCount === 1 &&
+    legal.canBetOrRaise &&
+    !actor.hadThreeBetOppThisHand
+  ) {
     actor.hadThreeBetOppThisHand = true;
     actor.stats.threeBetOpps += 1;
   }
@@ -1623,32 +1640,8 @@ export function applyPlayerAction(
 }
 
 /**
- * Position-looseness adjustment for preflop play:
- * UTG plays tightest (-0.09); BTN & HU BTN play widest (+0.07 to +0.14).
- */
-function preflopPositionShift(pos: Position, tableSize: ArenaSize): number {
-  if (tableSize === 2) {
-    return pos === 'BTN' ? 0.14 : 0.08;
-  }
-  switch (pos) {
-    case 'UTG':
-      return -0.09;
-    case 'HJ':
-      return -0.04;
-    case 'CO':
-      return 0.02;
-    case 'BTN':
-      return 0.08;
-    case 'SB':
-      return 0.03;
-    case 'BB':
-      return 0.05;
-  }
-}
-
-/**
- * Smarter position-, initiative-, texture-, and draw-aware strategic bot policy
- * across all 6 distinct poker archetypes.
+ * Multi-street position-, initiative-, texture-, SPR-, and draw-aware strategic bot policy
+ * across all 6 distinct poker archetypes (delegates to src/poker/botAi.ts).
  */
 export function chooseBotAction(
   state: PokerTableState,
@@ -1657,134 +1650,6 @@ export function chooseBotAction(
 ): { type: 'fold' | 'check' | 'call' | 'raise'; raiseToBb?: number } {
   const seat = state.seats[seatIndex];
   const legal = getLegalActions(state, seatIndex);
-  const rawStrength = seat.cards ? handStrengthScore(seat.cards, state.board) : 0.4;
-  const draw = seat.cards
-    ? detectDrawBonus(seat.cards, state.board)
-    : { flushDraw: false, straightDraw: false, bonus: 0 };
-  const wetBoard = isBoardWet(state.board);
-  const contenders = activeSeats(state.seats).length;
-  const isMultiway = contenders >= 3;
-  const hasInitiative = state.preflopAggressorSeatIndex === seatIndex;
-  const { reqEq: potOdds } = computeEffectivePotOdds(state, seat);
-
-  // Archetype parameters: [loosenessShift, aggressionBoost, bluffFreq, callStickiness]
-  const profile: Record<BotArchetype, [number, number, number, number]> = {
-    'Balanced Reg': [0.0, 0.05, 0.16, 0.0],
-    'Tight-Aggressive': [-0.07, 0.1, 0.1, -0.03],
-    'Loose-Aggressive': [0.09, 0.15, 0.27, 0.03],
-    'Calling Station': [0.13, -0.15, 0.03, 0.16],
-    'Tight Nit': [-0.15, -0.05, 0.03, -0.1],
-    Maniac: [0.17, 0.24, 0.42, 0.08],
-  };
-
-  const [looseShift, aggBoost, bluffFreq, callStickiness] =
-    seat.archetype === 'Hero' ? [0, 0, 0, 0] : profile[seat.archetype];
-
-  const posShift =
-    state.phase === 'PREFLOP' ? preflopPositionShift(seat.position, state.config.tableSize) : 0;
-  const multiwayPenalty = isMultiway && state.phase !== 'PREFLOP' ? -0.05 : 0;
-  const noise = (rng() - 0.5) * 0.07;
-
-  const effStrength = Math.min(
-    1,
-    Math.max(0, rawStrength + draw.bonus * 0.7 + looseShift + posShift + multiwayPenalty + noise)
-  );
-
-  const pickSizing = () => {
-    if (state.phase === 'PREFLOP') {
-      if (state.currentBetBb <= 1.0) {
-        const openSize = seat.position === 'SB' ? 3.0 : state.config.tableSize === 2 ? 2.2 : 2.5;
-        return Math.max(legal.minTotalBetBb, Math.min(legal.maxTotalBetBb, openSize));
-      }
-      const mult = seat.archetype === 'Maniac' ? 3.5 : 3.0;
-      const target = roundBb(Math.min(legal.maxTotalBetBb, state.currentBetBb * mult));
-      return Math.max(legal.minTotalBetBb, Math.min(legal.maxTotalBetBb, target));
-    }
-
-    // Postflop texture-aware sizing: smaller c-bets on dry boards (33-50%), larger on wet boards (66-75%)
-    const potFrac =
-      seat.archetype === 'Maniac'
-        ? 0.85
-        : wetBoard || effStrength > 0.8
-          ? 0.72
-          : hasInitiative && state.phase === 'FLOP'
-            ? 0.38
-            : 0.52;
-    const raw =
-      state.currentBetBb === 0
-        ? Math.max(1.0, state.potBb * potFrac)
-        : state.currentBetBb * 2.6;
-    return roundBb(Math.max(legal.minTotalBetBb, Math.min(legal.maxTotalBetBb, raw)));
-  };
-
-  // Preflop open / 3-bet / defense logic
-  if (state.phase === 'PREFLOP') {
-    if (legal.canCheck) {
-      if (legal.canBetOrRaise && effStrength > 0.64 - aggBoost) {
-        return { type: 'raise', raiseToBb: pickSizing() };
-      }
-      return { type: 'check' };
-    }
-
-    const facingOpen = state.preflopRaiseCount === 1;
-    const facing3BetPlus = state.preflopRaiseCount >= 2;
-
-    if (legal.canBetOrRaise && state.currentBetBb < state.config.startingStackBb * 0.35) {
-      const raiseThresh = facing3BetPlus
-        ? 0.84 - aggBoost * 0.4
-        : facingOpen
-          ? 0.74 - aggBoost
-          : 0.56 - aggBoost * 0.7;
-      const light3Bet = facingOpen && rng() < bluffFreq * 0.45 && rawStrength > 0.42;
-      if (effStrength > raiseThresh || light3Bet) {
-        return { type: 'raise', raiseToBb: pickSizing() };
-      }
-    }
-
-    const callThreshold = facing3BetPlus
-      ? potOdds + 0.24 - callStickiness
-      : facingOpen
-        ? potOdds + 0.14 - callStickiness
-        : potOdds + 0.06 - callStickiness;
-
-    if (effStrength >= callThreshold) {
-      return { type: 'call' };
-    }
-    return { type: 'fold' };
-  }
-
-  // Postflop: checked to bot
-  if (legal.canCheck) {
-    const cbetBoost = hasInitiative && state.phase === 'FLOP' && !isMultiway ? 0.12 : 0;
-    const semiBluff = (draw.flushDraw || draw.straightDraw) && rng() < 0.55 + aggBoost;
-    const pureBluff = !isMultiway && rng() < bluffFreq * (wetBoard ? 0.75 : 1.0);
-
-    if (
-      legal.canBetOrRaise &&
-      (effStrength > 0.62 - aggBoost - cbetBoost || semiBluff || pureBluff)
-    ) {
-      return { type: 'raise', raiseToBb: pickSizing() };
-    }
-    return { type: 'check' };
-  }
-
-  // Postflop: facing a bet or raise
-  const semiBluffRaise =
-    (draw.flushDraw || draw.straightDraw) &&
-    state.phase !== 'RIVER' &&
-    rng() < bluffFreq * 0.55;
-
-  if (
-    legal.canBetOrRaise &&
-    state.currentBetBb < state.config.startingStackBb * 0.45 &&
-    (effStrength > 0.78 - aggBoost || semiBluffRaise || (rng() < bluffFreq * 0.28 && state.phase !== 'RIVER'))
-  ) {
-    return { type: 'raise', raiseToBb: pickSizing() };
-  }
-
-  if (effStrength >= potOdds + 0.07 - callStickiness) {
-    return { type: 'call' };
-  }
-
-  return { type: 'fold' };
+  const effPotOdds = computeEffectivePotOdds(state, seat);
+  return decideBotAction(state, seatIndex, legal, effPotOdds, rng);
 }

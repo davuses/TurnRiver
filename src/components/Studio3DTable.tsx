@@ -23,9 +23,10 @@ import type { Seat3DSpec } from '../three/models';
 import type { FeltThemeId } from '../three/textures';
 import { useLocale } from '../i18n/LocaleContext';
 
-interface Studio3DTableProps {
+export interface Studio3DTableProps {
   board: Card[];
   potBb: number;
+  potText?: string;
   streetLabel: string;
   seats: Seat3DSpec[];
   fourColorDeck: boolean;
@@ -42,6 +43,7 @@ interface Studio3DTableProps {
 export function Studio3DTable({
   board,
   potBb,
+  potText,
   streetLabel,
   seats,
   fourColorDeck,
@@ -103,6 +105,7 @@ export function Studio3DTable({
       const controller = new PokerScene3D(el, {
         board,
         potBb,
+        potText,
         seats,
         fourColorDeck,
         feltTheme,
@@ -150,10 +153,11 @@ export function Studio3DTable({
     sceneRef.current?.updateHandLayer({
       board,
       potBb,
+      potText,
       seats,
       fourColorDeck,
     });
-  }, [board, potBb, seats, fourColorDeck]);
+  }, [board, potBb, potText, seats, fourColorDeck]);
 
   // Lightweight setters: never rebuild cards/chips/plaques when toggling felt, light, props, or audio
   useEffect(() => {
@@ -265,80 +269,84 @@ export function Studio3DTable({
         </div>
       )}
 
-      {/* Minimal Top-Left Pot & Street Telemetry (solid opaque backing, NO backdrop-filter over WebGL) */}
-      <div className="pointer-events-none absolute top-2 left-2 sm:top-3 sm:left-3 flex items-center gap-2 sm:gap-2.5 bg-[#0A100E]/92 border border-[#21322C] rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs font-mono tabular-nums">
-        <span className="text-slate-400">{t('studio3d.streetLabel')}</span>
-        <span className="text-emerald-400 font-semibold">{streetLabel}</span>
-        <span className="text-slate-600">·</span>
-        <span className="text-amber-300 font-semibold">
-          {t('studio3d.potLabel')} {potBb.toFixed(1)} bb
-        </span>
-      </div>
+      {/* Responsive Top Header Overlay: Telemetry + Controls (solid opaque backing, NO backdrop-filter over WebGL) */}
+      <div className="pointer-events-none absolute top-2 left-2 right-2 sm:top-3 sm:left-3 sm:right-3 flex items-center justify-between gap-1.5">
+        {/* Top-Left Pot & Street Telemetry */}
+        <div className="min-w-0 flex items-center gap-1.5 sm:gap-2.5 bg-[#0A100E]/92 border border-[#21322C] rounded-lg px-2 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs font-mono tabular-nums overflow-hidden">
+          <span className="hidden sm:inline text-slate-400 shrink-0">{t('studio3d.streetLabel')}</span>
+          <span className="text-emerald-400 font-semibold truncate">{streetLabel}</span>
+          <span className="text-slate-600 shrink-0">·</span>
+          <span className="text-amber-300 font-semibold whitespace-nowrap shrink-0">
+            <span className="hidden sm:inline">{t('studio3d.potLabel')} </span>
+            {potText ?? `${potBb.toFixed(1)} bb`}
+          </span>
+        </div>
 
-      {/* Top-Right Compact Theater + Hide/Show Dock Toggles */}
-      <div className="absolute top-2 right-2 sm:top-3 sm:right-3 flex items-center gap-1.5 sm:gap-2">
-        {orbitLockable && (
+        {/* Top-Right Compact Orbit + Theater + Hide/Show Dock Toggles */}
+        <div className="pointer-events-auto flex items-center gap-1 sm:gap-2 shrink-0">
+          {orbitLockable && (
+            <button
+              type="button"
+              data-testid="studio3d-orbit-toggle"
+              aria-pressed={orbitEnabled}
+              onClick={() => setOrbitEnabled((v) => !v)}
+              aria-label={
+                orbitEnabled
+                  ? locale === 'zh-CN' ? '锁定旋转，恢复页面滚动' : 'Lock orbit and scroll page'
+                  : locale === 'zh-CN' ? '解锁旋转视角' : 'Unlock 3D orbit'
+              }
+              className={`px-2 py-1.5 text-[11px] sm:text-xs font-medium rounded-lg border inline-flex items-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap ${
+                orbitEnabled
+                  ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200'
+                  : 'bg-[#0A100E]/92 border-[#21322C] text-slate-300 hover:text-white'
+              }`}
+            >
+              <Move3d className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              <span>{locale === 'zh-CN' ? (orbitEnabled ? '旋转' : '已锁定') : orbitEnabled ? 'Orbit' : 'Locked'}</span>
+            </button>
+          )}
+          {onToggleTheater && (
+            <button
+              type="button"
+              data-testid="studio3d-theater-toggle"
+              aria-pressed={isTheater}
+              onClick={onToggleTheater}
+              aria-label={isTheater ? t('studio3d.exitTheater') : t('studio3d.theater')}
+              className="px-2 sm:px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0A100E]/92 border border-[#21322C] text-emerald-300 hover:text-white hover:border-emerald-500/60 inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              {isTheater ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span className="hidden sm:inline">{t('studio3d.exitTheater')}</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span className="hidden sm:inline">{t('studio3d.theater')}</span>
+                </>
+              )}
+            </button>
+          )}
           <button
             type="button"
-            data-testid="studio3d-orbit-toggle"
-            aria-pressed={orbitEnabled}
-            onClick={() => setOrbitEnabled((v) => !v)}
-            aria-label={
-              orbitEnabled
-                ? locale === 'zh-CN' ? '锁定旋转，恢复页面滚动' : 'Lock orbit and scroll page'
-                : locale === 'zh-CN' ? '解锁旋转视角' : 'Unlock 3D orbit'
-            }
-            className={`px-2 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer ${
-              orbitEnabled
-                ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200'
-                : 'bg-[#0A100E]/92 border-[#21322C] text-slate-300 hover:text-white'
-            }`}
+            aria-pressed={dockVisible}
+            onClick={() => setDockVisible((v) => !v)}
+            aria-label={dockVisible ? t('studio3d.hideDock') : t('studio3d.showDock')}
+            className="px-2 sm:px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0A100E]/92 border border-[#21322C] text-slate-200 hover:text-white hover:border-emerald-500/50 inline-flex items-center gap-1.5 cursor-pointer"
           >
-            <Move3d className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>{locale === 'zh-CN' ? (orbitEnabled ? '旋转' : '已锁定') : orbitEnabled ? 'Orbit' : 'Locked'}</span>
-          </button>
-        )}
-        {onToggleTheater && (
-          <button
-            type="button"
-            data-testid="studio3d-theater-toggle"
-            aria-pressed={isTheater}
-            onClick={onToggleTheater}
-            aria-label={isTheater ? t('studio3d.exitTheater') : t('studio3d.theater')}
-            className="px-2 sm:px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0A100E]/92 border border-[#21322C] text-emerald-300 hover:text-white hover:border-emerald-500/60 inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            {isTheater ? (
+            {dockVisible ? (
               <>
-                <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
-                <span className="hidden sm:inline">{t('studio3d.exitTheater')}</span>
+                <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
+                <span className="hidden sm:inline">{t('studio3d.hideDock')}</span>
               </>
             ) : (
               <>
-                <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
-                <span className="hidden sm:inline">{t('studio3d.theater')}</span>
+                <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                <span className="hidden sm:inline">{t('studio3d.showDock')}</span>
               </>
             )}
           </button>
-        )}
-        <button
-          type="button"
-          aria-pressed={dockVisible}
-          onClick={() => setDockVisible((v) => !v)}
-          aria-label={dockVisible ? t('studio3d.hideDock') : t('studio3d.showDock')}
-          className="px-2 sm:px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0A100E]/92 border border-[#21322C] text-slate-200 hover:text-white hover:border-emerald-500/50 inline-flex items-center gap-1.5 cursor-pointer"
-        >
-          {dockVisible ? (
-            <>
-              <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">{t('studio3d.hideDock')}</span>
-            </>
-          ) : (
-            <>
-              <Eye className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">{t('studio3d.showDock')}</span>
-            </>
-          )}
-        </button>
+        </div>
       </div>
 
       {/* Viewport-First Collapsible Bottom Dock (single-row scroll strip on <640px mobile, NO backdrop-filter) */}

@@ -480,9 +480,52 @@ function preflopHandStrength(hole: [Card, Card]): number {
     : PREFLOP_STRENGTH_MATRIX[loIdx][hiIdx];
 }
 
+function highestStraightRankFromSet(ranks: Set<number>): number {
+  for (let high = 14; high >= 5; high--) {
+    let ok = true;
+    for (let offset = 0; offset < 5; offset++) {
+      const needed = high - offset === 1 ? 14 : high - offset;
+      if (!ranks.has(needed)) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return high;
+  }
+  return 0;
+}
+
+function isBoardFourStraight(board: Card[]): boolean {
+  if (board.length < 4) return false;
+  const unique = Array.from(new Set(board.map((c) => RANK_VALUE[c.rank])));
+  if (unique.length < 4) return false;
+  // Check any 5-rank straight window (including A-2-3-4-5) containing >= 4 distinct board ranks
+  for (let high = 14; high >= 5; high--) {
+    let count = 0;
+    for (let offset = 0; offset < 5; offset++) {
+      const needed = high - offset === 1 ? 14 : high - offset;
+      if (unique.includes(needed)) count++;
+    }
+    if (count >= 4) return true;
+  }
+  return false;
+}
+
+function highestMissingRankInSuit(board: Card[], suit: Suit, aboveRank: number): number {
+  const boardInSuit = new Set(
+    board.filter((c) => c.suit === suit).map((c) => RANK_VALUE[c.rank])
+  );
+  let missingAbove = 0;
+  for (let r = 14; r > aboveRank; r--) {
+    if (!boardInSuit.has(r)) missingAbove++;
+  }
+  return missingAbove;
+}
+
 /**
  * Evaluates preflop + postflop made-hand strength normalized 0..1 for bot AI & quick readouts.
- * Accounts for paired/made boards so playing the board with weak hole cards is not over-valued.
+ * Accounts for paired/made/4-flush/4-straight boards so weak flushes, underfulls, or
+ * non-flush hands on 4-flush boards are not over-valued.
  */
 export function handStrengthScore(hole: [Card, Card], board: Card[]): number {
   if (board.length === 0) {
@@ -492,12 +535,27 @@ export function handStrengthScore(hole: [Card, Card], board: Card[]): number {
   const evalResult = evaluateHand([...hole, ...board]);
   const boardOnly = board.length >= 5 ? evaluateHand(board) : null;
   const boardRankCounts = new Map<number, number>();
+  const boardSuitCounts: Record<Suit, number> = { s: 0, h: 0, d: 0, c: 0 };
   let boardMax = 0;
   for (const c of board) {
     const val = RANK_VALUE[c.rank];
     boardRankCounts.set(val, (boardRankCounts.get(val) ?? 0) + 1);
+    boardSuitCounts[c.suit]++;
     if (val > boardMax) boardMax = val;
   }
+
+  let maxBoardSuit: Suit = 's';
+  let maxBoardSuitCount = 0;
+  for (const s of SUITS) {
+    if (boardSuitCounts[s] > maxBoardSuitCount) {
+      maxBoardSuitCount = boardSuitCounts[s];
+      maxBoardSuit = s;
+    }
+  }
+  const boardHasFourFlush = maxBoardSuitCount >= 4;
+  const boardHasFourStraight = isBoardFourStraight(board);
+  const scarePenalty =
+    (boardHasFourFlush ? 0.24 : 0) + (boardHasFourStraight ? 0.14 : 0);
 
   const h1 = RANK_VALUE[hole[0].rank];
   const h2 = RANK_VALUE[hole[1].rank];
@@ -517,31 +575,97 @@ export function handStrengthScore(hole: [Card, Card], board: Card[]): number {
     }
 
     case HandCategory.FullHouse: {
-      if (playingBoardOnly) return 0.38;
-      return 0.94 + (evalResult.tiebreakers[0] / 14) * 0.03;
+      if (playingBoardOnly) return 0.36;
+      const tripRank = evalResult.tiebreakers[0];
+      const pairRank = evalResult.tiebreakers[1] ?? 2;
+      if ((boardRankCounts.get(tripRank) ?? 0) >= 3) {
+        // Trips on board (e.g. Ks Kh Kd 7c 2s): strength hinges heavily on the pair kicker!
+        const heroHasOverPocket = h1 === h2 && h1 > tripRank;
+        if (heroHasOverPocket) {
+          return 0.94 + (pairRank / 14) * 0.04;
+        }
+        return 0.72 + (pairRank / 14) * 0.16;
+      }
+      // Genuine full house (pocket pair + board pair, or board pair + hero trips)
+      const isUnderfull =
+        (boardRankCounts.get(tripRank) ?? 0) === 1 &&
+        Array.from(boardRankCounts.entries()).some(([r, cnt]) => cnt >= 2 && r > tripRank);
+      if (isUnderfull) {
+        return 0.86 + (tripRank / 14) * 0.05 + (pairRank / 14) * 0.02;
+      }
+      return 0.92 + (tripRank / 14) * 0.04 + (pairRank / 14) * 0.025;
     }
 
     case HandCategory.Flush: {
       if (playingBoardOnly) {
-        return evalResult.tiebreakers[0] === 14 ? 0.42 : 0.28;
+        return evalResult.tiebreakers[0] === 14 ? 0.42 : 0.25;
       }
-      return 0.89 + (evalResult.tiebreakers[0] / 14) * 0.05;
+      // Determine the flush suit and Hero's highest card in that suit
+      let flushSuit: Suit = maxBoardSuit;
+      for (const s of SUITS) {
+        const totalInSuit =
+          boardSuitCounts[s] + (hole[0].suit === s ? 1 : 0) + (hole[1].suit === s ? 1 : 0);
+        if (totalInSuit >= 5) {
+          flushSuit = s;
+          break;
+        }
+      }
+      const heroSuitRanks = hole
+        .filter((c) => c.suit === flushSuit)
+        .map((c) => RANK_VALUE[c.rank]);
+      const heroTopFlushRank = heroSuitRanks.length > 0 ? Math.max(...heroSuitRanks) : 2;
+      const higherMissing = highestMissingRankInSuit(board, flushSuit, heroTopFlushRank);
+
+      if (boardSuitCounts[flushSuit] >= 4) {
+        // 4-flush on board: nut flush is strong, baby flush (e.g. 3s) is a bluff-catcher
+        if (higherMissing === 0) return 0.94;
+        if (higherMissing === 1) return 0.86;
+        if (higherMissing === 2) return 0.78;
+        if (higherMissing === 3) return 0.70;
+        return Math.min(0.66, 0.50 + (heroTopFlushRank / 14) * 0.14);
+      }
+      // 3-flush board (Hero uses both hole cards)
+      if (higherMissing === 0) return 0.95;
+      if (higherMissing === 1) return 0.91;
+      return 0.84 + (heroTopFlushRank / 14) * 0.06;
     }
 
     case HandCategory.Straight: {
       if (playingBoardOnly) {
-        return evalResult.tiebreakers[0] === 14 ? 0.45 : 0.28;
+        return evalResult.tiebreakers[0] === 14 ? 0.44 : 0.25;
       }
-      return 0.84 + (evalResult.tiebreakers[0] / 14) * 0.04;
+      const straightHigh = evalResult.tiebreakers[0];
+      let score = 0.82 + (straightHigh / 14) * 0.06;
+      if (boardHasFourFlush) {
+        score -= 0.22;
+      }
+      if (boardHasFourStraight) {
+        // Check if a single higher card could beat Hero's straight on this 4-straight board
+        const boardRankSet = new Set(board.map((c) => RANK_VALUE[c.rank]));
+        let maxPossibleOneCardStraight = straightHigh;
+        for (let r = 2; r <= 14; r++) {
+          if (boardRankSet.has(r)) continue;
+          const possible = highestStraightRankFromSet(new Set([...boardRankSet, r]));
+          if (possible > maxPossibleOneCardStraight) {
+            maxPossibleOneCardStraight = possible;
+          }
+        }
+        if (maxPossibleOneCardStraight > straightHigh) {
+          score -= 0.11;
+        }
+      }
+      return Math.max(0.42, score);
     }
 
     case HandCategory.ThreeOfAKind: {
       const tripRank = evalResult.tiebreakers[0];
       if ((boardRankCounts.get(tripRank) ?? 0) >= 3) {
         // Trips are entirely on the board — Hero only holds a kicker
-        return 0.14 + (hiHole / 14) * 0.18;
+        return 0.14 + (hiHole / 14) * 0.16;
       }
-      return 0.78 + (tripRank / 14) * 0.05;
+      const isSet = h1 === h2 && h1 === tripRank;
+      const base = (isSet ? 0.79 : 0.75) + (tripRank / 14) * 0.05;
+      return Math.max(0.42, base - scarePenalty);
     }
 
     case HandCategory.TwoPair: {
@@ -552,7 +676,7 @@ export function handStrengthScore(hole: [Card, Card], board: Card[]): number {
 
       if (boardHasHigh && boardHasLow) {
         // Double-paired board — Hero did not pair either hole card
-        return 0.12 + (hiHole / 14) * 0.18;
+        return 0.12 + (hiHole / 14) * 0.16;
       }
 
       if (boardHasHigh || boardHasLow) {
@@ -564,31 +688,361 @@ export function handStrengthScore(hole: [Card, Card], board: Card[]): number {
             .map((c) => RANK_VALUE[c.rank])
             .filter((r) => (boardRankCounts.get(r) ?? 0) < 2)
         );
-        if (heroPair > boardMax) return 0.66 + (heroPair / 14) * 0.05;
-        if (heroPair >= unpairedBoardMax && unpairedBoardMax > 0) {
-          return 0.54 + (heroPair / 14) * 0.08;
+        let base: number;
+        if (heroPair > boardMax) base = 0.66 + (heroPair / 14) * 0.05;
+        else if (heroPair >= unpairedBoardMax && unpairedBoardMax > 0) {
+          base = 0.54 + (heroPair / 14) * 0.08;
+        } else {
+          base = 0.36 + (heroPair / 14) * 0.14;
         }
-        return 0.36 + (heroPair / 14) * 0.14;
+        return Math.max(0.24, base - scarePenalty * 0.85);
       }
 
       // Genuine Two Pair using both hole cards
-      return 0.71 + (highPair / 14) * 0.06;
+      const base = 0.71 + (highPair / 14) * 0.06;
+      return Math.max(0.38, base - scarePenalty * 0.9);
     }
 
     case HandCategory.OnePair: {
       const pairRank = evalResult.tiebreakers[0];
       if ((boardRankCounts.get(pairRank) ?? 0) >= 2) {
         // Pair is entirely on the board — Hero is unpaired (high-card showdown value)
-        return 0.12 + (hiHole / 14) * 0.16;
+        return 0.12 + (hiHole / 14) * 0.15;
       }
       const kicker = evalResult.tiebreakers[1] ?? 7;
-      if (pairRank > boardMax) return 0.68 + (pairRank / 14) * 0.05; // Overpair
-      if (pairRank === boardMax) return 0.56 + (kicker / 14) * 0.1; // Top pair
-      return 0.34 + (pairRank / 14) * 0.16; // Middle / bottom pair
+      let base: number;
+      if (pairRank > boardMax) base = 0.67 + (pairRank / 14) * 0.05; // Overpair
+      else if (pairRank === boardMax) base = 0.55 + (kicker / 14) * 0.1; // Top pair
+      else base = 0.33 + (pairRank / 14) * 0.15; // Middle / bottom pair
+      return Math.max(0.22, base - scarePenalty * 0.8);
     }
 
     default: {
-      return 0.12 + (hiHole / 14) * 0.16;
+      return 0.10 + (hiHole / 14) * 0.15;
     }
   }
+}
+
+const RANK_ZH_SHORT: Record<number, string> = {
+  14: 'A',
+  13: 'K',
+  12: 'Q',
+  11: 'J',
+  10: '10',
+  9: '9',
+  8: '8',
+  7: '7',
+  6: '6',
+  5: '5',
+  4: '4',
+  3: '3',
+  2: '2',
+};
+
+const RANK_CODE_SHORT: Record<number, string> = {
+  14: 'A',
+  13: 'K',
+  12: 'Q',
+  11: 'J',
+  10: 'T',
+  9: '9',
+  8: '8',
+  7: '7',
+  6: '6',
+  5: '5',
+  4: '4',
+  3: '3',
+  2: '2',
+};
+
+/**
+ * Returns a concise live hand strength + active draw description for Hero in EN or zh-CN.
+ * Examples:
+ * - Preflop: "Pocket Aces" / "口袋对 A", "Ace-King Suited" / "AK 同花"
+ * - Postflop: "Top Pair, Ace Kicker · Flush Draw" / "顶对（A 踢脚）· 同花听牌",
+ *   "Overpair" / "超对", "Set of Kings" / "暗三条 K", "Two Pair" / "两对",
+ *   "Nut Flush Draw + OESD" / "坚果同花+两头顺听牌"
+ */
+export function describeHeroHand(
+  hole: [Card, Card],
+  board: Card[],
+  locale: 'en' | 'zh-CN'
+): string {
+  const isZh = locale === 'zh-CN';
+  const v1 = RANK_VALUE[hole[0].rank];
+  const v2 = RANK_VALUE[hole[1].rank];
+  const hi = Math.max(v1, v2);
+  const lo = Math.min(v1, v2);
+
+  // Preflop description
+  if (board.length === 0) {
+    if (hi === lo) {
+      return isZh
+        ? `口袋对 ${RANK_ZH_SHORT[hi]}`
+        : `Pocket ${RANK_NAME_PLURAL[hi]}`;
+    }
+    const suited = hole[0].suit === hole[1].suit;
+    if (isZh) {
+      const code = `${RANK_CODE_SHORT[hi]}${RANK_CODE_SHORT[lo]}`;
+      return suited ? `${code} 同花` : `${code} 杂色`;
+    }
+    return `${RANK_NAME_SINGULAR[hi]}-${RANK_NAME_SINGULAR[lo]} ${suited ? 'Suited' : 'Offsuit'}`;
+  }
+
+  // Postflop evaluation
+  const all = [...hole, ...board];
+  const evalResult = evaluateHand(all);
+  const boardOnly = board.length >= 5 ? evaluateHand(board) : null;
+  const playingBoardOnly = boardOnly !== null && evalResult.score === boardOnly.score;
+
+  const boardRankCounts = new Map<number, number>();
+  const boardSuitCounts: Record<Suit, number> = { s: 0, h: 0, d: 0, c: 0 };
+  const uniqueBoardRanksDesc = Array.from(
+    new Set(board.map((c) => RANK_VALUE[c.rank]))
+  ).sort((a, b) => b - a);
+  const boardMax = uniqueBoardRanksDesc[0] ?? 0;
+  const boardMin = uniqueBoardRanksDesc[uniqueBoardRanksDesc.length - 1] ?? 0;
+
+  for (const c of board) {
+    const val = RANK_VALUE[c.rank];
+    boardRankCounts.set(val, (boardRankCounts.get(val) ?? 0) + 1);
+    boardSuitCounts[c.suit]++;
+  }
+
+  // Active draws (Flop & Turn only)
+  let hasNutFd = false;
+  let hasFd = false;
+  let hasOesd = false;
+  let hasGutshot = false;
+
+  if (board.length === 3 || board.length === 4) {
+    if (evalResult.category < HandCategory.Flush) {
+      for (const s of SUITS) {
+        const heroSuitCards = hole.filter((c) => c.suit === s);
+        const totalSuit = boardSuitCounts[s] + heroSuitCards.length;
+        if (totalSuit === 4 && heroSuitCards.length >= 1) {
+          hasFd = true;
+          const heroTopSuit = Math.max(...heroSuitCards.map((c) => RANK_VALUE[c.rank]));
+          if (highestMissingRankInSuit(board, s, heroTopSuit) === 0) {
+            hasNutFd = true;
+          }
+          break;
+        }
+      }
+    }
+
+    if (evalResult.category < HandCategory.Straight) {
+      const allRanks = new Set(all.map((c) => RANK_VALUE[c.rank]));
+      const boardRanks = new Set(board.map((c) => RANK_VALUE[c.rank]));
+      if (highestStraightRankFromSet(allRanks) === 0) {
+        let straightOutRanks = 0;
+        for (let r = 2; r <= 14; r++) {
+          if (allRanks.has(r)) continue;
+          const heroStraight = highestStraightRankFromSet(new Set([...allRanks, r]));
+          if (heroStraight === 0) continue;
+          const boardStraight =
+            board.length >= 4 ? highestStraightRankFromSet(new Set([...boardRanks, r])) : 0;
+          if (heroStraight > boardStraight) {
+            straightOutRanks++;
+          }
+        }
+        if (straightOutRanks >= 2) hasOesd = true;
+        else if (straightOutRanks === 1) hasGutshot = true;
+      }
+    }
+  }
+
+  let drawLabel = '';
+  if (hasFd && (hasOesd || hasGutshot)) {
+    if (isZh) {
+      const fdPart = hasNutFd ? '坚果同花' : '同花';
+      const sdPart = hasOesd ? '两头顺听牌' : '卡顺听牌';
+      drawLabel = `${fdPart}+${sdPart}`;
+    } else {
+      const fdPart = hasNutFd ? 'Nut Flush Draw' : 'Flush Draw';
+      const sdPart = hasOesd ? 'OESD' : 'Gutshot';
+      drawLabel = `${fdPart} + ${sdPart}`;
+    }
+  } else if (hasFd) {
+    drawLabel = isZh
+      ? hasNutFd
+        ? '坚果同花听牌'
+        : '同花听牌'
+      : hasNutFd
+        ? 'Nut Flush Draw'
+        : 'Flush Draw';
+  } else if (hasOesd) {
+    drawLabel = isZh ? '两头顺听牌' : 'OESD';
+  } else if (hasGutshot) {
+    drawLabel = isZh ? '卡顺听牌' : 'Gutshot';
+  }
+
+  let madeLabel = '';
+  let isUnpairedEffective = false;
+
+  switch (evalResult.category) {
+    case HandCategory.StraightFlush: {
+      const sfHigh = evalResult.tiebreakers[0];
+      if (sfHigh === 14) {
+        madeLabel = isZh ? '皇家同花顺' : 'Royal Flush';
+      } else {
+        madeLabel = isZh
+          ? `同花顺（${RANK_ZH_SHORT[sfHigh]} 高）`
+          : `Straight Flush, ${RANK_NAME_SINGULAR[sfHigh]}-High`;
+      }
+      break;
+    }
+
+    case HandCategory.FourOfAKind: {
+      const quadRank = evalResult.tiebreakers[0];
+      if ((boardRankCounts.get(quadRank) ?? 0) >= 4) {
+        madeLabel = isZh
+          ? `牌面四条（${RANK_ZH_SHORT[hi]} 踢脚）`
+          : `Board Quads, ${RANK_NAME_SINGULAR[hi]} Kicker`;
+      } else {
+        madeLabel = isZh
+          ? `四条（${RANK_ZH_SHORT[quadRank]}）`
+          : `Four of a Kind, ${RANK_NAME_PLURAL[quadRank]}`;
+      }
+      break;
+    }
+
+    case HandCategory.FullHouse: {
+      if (playingBoardOnly) {
+        madeLabel = isZh ? '牌面葫芦' : 'Board Full House';
+      } else {
+        const tripRank = evalResult.tiebreakers[0];
+        const pairRank = evalResult.tiebreakers[1];
+        madeLabel = isZh
+          ? `葫芦（${RANK_ZH_SHORT[tripRank]} 带 ${RANK_ZH_SHORT[pairRank]}）`
+          : `Full House, ${RANK_NAME_PLURAL[tripRank]} Full`;
+      }
+      break;
+    }
+
+    case HandCategory.Flush: {
+      if (playingBoardOnly) {
+        madeLabel = isZh ? '牌面同花' : 'Board Flush';
+      } else {
+        let flushSuit: Suit = 's';
+        for (const s of SUITS) {
+          if (
+            boardSuitCounts[s] + (hole[0].suit === s ? 1 : 0) + (hole[1].suit === s ? 1 : 0) >=
+            5
+          ) {
+            flushSuit = s;
+            break;
+          }
+        }
+        const heroSuitRanks = hole
+          .filter((c) => c.suit === flushSuit)
+          .map((c) => RANK_VALUE[c.rank]);
+        const heroTopFlush = heroSuitRanks.length > 0 ? Math.max(...heroSuitRanks) : 2;
+        if (highestMissingRankInSuit(board, flushSuit, heroTopFlush) === 0) {
+          madeLabel = isZh ? '坚果同花' : 'Nut Flush';
+        } else {
+          const topRank = evalResult.tiebreakers[0];
+          madeLabel = isZh
+            ? `同花（${RANK_ZH_SHORT[topRank]} 高）`
+            : `Flush, ${RANK_NAME_SINGULAR[topRank]}-High`;
+        }
+      }
+      break;
+    }
+
+    case HandCategory.Straight: {
+      if (playingBoardOnly) {
+        madeLabel = isZh ? '牌面顺子' : 'Board Straight';
+      } else {
+        const high = evalResult.tiebreakers[0];
+        madeLabel = isZh
+          ? `顺子（${RANK_ZH_SHORT[high]} 高）`
+          : `Straight, ${RANK_NAME_SINGULAR[high]}-High`;
+      }
+      break;
+    }
+
+    case HandCategory.ThreeOfAKind: {
+      const tripRank = evalResult.tiebreakers[0];
+      if ((boardRankCounts.get(tripRank) ?? 0) >= 3) {
+        madeLabel = isZh
+          ? `牌面三条（${RANK_ZH_SHORT[hi]} 踢脚）`
+          : `Board Trips, ${RANK_NAME_SINGULAR[hi]} Kicker`;
+      } else if (v1 === v2 && v1 === tripRank) {
+        madeLabel = isZh
+          ? `暗三条 ${RANK_ZH_SHORT[tripRank]}`
+          : `Set of ${RANK_NAME_PLURAL[tripRank]}`;
+      } else {
+        madeLabel = isZh
+          ? `明三条 ${RANK_ZH_SHORT[tripRank]}`
+          : `Trips, ${RANK_NAME_PLURAL[tripRank]}`;
+      }
+      break;
+    }
+
+    case HandCategory.TwoPair: {
+      const highPair = evalResult.tiebreakers[0];
+      const lowPair = evalResult.tiebreakers[1];
+      const boardHasHigh = (boardRankCounts.get(highPair) ?? 0) >= 2;
+      const boardHasLow = (boardRankCounts.get(lowPair) ?? 0) >= 2;
+      if (boardHasHigh && boardHasLow) {
+        isUnpairedEffective = true;
+        madeLabel = isZh
+          ? `牌面两对（${RANK_ZH_SHORT[hi]} 高）`
+          : `Board Two Pair, ${RANK_NAME_SINGULAR[hi]}-High`;
+      } else if (
+        !boardHasHigh &&
+        !boardHasLow &&
+        uniqueBoardRanksDesc.length >= 2 &&
+        highPair === uniqueBoardRanksDesc[0] &&
+        lowPair === uniqueBoardRanksDesc[1]
+      ) {
+        madeLabel = isZh ? '顶两对' : 'Top Two Pair';
+      } else {
+        madeLabel = isZh ? '两对' : 'Two Pair';
+      }
+      break;
+    }
+
+    case HandCategory.OnePair: {
+      const pairRank = evalResult.tiebreakers[0];
+      if ((boardRankCounts.get(pairRank) ?? 0) >= 2) {
+        isUnpairedEffective = true;
+        madeLabel = isZh
+          ? `牌面对（${RANK_ZH_SHORT[hi]} 高）`
+          : `Board Pair, ${RANK_NAME_SINGULAR[hi]}-High`;
+      } else if (v1 === v2 && pairRank > boardMax) {
+        madeLabel = isZh ? '超对' : 'Overpair';
+      } else if (pairRank === boardMax) {
+        const kickerVal = v1 === pairRank ? v2 : v1;
+        madeLabel = isZh
+          ? `顶对（${RANK_ZH_SHORT[kickerVal]} 踢脚）`
+          : `Top Pair, ${RANK_NAME_SINGULAR[kickerVal]} Kicker`;
+      } else if (v1 === v2 && pairRank < boardMin) {
+        madeLabel = isZh ? '小口袋对' : 'Underpair';
+      } else if (uniqueBoardRanksDesc.length >= 2 && pairRank >= uniqueBoardRanksDesc[1]) {
+        madeLabel = isZh ? '中对' : 'Middle Pair';
+      } else {
+        madeLabel = isZh ? '底对' : 'Bottom Pair';
+      }
+      break;
+    }
+
+    default: {
+      isUnpairedEffective = true;
+      madeLabel = isZh
+        ? `${RANK_ZH_SHORT[hi]} 高牌`
+        : `${RANK_NAME_SINGULAR[hi]}-High`;
+      break;
+    }
+  }
+
+  if (drawLabel) {
+    if (isUnpairedEffective) {
+      return drawLabel;
+    }
+    const sep = isZh && madeLabel.endsWith('）') ? '· ' : ' · ';
+    return `${madeLabel}${sep}${drawLabel}`;
+  }
+  return madeLabel;
 }

@@ -1000,7 +1000,8 @@ export function createSeatPlaqueTexture(
   winnerLabel?: string,
   isAggressiveAction?: boolean,
   actionKind?: 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'all_in' | 'post_blind',
-  isAllIn?: boolean
+  isAllIn?: boolean,
+  stackText?: string
 ): THREE.CanvasTexture {
   const w = 512;
   const h = 220;
@@ -1068,20 +1069,54 @@ export function createSeatPlaqueTexture(
   ctx.lineTo(w - 26, 118);
   ctx.stroke();
 
-  // Bottom-left stack bb (large, unmistakable tabular numerals)
+  // Measure bottom-right live action tag or winner badge first so stack text never collides with it
+  const badgeText = isWinner
+    ? (winnerLabel ?? 'WINNER').slice(0, 20)
+    : actionText
+      ? actionText.slice(0, 20)
+      : '';
+  let badgeLayout: {
+    pillX: number;
+    pillY: number;
+    pillW: number;
+    pillH: number;
+    padX: number;
+    maxTextW: number;
+    fontSize: number;
+  } | null = null;
+  if (badgeText) {
+    const maxTextW = 224;
+    let fontSize = badgeText.length > 12 ? 24 : 28;
+    ctx.font = `bold ${fontSize}px "JetBrains Mono", Inter, system-ui, sans-serif`;
+    while (fontSize > 20 && ctx.measureText(badgeText).width > maxTextW) {
+      fontSize -= 2;
+      ctx.font = `bold ${fontSize}px "JetBrains Mono", Inter, system-ui, sans-serif`;
+    }
+    const textW = Math.min(maxTextW, ctx.measureText(badgeText).width);
+    const padX = 14;
+    const pillW = textW + padX * 2;
+    const pillH = 48;
+    const pillX = w - 26 - pillW;
+    const pillY = 140;
+    badgeLayout = { pillX, pillY, pillW, pillH, padX, maxTextW, fontSize };
+  }
+
+  // Bottom-left stack display (dynamic font-size fit & width clamp so dollar amounts never hit action pill)
+  const stackLabel = stackText ?? `${stackBb.toFixed(1)} bb`;
+  const maxStackW = badgeLayout ? Math.max(180, badgeLayout.pillX - 28 - 14) : w - 56;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = folded ? '#64748b' : '#ffffff';
-  ctx.font = 'bold 44px "JetBrains Mono", monospace';
-  ctx.fillText(`${stackBb.toFixed(1)} bb`, 28, 164);
+  let stackFontSize = 44;
+  ctx.font = `bold ${stackFontSize}px "JetBrains Mono", monospace`;
+  while (stackFontSize > 24 && ctx.measureText(stackLabel).width > maxStackW) {
+    stackFontSize -= 2;
+    ctx.font = `bold ${stackFontSize}px "JetBrains Mono", monospace`;
+  }
+  ctx.fillText(stackLabel, 28, 164, maxStackW);
 
   // Bottom-right live action tag or winner badge
-  const badgeText = isWinner
-    ? (winnerLabel ?? 'WINNER').slice(0, 16)
-    : actionText
-      ? actionText.slice(0, 16)
-      : '';
-  if (badgeText) {
+  if (badgeText && badgeLayout) {
     const isCheck =
       actionKind === 'check' ||
       (!actionKind && (/check/i.test(badgeText) || badgeText.includes('过牌')));
@@ -1097,15 +1132,8 @@ export function createSeatPlaqueTexture(
           badgeText.includes('Bet') ||
           badgeText.includes('加注') ||
           badgeText.includes('下注')));
-    const fontSize = badgeText.length > 12 ? 24 : 28;
+    const { pillX, pillY, pillW, pillH, padX, maxTextW, fontSize } = badgeLayout;
     ctx.font = `bold ${fontSize}px "JetBrains Mono", Inter, system-ui, sans-serif`;
-    const maxTextW = 228;
-    const textW = Math.min(maxTextW, ctx.measureText(badgeText).width);
-    const padX = 14;
-    const pillW = textW + padX * 2;
-    const pillH = 48;
-    const pillX = w - 26 - pillW;
-    const pillY = 140;
 
     ctx.fillStyle = isWinner
       ? 'rgba(245, 158, 11, 0.24)'
@@ -1142,16 +1170,21 @@ export function createSeatPlaqueTexture(
   return tex;
 }
 
+const MAX_FELT_BADGE_CACHE = 120;
 const feltBadgeCache = new Map<string, THREE.CanvasTexture>();
 
 /**
  * Crisp obsidian-emerald pill with brass/ivory numerals for on-felt pot & bet amounts.
- * Cached by `variant:text`; cached textures are shared (flagged via userData.sharedFeltBadge) and must not be disposed per-mesh.
+ * Cached by `variant:text` with LRU eviction; cached textures are shared (flagged via userData.sharedFeltBadge) and must not be disposed per-mesh.
  */
 export function createFeltBadgeTexture(text: string, variant: 'pot' | 'bet'): THREE.CanvasTexture {
   const key = `${variant}:${text}`;
   const cached = feltBadgeCache.get(key);
-  if (cached) return cached;
+  if (cached) {
+    feltBadgeCache.delete(key);
+    feltBadgeCache.set(key, cached);
+    return cached;
+  }
 
   const w = 320;
   const h = 112;
@@ -1192,6 +1225,12 @@ export function createFeltBadgeTexture(text: string, variant: 'pot' | 'bet'): TH
   tex.anisotropy = 8;
   tex.userData.sharedFeltBadge = true;
   feltBadgeCache.set(key, tex);
+  while (feltBadgeCache.size > MAX_FELT_BADGE_CACHE) {
+    const oldestKey = feltBadgeCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    feltBadgeCache.get(oldestKey)?.dispose();
+    feltBadgeCache.delete(oldestKey);
+  }
   return tex;
 }
 

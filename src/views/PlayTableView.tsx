@@ -25,6 +25,7 @@ import type { Card, DrillAttemptRecord, UserPreferences } from '../poker/types';
 import {
   applyPlayerAction,
   chooseBotAction,
+  computeEffectivePotOdds,
   computeHudDisplay,
   createTableFromConfig,
   DEFAULT_ARENA_CONFIG,
@@ -41,6 +42,16 @@ import {
   type TableSeat,
   type WinnerSummarySpec,
 } from '../poker/tableEngine';
+import { describeHeroHand } from '../poker/evaluator';
+import {
+  formatChips,
+  formatSignedChips,
+  getCashStakes,
+  getSliderStepBb,
+  snapRaiseBb,
+  type ChipDisplayConfig,
+  type ChipDisplayUnit,
+} from '../poker/currency';
 import { PokerTableOval, type TableSeatDisplay } from '../components/PokerTableOval';
 import { Studio3DTable } from '../components/Studio3DTable';
 import { ArenaSetupModal } from '../components/ArenaSetupModal';
@@ -114,6 +125,29 @@ export interface HandReplayRecord {
   won: boolean;
   totalPotBb: number;
   frames: HandReplayFrame[];
+  actionLog?: TableActionLogItem[];
+}
+
+function applyAutoTopUp(state: PokerTableState, enabled: boolean): PokerTableState {
+  if (!enabled) return state;
+  const hero = state.seats[0];
+  if (!hero) return state;
+  const startTotal = roundBb(hero.stackBb + hero.totalInvestedBb);
+  const target = state.config.startingStackBb;
+  if (startTotal >= target) return state;
+  const addBb = roundBb(target - startTotal);
+  return {
+    ...state,
+    seats: state.seats.map((s) =>
+      s.isHero
+        ? {
+            ...s,
+            stackBb: roundBb(s.stackBb + addBb),
+            allIn: false,
+          }
+        : s
+    ),
+  };
 }
 
 function snapshotSeat(seat: TableSeat): ReplaySeat {
@@ -193,9 +227,22 @@ export function PlayTableView({
   onRecordAttempt,
 }: PlayTableViewProps) {
   const { locale, t } = useLocale();
-  const [table, setTable] = useState<PokerTableState>(() =>
-    startNewHand(createTableFromConfig(DEFAULT_ARENA_CONFIG))
+  const chipDisplay: ChipDisplayConfig = useMemo(
+    () => ({
+      unit: prefs.chipDisplayUnit ?? 'bb',
+      stakesId: prefs.cashStakesId ?? 'nl200',
+    }),
+    [prefs.chipDisplayUnit, prefs.cashStakesId]
   );
+  const activeStakes = getCashStakes(chipDisplay.stakesId);
+  const autoTopUp = Boolean(prefs.autoTopUp);
+
+  const [table, setTable] = useState<PokerTableState>(() => {
+    const initialUnit = prefs.chipDisplayUnit ?? 'bb';
+    const initialSbBb =
+      initialUnit === 'usd' ? getCashStakes(prefs.cashStakesId).sbBb : 0.5;
+    return startNewHand(createTableFromConfig({ ...DEFAULT_ARENA_CONFIG, sbBb: initialSbBb }));
+  });
   const [raiseAmount, setRaiseAmount] = useState<number>(2.5);
   // 3D Table is the primary default experience for the Multi-Bot Arena
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('3d');
@@ -208,12 +255,25 @@ export function PlayTableView({
   const [replayHistory, setReplayHistory] = useState<HandReplayRecord[]>(loadReplayHistory);
   const [replayRecord, setReplayRecord] = useState<HandReplayRecord | null>(null);
   const [replayStep, setReplayStep] = useState<number>(0);
+  const [sessionStats, setSessionStats] = useState<{ netBb: number; hands: number }>({
+    netBb: 0,
+    hands: 0,
+  });
   const captureRef = useRef<{
     hand: number;
     frames: HandReplayFrame[];
     startStackBb: number;
     saved: boolean;
   }>({ hand: -1, frames: [], startStackBb: 0, saved: false });
+  const handAccountingRef = useRef<{
+    handNumber: number;
+    startStackBb: number;
+    settledHandNumber: number;
+  }>({ handNumber: -1, startStackBb: 0, settledHandNumber: 0 });
+  const tableRef = useRef<PokerTableState>(table);
+  tableRef.current = table;
+  const autoTopUpRef = useRef<boolean>(autoTopUp);
+  autoTopUpRef.current = autoTopUp;
   const arenaRootRef = useRef<HTMLDivElement | null>(null);
   const loggedHandRef = useRef<number>(0);
 
@@ -277,6 +337,46 @@ export function PlayTableView({
   const is3DActive = viewMode === '3d' || theaterMode;
   const prevStreetKeyRef = useRef<string>('');
 
+  // Honest session P&L accounting: tracks start-of-hand stack and settles once at showdown
+  useEffect(() => {
+    if (table.phase === 'IDLE') return;
+    const acc = handAccountingRef.current;
+    if (acc.handNumber !== table.handNumber) {
+      acc.handNumber = table.handNumber;
+      acc.startStackBb = roundBb(table.seats[0].stackBb + table.seats[0].totalInvestedBb);
+    }
+    if (table.phase === 'SHOWDOWN' && acc.settledHandNumber < table.handNumber) {
+      acc.settledHandNumber = table.handNumber;
+      const deltaBb = roundBb(table.seats[0].stackBb - acc.startStackBb);
+      setSessionStats((prev) => ({
+        netBb: roundBb(prev.netBb + deltaBb),
+        hands: prev.hands + 1,
+      }));
+    }
+  }, [table.handNumber, table.phase, table.seats]);
+
+  const advanceToNextHand = () => {
+    const curr = tableRef.current;
+    const acc = handAccountingRef.current;
+    if (
+      curr.phase !== 'IDLE' &&
+      curr.phase !== 'SHOWDOWN' &&
+      acc.settledHandNumber < curr.handNumber
+    ) {
+      acc.settledHandNumber = curr.handNumber;
+      const startStack =
+        acc.handNumber === curr.handNumber
+          ? acc.startStackBb
+          : roundBb(curr.seats[0].stackBb + curr.seats[0].totalInvestedBb);
+      const deltaBb = roundBb(curr.seats[0].stackBb - startStack);
+      setSessionStats((prev) => ({
+        netBb: roundBb(prev.netBb + deltaBb),
+        hands: prev.hands + 1,
+      }));
+    }
+    setTable((prev) => applyAutoTopUp(settleAndStartNewHand(prev), autoTopUpRef.current));
+  };
+
   // Sync default raise sizing whenever it becomes Hero's turn
   useEffect(() => {
     if (isHeroTurn && legal.canBetOrRaise) {
@@ -289,7 +389,7 @@ export function PlayTableView({
             ? roundBb(Math.max(legal.minTotalBetBb, table.potBb * 0.5))
             : roundBb(Math.max(legal.minTotalBetBb, table.currentBetBb * 2.5));
       setRaiseAmount(
-        Math.min(legal.maxTotalBetBb, Math.max(legal.minTotalBetBb, defaultTarget))
+        snapRaiseBb(defaultTarget, chipDisplay, legal.minTotalBetBb, legal.maxTotalBetBb)
       );
     }
   }, [
@@ -301,6 +401,7 @@ export function PlayTableView({
     legal.canBetOrRaise,
     legal.minTotalBetBb,
     legal.maxTotalBetBb,
+    chipDisplay,
   ]);
 
   // Automatic strategic bot turn loop with realistic live-table pacing & street-deal breathing room
@@ -321,7 +422,7 @@ export function PlayTableView({
     // Fast-fold: if Hero folded and fastFold is enabled, pause briefly so fold registers then deal next
     if (heroSeat.folded && table.config.fastFold) {
       const fastTimer = window.setTimeout(() => {
-        setTable((curr) => settleAndStartNewHand(curr));
+        advanceToNextHand();
       }, isFastSpeed ? 450 : 750);
       return () => window.clearTimeout(fastTimer);
     }
@@ -462,6 +563,7 @@ export function PlayTableView({
         won: netBb > 0,
         totalPotBb: Math.max(...cap.frames.map((f) => f.potBb)),
         frames: [...cap.frames],
+        actionLog: [...table.actionLog],
       };
       setReplayHistory((prev) => [record, ...prev].slice(0, REPLAY_HISTORY_LIMIT));
     }
@@ -486,7 +588,7 @@ export function PlayTableView({
     if (!is3DActive) {
       playPokerSound('card', prefs.soundEnabled);
     }
-    setTable((curr) => settleAndStartNewHand(curr));
+    advanceToNextHand();
   };
 
   // Poker action hotkeys: F (Fold), C/Space (Check/Call), R (Bet/Raise), Enter (Deal Next on showdown)
@@ -561,14 +663,37 @@ export function PlayTableView({
     setTable((curr) => rebuyHeroTo100(curr));
   };
 
-  const handleApplyArenaConfig = (nextConfig: ArenaConfig) => {
+  const handleApplyArenaConfig = (
+    nextConfig: ArenaConfig,
+    prefsPatch?: Partial<UserPreferences>
+  ) => {
     if (!is3DActive) {
       playPokerSound('card', prefs.soundEnabled);
     }
+    if (prefsPatch) {
+      onUpdatePrefs(prefsPatch);
+    }
     loggedHandRef.current = 0;
     captureRef.current.hand = -1;
+    handAccountingRef.current = { handNumber: -1, startStackBb: 0, settledHandNumber: 0 };
+    setSessionStats({ netBb: 0, hands: 0 });
     setReplayRecord(null);
     setTable(startNewHand(createTableFromConfig(nextConfig)));
+  };
+
+  const handleChangeChipUnit = (nextUnit: ChipDisplayUnit) => {
+    if (nextUnit === chipDisplay.unit) return;
+    onUpdatePrefs({ chipDisplayUnit: nextUnit });
+    if (isHeroTurn && legal.canBetOrRaise) {
+      setRaiseAmount((prev) =>
+        snapRaiseBb(
+          prev,
+          { unit: nextUnit, stakesId: chipDisplay.stakesId },
+          legal.minTotalBetBb,
+          legal.maxTotalBetBb
+        )
+      );
+    }
   };
 
   const toggleBlindRead = () => {
@@ -678,6 +803,7 @@ export function PlayTableView({
         position: s.position,
         label: s.isHero ? t('common.heroShort') : s.name,
         stackBb: s.stackBb,
+        stackText: formatChips(s.stackBb, chipDisplay),
         isHero: s.isHero,
         isDealer: s.seatIndex === viewButtonSeat,
         isActiveTurn: viewActingSeat === s.seatIndex,
@@ -685,9 +811,11 @@ export function PlayTableView({
         isWinner: viewWinners.includes(s.seatIndex),
         winnerLabel,
         streetBetBb: s.streetBetBb,
+        betText:
+          s.streetBetBb > 0 ? formatChips(s.streetBetBb, chipDisplay, { compact: true }) : undefined,
         actionText:
           s.lastActionSpec || s.lastActionText
-            ? formatArenaAction(locale, s.lastActionSpec, s.lastActionText)
+            ? formatArenaAction(locale, s.lastActionSpec, s.lastActionText, chipDisplay)
             : undefined,
         actionKind: mapActionKindTo3D(s.lastActionSpec?.kind),
         isAllIn: s.allIn,
@@ -707,15 +835,142 @@ export function PlayTableView({
     viewPhase,
     locale,
     t,
+    chipDisplay,
   ]);
+
+  const viewHeroSeat = viewSeats[0];
+  const heroHandDescription = useMemo(() => {
+    if (!viewHeroSeat || !viewHeroSeat.cards || viewHeroSeat.folded || viewPhase === 'IDLE') {
+      return '';
+    }
+    return describeHeroHand(viewHeroSeat.cards, viewBoard, locale);
+  }, [viewHeroSeat, viewBoard, viewPhase, locale]);
+
+  const liveSprVal = useMemo(() => {
+    if (viewPhase === 'PREFLOP' || viewPhase === 'IDLE' || viewPotBb <= 0 || !viewHeroSeat) {
+      return null;
+    }
+    const activeOppStacks = viewSeats
+      .filter((s) => !s.isHero && !s.folded)
+      .map((s) => s.stackBb);
+    if (activeOppStacks.length === 0) return null;
+    const effStackBb = Math.min(viewHeroSeat.stackBb, Math.max(...activeOppStacks));
+    return effStackBb / viewPotBb;
+  }, [viewPhase, viewPotBb, viewHeroSeat, viewSeats]);
+
+  const liveSprLabel =
+    liveSprVal !== null ? `${t('arena.spr')} ${liveSprVal.toFixed(1)}` : undefined;
+
+  const livePotOdds = useMemo(() => {
+    if (replayRecord || !isHeroTurn || legal.canCheck) return null;
+    const po = computeEffectivePotOdds(table, heroSeat);
+    if (po.effectiveToCall <= 0) return null;
+    const oddsRatio = po.effectivePotBb / po.effectiveToCall;
+    return {
+      ...po,
+      oddsRatio,
+    };
+  }, [replayRecord, isHeroTurn, legal.canCheck, table, heroSeat]);
+
+  const displayedActionLog: TableActionLogItem[] = useMemo(() => {
+    if (!replayRecord || !replayFrame) return table.actionLog;
+    if (replayRecord.actionLog) {
+      return replayRecord.actionLog.slice(0, replayFrame.actionLogLength);
+    }
+    const seen = new Set<number>();
+    const reconstructed: TableActionLogItem[] = [];
+    for (let i = 0; i <= Math.min(replayStep, replayRecord.frames.length - 1); i++) {
+      const f = replayRecord.frames[i];
+      if (f.latestLog && !seen.has(f.actionLogLength)) {
+        seen.add(f.actionLogLength);
+        reconstructed.push(f.latestLog);
+      }
+    }
+    return reconstructed;
+  }, [replayRecord, replayFrame, replayStep, table.actionLog]);
+
+  const presetLabel = t(`arena.preset.${table.config.poolPreset}` as TranslationKey);
+
+  const canManualTopUp =
+    (table.phase === 'IDLE' || table.phase === 'SHOWDOWN') &&
+    heroSeat.stackBb < table.config.startingStackBb;
+
+  const configBadgeText = (() => {
+    const sizeText =
+      locale === 'zh-CN' ? `${table.config.tableSize}人桌` : `${table.config.tableSize}-Max`;
+    if (chipDisplay.unit === 'usd') {
+      return `${sizeText} · ${activeStakes.label} · ${formatChips(table.config.startingStackBb, chipDisplay)}`;
+    }
+    return `${sizeText} · ${presetLabel} · ${table.config.startingStackBb}bb`;
+  })();
+
+  const chipUnitToggleNode = (
+    <div
+      role="group"
+      data-testid="toggle-chip-unit"
+      aria-label={t('arena.ariaChipUnit')}
+      className="flex items-center gap-0.5 p-0.5 bg-[#0E1513] border border-[#1F2D28] rounded-lg shrink-0"
+    >
+      <button
+        type="button"
+        data-testid="unit-bb"
+        aria-pressed={chipDisplay.unit === 'bb'}
+        onClick={() => handleChangeChipUnit('bb')}
+        className={`px-2 py-1 text-[11px] font-mono font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+          chipDisplay.unit === 'bb'
+            ? 'bg-emerald-500 text-slate-950'
+            : 'text-slate-400 hover:text-slate-200'
+        }`}
+      >
+        BB
+      </button>
+      <button
+        type="button"
+        data-testid="unit-usd"
+        aria-pressed={chipDisplay.unit === 'usd'}
+        onClick={() => handleChangeChipUnit('usd')}
+        className={`px-2 py-1 text-[11px] font-mono font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+          chipDisplay.unit === 'usd'
+            ? 'bg-emerald-500 text-slate-950'
+            : 'text-slate-400 hover:text-slate-200'
+        }`}
+      >
+        $
+      </button>
+    </div>
+  );
+
+  const sessionPnlNode = (
+    <span
+      data-testid="session-pnl-badge"
+      className={`px-2 py-0.5 rounded-md border font-mono tabular-nums text-[11px] whitespace-nowrap ${
+        sessionStats.netBb > 0
+          ? 'bg-emerald-500/10 border-emerald-500/35 text-emerald-300'
+          : sessionStats.netBb < 0
+            ? 'bg-rose-500/10 border-rose-500/35 text-rose-300'
+            : 'bg-[#121D19] border-[#253832] text-slate-300'
+      }`}
+    >
+      {t('arena.sessionPnl')} {formatSignedChips(sessionStats.netBb, chipDisplay)}
+      {sessionStats.hands > 0 ? ` (${sessionStats.hands}H)` : ''}
+    </span>
+  );
+
+  const heroStrengthPillNode = heroHandDescription ? (
+    <span
+      data-testid="hero-hand-strength"
+      className="px-2 py-0.5 rounded-md bg-amber-400/10 border border-amber-400/35 text-amber-200 font-mono text-[11px] truncate max-w-[260px]"
+      title={heroHandDescription}
+    >
+      {heroHandDescription}
+    </span>
+  ) : null;
 
   const activeSeat =
     table.actingSeatIndex !== null ? table.seats[table.actingSeatIndex] : null;
   const activeActorName = activeSeat
     ? formatSeatDisplayName(locale, activeSeat.name, activeSeat.isHero)
     : null;
-
-  const presetLabel = t(`arena.preset.${table.config.poolPreset}` as TranslationKey);
 
   const handLabelText = (n: number) =>
     locale === 'zh-CN' ? `${t('table.hand')} ${n} 手` : `${t('table.hand')} #${n}`;
@@ -730,13 +985,15 @@ export function PlayTableView({
           ? `${activeActorName} ${t('table.acting')}`
           : t('table.ready');
 
+  const isRaiseAllIn = legal.canBetOrRaise && raiseAmount >= legal.maxTotalBetBb - 1e-6;
+
   const liveConsoleNode =
     table.phase === 'SHOWDOWN' ? (
       <div className="flex flex-wrap items-center justify-between gap-4 bg-[#0C1814] border border-emerald-500/30 rounded-lg p-3.5">
         <div className="space-y-0.5">
           <p className="text-xs font-mono text-emerald-400">{t('table.showdownResult')}</p>
           <p className="text-sm font-semibold text-white">
-            {formatWinnerSummary(locale, table.winnerSpec, table.winnerSummary)}
+            {formatWinnerSummary(locale, table.winnerSpec, table.winnerSummary, chipDisplay)}
           </p>
         </div>
         <button
@@ -746,116 +1003,189 @@ export function PlayTableView({
         >
           <Play className="w-4 h-4" aria-hidden="true" />
           <span>{t('table.dealNext')}</span>
+          <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-950/20 text-slate-950/80">
+            Enter
+          </kbd>
         </button>
       </div>
     ) : isHeroTurn ? (
-      <div className={theaterMode ? 'flex flex-wrap items-center gap-3' : 'space-y-3.5'}>
-        <div className={`flex flex-wrap items-center gap-2.5 ${theaterMode ? 'flex-1 min-w-[320px]' : ''}`}>
-          {legal.canFold && (
-            <button
-              type="button"
-              onClick={() => handleHeroAction('fold')}
-              className="flex-1 min-w-[96px] min-h-[42px] px-4 py-2 rounded-lg bg-[#16211D] hover:bg-[#20302A] border border-[#2B3E37] text-sm font-semibold text-slate-200 cursor-pointer whitespace-nowrap"
-            >
-              {t('common.fold')}
-            </button>
-          )}
-          {legal.canCheck ? (
-            <button
-              type="button"
-              onClick={() => handleHeroAction('check')}
-              className="flex-1 min-w-[106px] min-h-[42px] px-4 py-2 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/45 text-sm font-semibold text-amber-200 cursor-pointer whitespace-nowrap"
-            >
-              {t('common.check')}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => handleHeroAction('call')}
-              className="flex-1 min-w-[118px] min-h-[42px] px-4 py-2 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/50 text-sm font-semibold text-sky-200 font-mono tabular-nums cursor-pointer whitespace-nowrap"
-            >
-              {t('common.call')} {legal.callAmountBb.toFixed(1)}bb
-            </button>
-          )}
-          {legal.canBetOrRaise && (
-            <button
-              type="button"
-              onClick={() => handleHeroAction('raise', raiseAmount)}
-              className="flex-1 min-w-[144px] min-h-[42px] px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-sm font-semibold text-slate-950 font-mono tabular-nums cursor-pointer whitespace-nowrap"
-            >
-              {legal.isBet ? t('common.bet') : t('common.raise')} {raiseAmount.toFixed(1)}bb
-            </button>
-          )}
-        </div>
-
-        {legal.canBetOrRaise && (
-          <div
-            className={`flex flex-wrap items-center gap-3 bg-[#0A100E] border border-[#1B2823] rounded-lg px-3.5 py-2 ${
-              theaterMode ? 'flex-1 min-w-[340px]' : ''
-            }`}
-          >
-            <div className="flex flex-wrap items-center gap-1.5">
-              {(table.phase === 'PREFLOP'
-                ? (() => {
-                    const preflopBase = Math.max(1, table.currentBetBb);
-                    return [
-                      { label: '2.2x', val: roundBb(preflopBase * 2.2) },
-                      { label: '2.5x', val: roundBb(preflopBase * 2.5) },
-                      { label: '3x', val: roundBb(preflopBase * 3) },
-                      { label: '4x', val: roundBb(preflopBase * 4) },
-                      { label: t('common.allIn'), val: legal.maxTotalBetBb },
-                    ];
-                  })()
-                : [
-                    { label: '33%', val: roundBb(table.potBb * 0.33) },
-                    { label: '50%', val: roundBb(table.potBb * 0.5) },
-                    { label: '75%', val: roundBb(table.potBb * 0.75) },
-                    { label: t('common.pot'), val: roundBb(table.potBb) },
-                    { label: t('common.allIn'), val: legal.maxTotalBetBb },
-                  ]
-              ).map((preset) => {
-                const clamped = roundBb(
-                  Math.max(legal.minTotalBetBb, Math.min(legal.maxTotalBetBb, preset.val))
-                );
-                return (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    onClick={() => {
-                      setRaiseAmount(clamped);
-                      if (prefs.soundEnabled) {
-                        sharedCasinoSoundEngine.enabled = true;
-                        sharedCasinoSoundEngine.playUiTick();
-                      }
-                    }}
-                    className="px-2.5 py-1 text-xs font-mono rounded bg-[#141E1B] hover:bg-[#1F2F29] border border-[#273A33] text-slate-200 cursor-pointer whitespace-nowrap"
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex-1 min-w-[140px] flex items-center gap-3">
-              <label htmlFor="table-raise-slider" className="sr-only">
-                {t('table.ariaRaiseSlider')}
-              </label>
-              <input
-                id="table-raise-slider"
-                type="range"
-                min={legal.minTotalBetBb}
-                max={legal.maxTotalBetBb}
-                step={0.5}
-                value={raiseAmount}
-                onChange={(e) => setRaiseAmount(Number(e.target.value))}
-                className="w-full accent-emerald-500 cursor-pointer"
-              />
-              <span className="font-mono tabular-nums text-xs text-emerald-300 w-14 text-right shrink-0">
-                {raiseAmount.toFixed(1)}bb
+      <div className={theaterMode ? 'space-y-2' : 'space-y-3'}>
+        {/* Live Pot-Odds & Postflop SPR helper strip */}
+        {(livePotOdds || (table.phase !== 'PREFLOP' && liveSprLabel)) && (
+          <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono tabular-nums">
+            {livePotOdds && (
+              <span
+                data-testid="live-pot-odds-pill"
+                className="px-2 py-0.5 rounded-md bg-sky-500/12 border border-sky-400/35 text-sky-200"
+              >
+                {t('arena.potOddsNeed')} {livePotOdds.reqEqPct.toFixed(1)}% ·{' '}
+                {livePotOdds.oddsRatio.toFixed(1)}:1
               </span>
-            </div>
+            )}
+            {table.phase !== 'PREFLOP' && liveSprLabel && (
+              <span
+                data-testid="live-spr-pill"
+                className="px-2 py-0.5 rounded-md bg-[#121D19] border border-[#253832] text-slate-300"
+              >
+                {liveSprLabel}
+              </span>
+            )}
           </div>
         )}
+
+        <div className={theaterMode ? 'flex flex-wrap items-center gap-3' : 'space-y-3'}>
+          <div className={`flex flex-wrap items-center gap-2.5 ${theaterMode ? 'flex-1 min-w-[320px]' : ''}`}>
+            {legal.canFold && (
+              <button
+                type="button"
+                onClick={() => handleHeroAction('fold')}
+                className="flex-1 min-w-[96px] min-h-[42px] px-4 py-2 rounded-lg bg-[#16211D] hover:bg-[#20302A] border border-[#2B3E37] text-sm font-semibold text-slate-200 inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+              >
+                <span>{t('common.fold')}</span>
+                <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono rounded bg-black/35 text-slate-400 border border-white/10">
+                  F
+                </kbd>
+              </button>
+            )}
+            {legal.canCheck ? (
+              <button
+                type="button"
+                onClick={() => handleHeroAction('check')}
+                className="flex-1 min-w-[106px] min-h-[42px] px-4 py-2 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/45 text-sm font-semibold text-amber-200 inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+              >
+                <span>{t('common.check')}</span>
+                <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono rounded bg-amber-950/50 text-amber-300/80 border border-amber-400/25">
+                  C
+                </kbd>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleHeroAction('call')}
+                className="flex-1 min-w-[118px] min-h-[42px] px-4 py-2 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/50 text-sm font-semibold text-sky-200 font-mono tabular-nums inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+              >
+                <span>
+                  {t('common.call')} {formatChips(legal.callAmountBb, chipDisplay, { compact: true })}
+                </span>
+                <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono rounded bg-sky-950/60 text-sky-300/80 border border-sky-400/25">
+                  C
+                </kbd>
+              </button>
+            )}
+            {legal.canBetOrRaise && (
+              <button
+                type="button"
+                data-testid="hero-raise-btn"
+                onClick={() => handleHeroAction('raise', raiseAmount)}
+                className="flex-1 min-w-[144px] min-h-[42px] px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-sm font-semibold text-slate-950 font-mono tabular-nums inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+              >
+                <span>
+                  {isRaiseAllIn
+                    ? t('common.allIn')
+                    : legal.isBet
+                      ? t('common.bet')
+                      : t('common.raise')}{' '}
+                  {formatChips(raiseAmount, chipDisplay, { compact: true })}
+                </span>
+                <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-950/20 text-slate-950/80">
+                  R
+                </kbd>
+              </button>
+            )}
+          </div>
+
+          {legal.canBetOrRaise && (
+            <div
+              className={`flex flex-wrap items-center gap-3 bg-[#0A100E] border border-[#1B2823] rounded-lg px-3.5 py-2 ${
+                theaterMode ? 'flex-1 min-w-[340px]' : ''
+              }`}
+            >
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(table.phase === 'PREFLOP'
+                  ? (() => {
+                      const preflopBase = Math.max(1, table.currentBetBb);
+                      return [
+                        { label: '2.2x', val: roundBb(preflopBase * 2.2) },
+                        { label: '2.5x', val: roundBb(preflopBase * 2.5) },
+                        { label: '3x', val: roundBb(preflopBase * 3) },
+                        { label: '4x', val: roundBb(preflopBase * 4) },
+                        { label: t('common.allIn'), val: legal.maxTotalBetBb },
+                      ];
+                    })()
+                  : table.currentBetBb > 0
+                    ? [
+                        { label: '2.2x', val: roundBb(table.currentBetBb * 2.2) },
+                        { label: '2.5x', val: roundBb(table.currentBetBb * 2.5) },
+                        { label: '3x', val: roundBb(table.currentBetBb * 3) },
+                        {
+                          label: t('common.pot'),
+                          val: roundBb(table.currentBetBb + table.potBb + legal.callAmountBb),
+                        },
+                        { label: t('common.allIn'), val: legal.maxTotalBetBb },
+                      ]
+                    : [
+                        { label: '33%', val: roundBb(table.potBb * 0.33) },
+                        { label: '50%', val: roundBb(table.potBb * 0.5) },
+                        { label: '75%', val: roundBb(table.potBb * 0.75) },
+                        { label: t('common.pot'), val: roundBb(table.potBb) },
+                        { label: t('common.allIn'), val: legal.maxTotalBetBb },
+                      ]
+                ).map((preset) => {
+                  const snapped = snapRaiseBb(
+                    preset.val,
+                    chipDisplay,
+                    legal.minTotalBetBb,
+                    legal.maxTotalBetBb
+                  );
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        setRaiseAmount(snapped);
+                        if (prefs.soundEnabled) {
+                          sharedCasinoSoundEngine.enabled = true;
+                          sharedCasinoSoundEngine.playUiTick();
+                        }
+                      }}
+                      className="px-2.5 py-1 text-xs font-mono rounded bg-[#141E1B] hover:bg-[#1F2F29] border border-[#273A33] text-slate-200 cursor-pointer whitespace-nowrap"
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex-1 min-w-[140px] flex items-center gap-3">
+                <label htmlFor="table-raise-slider" className="sr-only">
+                  {t('table.ariaRaiseSlider')}
+                </label>
+                <input
+                  id="table-raise-slider"
+                  type="range"
+                  min={legal.minTotalBetBb}
+                  max={legal.maxTotalBetBb}
+                  step={getSliderStepBb(chipDisplay)}
+                  value={raiseAmount}
+                  onChange={(e) =>
+                    setRaiseAmount(
+                      snapRaiseBb(
+                        Number(e.target.value),
+                        chipDisplay,
+                        legal.minTotalBetBb,
+                        legal.maxTotalBetBb
+                      )
+                    )
+                  }
+                  className="w-full accent-emerald-500 cursor-pointer"
+                />
+                <span className="font-mono tabular-nums text-xs text-emerald-300 min-w-[4.75rem] text-right shrink-0">
+                  {formatChips(raiseAmount, chipDisplay, { compact: true })}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     ) : (
       <div className="flex items-center justify-between text-xs text-slate-400 py-1.5">
@@ -894,11 +1224,16 @@ export function PlayTableView({
   const replayLatestLine = (() => {
     if (!replayFrame) return '';
     if (replayFrame.phase === 'SHOWDOWN' && replayFrame.winnerSummary) {
-      return formatWinnerSummary(locale, replayFrame.winnerSpec, replayFrame.winnerSummary);
+      return formatWinnerSummary(
+        locale,
+        replayFrame.winnerSpec,
+        replayFrame.winnerSummary,
+        chipDisplay
+      );
     }
     const log = replayFrame.latestLog;
     if (!log) return '';
-    return `${log.position} ${formatSeatDisplayName(locale, log.seatName, log.isHero)} ${formatArenaAction(locale, log.actionSpec, log.text)}`;
+    return `${log.position} ${formatSeatDisplayName(locale, log.seatName, log.isHero)} ${formatArenaAction(locale, log.actionSpec, log.text, chipDisplay)}`;
   })();
 
   const replayConsoleNode =
@@ -1014,7 +1349,7 @@ export function PlayTableView({
             rightTab === 'feed' ? 'bg-[#192823] text-white' : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          {t('arena.tabFeed')} ({table.actionLog.length})
+          {t('arena.tabFeed')} ({displayedActionLog.length})
         </button>
         <button
           id="arena-tab-replay"
@@ -1052,12 +1387,13 @@ export function PlayTableView({
               <table className="w-full text-left text-[11px] font-mono tabular-nums">
                 <thead>
                   <tr className="border-b border-[#1B2823] text-slate-400">
-                    <th className="py-2 px-2.5 font-medium">{t('arena.hudColPlayer')}</th>
-                    <th className="py-2 px-2 font-medium">{t('arena.hudColStyle')}</th>
-                    <th className="py-2 px-1.5 text-right font-medium">{t('arena.hudColVpip')}</th>
-                    <th className="py-2 px-1.5 text-right font-medium">{t('arena.hudColPfr')}</th>
-                    <th className="py-2 px-1.5 text-right font-medium">{t('arena.hudCol3b')}</th>
-                    <th className="py-2 px-2 text-right font-medium">{t('arena.hudColAf')}</th>
+                    <th className="py-2 px-2 font-medium">{t('arena.hudColPlayer')}</th>
+                    <th className="py-2 px-1.5 font-medium">{t('arena.hudColStyle')}</th>
+                    <th className="py-2 px-1 text-right font-medium">{t('arena.hudColHands')}</th>
+                    <th className="py-2 px-1 text-right font-medium">{t('arena.hudColVpip')}</th>
+                    <th className="py-2 px-1 text-right font-medium">{t('arena.hudColPfr')}</th>
+                    <th className="py-2 px-1 text-right font-medium">{t('arena.hudCol3b')}</th>
+                    <th className="py-2 px-1.5 text-right font-medium">{t('arena.hudColAf')}</th>
                   </tr>
                 </thead>
                 <tbody data-testid="opponent-hud-rows">
@@ -1076,12 +1412,12 @@ export function PlayTableView({
                             isActing ? 'bg-emerald-500/10' : ''
                           } ${bot.folded ? 'opacity-50' : ''}`}
                         >
-                          <td className="py-2 px-2.5 text-slate-200 whitespace-nowrap">
+                          <td className="py-2 px-2 text-slate-200 whitespace-nowrap">
                             <span className="text-emerald-400 mr-1.5">{bot.position}</span>
                             <span>{bot.name.split(' ')[1] ?? bot.name}</span>
                           </td>
                           <td
-                            className="py-2 px-2 text-slate-300 whitespace-nowrap"
+                            className="py-2 px-1.5 text-slate-300 whitespace-nowrap"
                             title={styleLabel}
                           >
                             {table.config.blindReadMode ? (
@@ -1090,12 +1426,15 @@ export function PlayTableView({
                               styleLabel
                             )}
                           </td>
-                          <td className="py-2 px-1.5 text-right text-slate-200">{hud.vpipPct}%</td>
-                          <td className="py-2 px-1.5 text-right text-slate-300">{hud.pfrPct}%</td>
-                          <td className="py-2 px-1.5 text-right text-sky-300">
+                          <td className="py-2 px-1 text-right text-slate-400">
+                            {bot.stats.handsDealt}
+                          </td>
+                          <td className="py-2 px-1 text-right text-slate-200">{hud.vpipPct}%</td>
+                          <td className="py-2 px-1 text-right text-slate-300">{hud.pfrPct}%</td>
+                          <td className="py-2 px-1 text-right text-sky-300">
                             {hud.threeBetPct}%
                           </td>
-                          <td className="py-2 px-2 text-right text-amber-300">{hud.af}</td>
+                          <td className="py-2 px-1.5 text-right text-amber-300">{hud.af}</td>
                         </tr>
                       );
                     })}
@@ -1130,7 +1469,12 @@ export function PlayTableView({
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-mono text-slate-300">
                         {translateStreetLabel(locale, audit.street)} ·{' '}
-                        {formatArenaAction(locale, audit.chosenActionSpec, audit.chosenAction)}
+                        {formatArenaAction(
+                          locale,
+                          audit.chosenActionSpec,
+                          audit.chosenAction,
+                          chipDisplay
+                        )}
                       </span>
                       <GradeBadge
                         grade={audit.grade}
@@ -1143,7 +1487,7 @@ export function PlayTableView({
                       />
                     </div>
                     <p className="text-slate-400 leading-relaxed">
-                      {formatArenaAuditNote(locale, audit.noteSpec, audit.note)}
+                      {formatArenaAuditNote(locale, audit.noteSpec, audit.note, chipDisplay)}
                     </p>
                   </div>
                 ))}
@@ -1152,16 +1496,25 @@ export function PlayTableView({
           </div>
         </div>
       ) : rightTab === 'feed' ? (
-        /* Live Table Action Feed Tab */
+        /* Live or Replayed Table Action Feed Tab */
         <div
           id="arena-panel-feed"
           role="tabpanel"
           aria-labelledby="arena-tab-feed"
           className="space-y-2.5"
         >
-          <h3 className="text-sm font-semibold text-white">{t('table.actionFeedTitle')}</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-white">
+              {replayRecord ? t('arena.replayFeedLabel') : t('table.actionFeedTitle')}
+            </h3>
+            {replayRecord && (
+              <span className="text-[11px] font-mono text-amber-300">
+                {handLabelText(replayRecord.handNumber)}
+              </span>
+            )}
+          </div>
           <ol className="space-y-1 max-h-[480px] overflow-y-auto text-xs font-mono pr-1">
-            {table.actionLog.map((item, idx) => (
+            {displayedActionLog.map((item, idx) => (
               <li
                 key={idx}
                 className="flex items-center justify-between gap-2 py-1.5 border-b border-[#182130] last:border-0"
@@ -1171,7 +1524,7 @@ export function PlayTableView({
                   {formatSeatDisplayName(locale, item.seatName, item.isHero)}
                 </span>
                 <span className="text-slate-400 shrink-0">
-                  {formatArenaAction(locale, item.actionSpec, item.text)}
+                  {formatArenaAction(locale, item.actionSpec, item.text, chipDisplay)}
                 </span>
               </li>
             ))}
@@ -1241,13 +1594,12 @@ export function PlayTableView({
                                 : 'text-slate-300'
                           }`}
                         >
-                          {netLabel} {rec.netBb > 0 ? '+' : ''}
-                          {rec.netBb.toFixed(1)}bb
+                          {netLabel} {formatSignedChips(rec.netBb, chipDisplay, { compact: true })}
                         </span>
                       </span>
                       <span className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-400">
                         <span className="font-mono tabular-nums">
-                          {t('common.pot')} {rec.totalPotBb.toFixed(1)}bb
+                          {t('common.pot')} {formatChips(rec.totalPotBb, chipDisplay, { compact: true })}
                         </span>
                         <span className="inline-flex items-center gap-1 text-emerald-300">
                           <History className="w-3 h-3" aria-hidden="true" />
@@ -1278,21 +1630,39 @@ export function PlayTableView({
       {/* Header Bar: Compact Cinema Bar in Theater Mode, Full Config Toolbar in Standard Mode */}
       {theaterMode ? (
         <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2.5 border-b border-[#1B2823] bg-[#0A100E] shrink-0">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <span
               data-testid="arena-config-badge"
               className="px-2.5 py-0.5 text-xs font-mono rounded-md bg-[#121D19] border border-[#253832] text-emerald-300"
             >
-              {locale === 'zh-CN' ? `${table.config.tableSize}人桌` : `${table.config.tableSize}-Max`} · {presetLabel} · {table.config.startingStackBb}bb
+              {configBadgeText}
             </span>
             <span className="text-xs font-mono text-emerald-400 font-semibold">{statusText}</span>
-            <span className="hidden md:inline text-xs font-mono tabular-nums text-slate-400">
-              {t('table.heroStack')} {heroSeat.stackBb.toFixed(1)}bb · {t('table.currentBet')}{' '}
-              {table.currentBetBb.toFixed(1)}bb
+            {heroStrengthPillNode}
+            {sessionPnlNode}
+            <span className="hidden lg:inline text-xs font-mono tabular-nums text-slate-400">
+              {t('table.heroStack')} {formatChips(heroSeat.stackBb, chipDisplay, { compact: true })} ·{' '}
+              {t('table.currentBet')}{' '}
+              {formatChips(table.currentBetBb, chipDisplay, { compact: true })}
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {chipUnitToggleNode}
+
+            <button
+              type="button"
+              data-testid="theater-top-up"
+              onClick={handleRebuy}
+              disabled={!canManualTopUp}
+              className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-200 hover:bg-[#17231F] disabled:opacity-45 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            >
+              <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+              <span className="hidden md:inline">
+                {t('table.topUp')} {formatChips(table.config.startingStackBb, chipDisplay)}
+              </span>
+            </button>
+
             <button
               type="button"
               data-testid="theater-toggle-hud"
@@ -1397,8 +1767,9 @@ export function PlayTableView({
                 data-testid="arena-config-badge"
                 className="hidden sm:inline-block px-2.5 py-0.5 text-xs font-mono rounded-md bg-[#121D19] border border-[#253832] text-emerald-300"
               >
-                {locale === 'zh-CN' ? `${table.config.tableSize}人桌` : `${table.config.tableSize}-Max`} · {presetLabel} · {table.config.startingStackBb}bb
+                {configBadgeText}
               </span>
+              {sessionPnlNode}
             </div>
             <p className="hidden sm:block text-xs text-slate-400">
               {locale === 'zh-CN'
@@ -1456,6 +1827,9 @@ export function PlayTableView({
               id="arena-options-strip"
               className={`${optionsOpen ? 'flex' : 'hidden'} w-full basis-full flex-wrap items-center gap-2 sm:contents`}
             >
+
+            {/* Quick Live BB / $ Chip Unit Toggle */}
+            {chipUnitToggleNode}
 
             {/* Blind Read Quick Toggle */}
             <button
@@ -1531,15 +1905,12 @@ export function PlayTableView({
             <button
               type="button"
               onClick={handleRebuy}
-              disabled={
-                !((table.phase === 'IDLE' || table.phase === 'SHOWDOWN') &&
-                  heroSeat.stackBb < table.config.startingStackBb)
-              }
+              disabled={!canManualTopUp}
               className="px-2.5 py-2 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-200 hover:bg-[#17231F] disabled:opacity-45 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
               <span>
-                {t('table.topUp')} {table.config.startingStackBb} bb
+                {t('table.topUp')} {formatChips(table.config.startingStackBb, chipDisplay)}
               </span>
             </button>
 
@@ -1591,10 +1962,15 @@ export function PlayTableView({
           {/* Status Strip (standard mode; Theater shows status in its top bar) */}
           {!theaterMode && (
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              <span className="font-mono text-emerald-400 font-semibold">{statusText}</span>
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <span className="font-mono text-emerald-400 font-semibold">{statusText}</span>
+                {heroStrengthPillNode}
+              </div>
               <span className="font-mono tabular-nums text-slate-400">
-                {t('table.heroStack')} {heroSeat.stackBb.toFixed(1)}bb · {t('table.currentBet')}{' '}
-                {table.currentBetBb.toFixed(1)}bb
+                {t('table.heroStack')}{' '}
+                {formatChips(heroSeat.stackBb, chipDisplay, { compact: true })} ·{' '}
+                {t('table.currentBet')}{' '}
+                {formatChips(table.currentBetBb, chipDisplay, { compact: true })}
               </span>
             </div>
           )}
@@ -1605,6 +1981,7 @@ export function PlayTableView({
               <Studio3DTable
                 board={viewBoard}
                 potBb={viewPotBb}
+                potText={formatChips(viewPotBb, chipDisplay)}
                 streetLabel={translateStreetLabel(locale, viewPhase)}
                 seats={seats3D}
                 fourColorDeck={prefs.fourColorDeck}
@@ -1621,7 +1998,9 @@ export function PlayTableView({
                 board={viewBoard}
                 potBb={viewPotBb}
                 streetLabel={translateStreetLabel(locale, viewPhase)}
+                sprLabel={liveSprLabel}
                 fourColor={prefs.fourColorDeck}
+                chipDisplay={chipDisplay}
               />
             )}
           </div>
@@ -1674,6 +2053,8 @@ export function PlayTableView({
       <ArenaSetupModal
         open={setupOpen}
         config={table.config}
+        chipDisplay={chipDisplay}
+        autoTopUp={autoTopUp}
         onClose={() => setSetupOpen(false)}
         onApply={handleApplyArenaConfig}
       />

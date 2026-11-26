@@ -1486,6 +1486,8 @@ export interface Seat3DSpec {
   position: Position;
   label: string;
   stackBb: number;
+  stackText?: string;
+  betText?: string;
   isHero: boolean;
   isDealer: boolean;
   isActiveTurn: boolean;
@@ -1551,7 +1553,8 @@ export function createSeatPlaqueMesh(seat: Seat3DSpec): THREE.Group {
     seat.winnerLabel,
     seat.isAggressiveAction,
     seat.actionKind,
-    seat.isAllIn
+    seat.isAllIn,
+    seat.stackText
   );
 
   // Sleek tapered brushed-brass or emerald active-turn pedestal base sitting cleanly atop the leather rail

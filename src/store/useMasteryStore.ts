@@ -20,6 +20,9 @@ const DEFAULT_SUMMARY: MasterySummary = {
 const DEFAULT_PREFS: UserPreferences = {
   fourColorDeck: true,
   soundEnabled: true,
+  chipDisplayUnit: 'bb',
+  cashStakesId: 'nl200',
+  autoTopUp: false,
 };
 
 function readLocal<T>(key: string, fallback: T): T {
@@ -55,9 +58,10 @@ export function useMasteryStore() {
     readLocal(STORAGE_KEY_ATTEMPTS, [])
   );
   const [summary, setSummary] = useState<MasterySummary>(() => readSummary());
-  const [prefs, setPrefs] = useState<UserPreferences>(() =>
-    readLocal(STORAGE_KEY_PREFS, DEFAULT_PREFS)
-  );
+  const [prefs, setPrefs] = useState<UserPreferences>(() => ({
+    ...DEFAULT_PREFS,
+    ...readLocal<Partial<UserPreferences>>(STORAGE_KEY_PREFS, {}),
+  }));
 
   useEffect(() => {
     try {

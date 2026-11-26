@@ -1,5 +1,6 @@
 import type { Card, Position } from '../poker/types';
 import type { TableActionSpec } from '../poker/tableEngine';
+import { formatChips, type ChipDisplayConfig } from '../poker/currency';
 import { PlayingCard } from './PlayingCard';
 import { useLocale } from '../i18n/LocaleContext';
 import { formatArenaAction } from '../i18n/drillContentZh';
@@ -32,6 +33,7 @@ interface PokerTableOvalProps {
   fourColor: boolean;
   compact?: boolean;
   mobileTight?: boolean;
+  chipDisplay?: ChipDisplayConfig;
 }
 
 // 6-max clockwise positions anchored around oval:
@@ -54,10 +56,17 @@ export function PokerTableOval({
   fourColor,
   compact = false,
   mobileTight = false,
+  chipDisplay,
 }: PokerTableOvalProps) {
   const { locale, t } = useLocale();
   const heroSeat = seats.find((s) => s.isHero) ?? seats[0];
   const otherSeats = seats.filter((s) => s.seatIndex !== heroSeat?.seatIndex);
+  const fmtStack = (bb: number, compactUnit = false) =>
+    chipDisplay
+      ? formatChips(bb, chipDisplay, { compact: compactUnit })
+      : compactUnit
+        ? `${bb.toFixed(1)}bb`
+        : `${bb.toFixed(1)} bb`;
 
   return (
     <div className={`w-full select-none ${mobileTight ? 'space-y-1.5 sm:space-y-3' : 'space-y-3'}`}>
@@ -80,12 +89,12 @@ export function PokerTableOval({
                   <span className="font-semibold text-slate-200 truncate">{seat.label}</span>
                   <span className="font-mono font-bold text-emerald-400">{seat.position}</span>
                   <span className="font-mono tabular-nums text-[10px] text-slate-400">
-                    {seat.stackBb.toFixed(1)}bb
+                    {fmtStack(seat.stackBb, true)}
                   </span>
                 </div>
                 {(seat.actionSpec || seat.actionText) && (
                   <span className="font-mono tabular-nums text-[10px] text-amber-300 shrink-0">
-                    {formatArenaAction(locale, seat.actionSpec, seat.actionText)}
+                    {formatArenaAction(locale, seat.actionSpec, seat.actionText, chipDisplay)}
                   </span>
                 )}
               </div>
@@ -114,11 +123,11 @@ export function PokerTableOval({
                   <span className="font-mono font-bold text-emerald-400">{seat.position}</span>
                 </div>
                 <div className="font-mono tabular-nums text-[10px] text-slate-400 mt-0.5">
-                  {seat.stackBb.toFixed(1)}bb
+                  {fmtStack(seat.stackBb, true)}
                 </div>
                 {(seat.actionSpec || seat.actionText) && (
                   <div className="font-mono tabular-nums text-[10px] text-amber-300 truncate mt-0.5">
-                    {formatArenaAction(locale, seat.actionSpec, seat.actionText)}
+                    {formatArenaAction(locale, seat.actionSpec, seat.actionText, chipDisplay)}
                   </div>
                 )}
               </div>
@@ -164,7 +173,7 @@ export function PokerTableOval({
                 {streetLabel && <span>{streetLabel}</span>}
                 {streetLabel && <span aria-hidden="true" className="text-white/25">·</span>}
                 <span className="text-amber-300 font-semibold text-sm">
-                  {t('common.pot')} {potBb.toFixed(1)} bb
+                  {t('common.pot')} {fmtStack(potBb)}
                 </span>
                 {sprLabel && (
                   <>
@@ -258,7 +267,7 @@ export function PokerTableOval({
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-2 text-xs sm:text-[13px] font-mono tabular-nums mt-1">
-                    <span className="text-white font-bold">{seat.stackBb.toFixed(1)} bb</span>
+                    <span className="text-white font-bold">{fmtStack(seat.stackBb)}</span>
                     {seat.isDealer && (
                       <span
                         aria-label={t('common.dealerButton')}
@@ -277,7 +286,7 @@ export function PokerTableOval({
 
                 {(seat.actionSpec || seat.actionText) && (
                   <div className="text-xs font-mono font-semibold tabular-nums text-amber-200 bg-[#0A100E]/95 border border-[#2D3B52] px-2.5 py-0.5 rounded-md shadow whitespace-nowrap">
-                    {formatArenaAction(locale, seat.actionSpec, seat.actionText)}
+                    {formatArenaAction(locale, seat.actionSpec, seat.actionText, chipDisplay)}
                   </div>
                 )}
               </div>
@@ -333,11 +342,11 @@ export function PokerTableOval({
                   </div>
                 </div>
                 <div className="font-mono tabular-nums text-sm font-semibold text-slate-200 mt-0.5">
-                  {heroSeat.stackBb.toFixed(1)} bb
+                  {fmtStack(heroSeat.stackBb)}
                 </div>
                 {(heroSeat.actionSpec || heroSeat.actionText) && (
                   <div className="text-[11px] font-mono tabular-nums text-amber-300 mt-0.5 whitespace-nowrap">
-                    {formatArenaAction(locale, heroSeat.actionSpec, heroSeat.actionText)}
+                    {formatArenaAction(locale, heroSeat.actionSpec, heroSeat.actionText, chipDisplay)}
                   </div>
                 )}
               </div>

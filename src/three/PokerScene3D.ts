@@ -42,6 +42,7 @@ export type LightingPresetId = 'studio' | 'daylight' | 'lounge';
 export interface Scene3DHandData {
   board: Card[];
   potBb: number;
+  potText?: string;
   seats: Seat3DSpec[];
   fourColorDeck: boolean;
   feltTheme: FeltThemeId;
@@ -118,7 +119,7 @@ const CAMERA_PRESETS: Record<
 > = {
   hero: { pos: [0, 3.35, 5.92], target: [0, FELT_Y + 0.04, 0.04] },
   broadcast: { pos: [3.95, 3.85, 4.45], target: [0, FELT_Y, 0.12] },
-  topdown: { pos: [0, 7.15, 0.85], target: [0, FELT_Y, 0] },
+  topdown: { pos: [0, 9.2, 1.35], target: [0, FELT_Y, 0.55] },
   closeup: { pos: [0.35, 2.15, 2.65], target: [0, FELT_Y + 0.02, 0.22] },
   rail: { pos: [-2.42, 1.84, 3.42], target: [0.12, FELT_Y + 0.12, -0.06] },
 };
@@ -805,7 +806,9 @@ export class PokerScene3D {
     this.requestRender();
   }
 
-  public updateHandLayer(data: Pick<Scene3DHandData, 'board' | 'potBb' | 'seats' | 'fourColorDeck'>) {
+  public updateHandLayer(
+    data: Pick<Scene3DHandData, 'board' | 'potBb' | 'potText' | 'seats' | 'fourColorDeck'>
+  ) {
     if (this.disposed) return;
     this.rebuildHandLayer(data);
     this.renderer.shadowMap.needsUpdate = true;
@@ -838,7 +841,8 @@ export class PokerScene3D {
       tex === this.chipSideTex ||
       tex === this.chipTopTex ||
       tex === this.dealerPuckTex ||
-      this.cardFaceTexSet.has(tex)
+      this.cardFaceTexSet.has(tex) ||
+      Boolean(tex.userData?.sharedFeltBadge)
     );
   }
 
@@ -1087,7 +1091,9 @@ export class PokerScene3D {
     this.dynamicGroup.add(badge);
   }
 
-  private rebuildHandLayer(data: Pick<Scene3DHandData, 'board' | 'potBb' | 'seats' | 'fourColorDeck'>) {
+  private rebuildHandLayer(
+    data: Pick<Scene3DHandData, 'board' | 'potBb' | 'potText' | 'seats' | 'fourColorDeck'>
+  ) {
     // Keep FX tweens and persistent card tweens running; only drop tweens of meshes about to be disposed
     this.activeTweens = this.activeTweens.filter(
       (tw) => tw.disposeOnEnd || tw.obj.parent === this.cardsGroup
@@ -1422,7 +1428,12 @@ export class PokerScene3D {
           fullChips: betChips,
           spec: { x: betX, z: betZ, chips: betChips, colorHex: betColor },
         });
-        this.addFeltBadge(`${Number(streetBet.toFixed(1))}bb`, 'bet', betX + (betX < 0 ? -0.3 : 0.3), betZ);
+        this.addFeltBadge(
+          seat.betText ?? `${streetBet.toFixed(1)}bb`,
+          'bet',
+          betX + (betX < 0 ? -0.3 : 0.3),
+          betZ
+        );
 
         // Staggered curved chip-toss arcs whenever this seat adds chips to the betting line
         if (!newlyAllIn && betIncreased) {
@@ -1799,7 +1810,7 @@ export class PokerScene3D {
 
     // Center pot amount badge floating just in front of the pot chips
     if (data.potBb > 0) {
-      this.addFeltBadge(`Pot ${data.potBb.toFixed(1)} bb`, 'pot', 0, -0.44);
+      this.addFeltBadge(data.potText ?? `Pot ${data.potBb.toFixed(1)} bb`, 'pot', 0, -0.44);
     }
 
     // Build all chips via single InstancedMesh group (bet chips lag behind until flying chips land)

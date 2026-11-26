@@ -1,3 +1,5 @@
+import type { CashStakesId, ChipDisplayUnit } from './currency';
+
 export type Suit = 's' | 'h' | 'd' | 'c';
 export type Rank =
   | 'A'
@@ -81,6 +83,9 @@ export interface DrillAttemptRecord {
 export interface UserPreferences {
   fourColorDeck: boolean;
   soundEnabled: boolean;
+  chipDisplayUnit?: ChipDisplayUnit;
+  cashStakesId?: CashStakesId;
+  autoTopUp?: boolean;
 }
 
 export interface MasterySummary {

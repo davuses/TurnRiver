@@ -3,12 +3,19 @@ import assert from 'node:assert/strict';
 import {
   canonicalHandKey,
   createSuitRotation,
+  describeHeroHand,
   evaluateHand,
   HandCategory,
   handStrengthScore,
   parseCards,
   rotateCards,
 } from './evaluator';
+import {
+  analyzeBoardTexture,
+  analyzeHeroDraws,
+  classifyAndEstimatePostflop,
+  extractPostflopContext,
+} from './botAi';
 import {
   analyzeDrawsAndOuts,
   bluffBreakEvenPct,
@@ -33,6 +40,7 @@ import {
 import { evaluateHandReading, HAND_READING_SPOTS } from './handReadingSpots';
 import { evaluateMathAnswer, generateMathQuestion } from './mathDrills';
 import {
+  ALL_BOT_ARCHETYPES,
   applyPlayerAction,
   buildPresetConfig,
   buildSidePots,
@@ -50,6 +58,7 @@ import {
   settleAndStartNewHand,
   startNewHand,
   type ArenaSize,
+  type BotArchetype,
   type PokerTableState,
   type TableSeat,
 } from './tableEngine';
@@ -994,4 +1003,429 @@ test('P2-6: FACING_3BET drills only sample hands from Hero plausible RFI opening
 
   assert.ok(foldSamples > 0, 'FACING_3BET should still sample realistic fold-to-3bet hands from RFI range');
   assert.ok(continueSamples > 0, 'FACING_3BET should sample continuing hands');
+});
+
+test('describeHeroHand returns concise EN and zh-CN live hand strength and active draws without banned terms', () => {
+  // Preflop
+  assert.equal(describeHeroHand(parseCards(['As', 'Ah']) as [any, any], [], 'en'), 'Pocket Aces');
+  assert.equal(describeHeroHand(parseCards(['As', 'Ah']) as [any, any], [], 'zh-CN'), '口袋对 A');
+  assert.equal(describeHeroHand(parseCards(['As', 'Ks']) as [any, any], [], 'en'), 'Ace-King Suited');
+  assert.equal(describeHeroHand(parseCards(['As', 'Ks']) as [any, any], [], 'zh-CN'), 'AK 同花');
+  assert.equal(describeHeroHand(parseCards(['Qh', 'Jc']) as [any, any], [], 'en'), 'Queen-Jack Offsuit');
+  assert.equal(describeHeroHand(parseCards(['Qh', 'Jc']) as [any, any], [], 'zh-CN'), 'QJ 杂色');
+
+  // Top Pair + Flush Draw on Flop
+  assert.equal(
+    describeHeroHand(parseCards(['As', 'Ts']) as [any, any], parseCards(['Td', '7s', '2s']), 'en'),
+    'Top Pair, Ace Kicker · Nut Flush Draw'
+  );
+  assert.equal(
+    describeHeroHand(parseCards(['As', 'Ts']) as [any, any], parseCards(['Td', '7s', '2s']), 'zh-CN'),
+    '顶对（A 踢脚）· 坚果同花听牌'
+  );
+
+  // Overpair, Set, Two Pair, Combo Draw
+  assert.equal(
+    describeHeroHand(parseCards(['Qd', 'Qc']) as [any, any], parseCards(['Js', '8h', '3d']), 'en'),
+    'Overpair'
+  );
+  assert.equal(
+    describeHeroHand(parseCards(['Qd', 'Qc']) as [any, any], parseCards(['Js', '8h', '3d']), 'zh-CN'),
+    '超对'
+  );
+  assert.equal(
+    describeHeroHand(parseCards(['Ks', 'Kh']) as [any, any], parseCards(['Kd', '9c', '4s']), 'en'),
+    'Set of Kings'
+  );
+  assert.equal(
+    describeHeroHand(parseCards(['Ks', 'Kh']) as [any, any], parseCards(['Kd', '9c', '4s']), 'zh-CN'),
+    '暗三条 K'
+  );
+  assert.equal(
+    describeHeroHand(parseCards(['As', 'Ts']) as [any, any], parseCards(['8s', '7s', '6d']), 'en'),
+    'Nut Flush Draw + Gutshot'
+  );
+  assert.equal(
+    describeHeroHand(parseCards(['As', 'Js']) as [any, any], parseCards(['Ts', '9s', '8d']), 'en'),
+    'Nut Flush Draw + OESD'
+  );
+  assert.equal(
+    describeHeroHand(parseCards(['As', 'Js']) as [any, any], parseCards(['Ts', '9s', '8d']), 'zh-CN'),
+    '坚果同花+两头顺听牌'
+  );
+
+  // River never appends draws
+  const riverDesc = describeHeroHand(
+    parseCards(['As', 'Js']) as [any, any],
+    parseCards(['Ts', '9s', '2d', '4c', '3h']),
+    'en'
+  );
+  assert.equal(riverDesc, 'Ace-High');
+});
+
+test('ArenaConfig optional sbBb supports $2/$5 (0.4bb SB) while defaulting to 0.5bb', () => {
+  const defaultTable = startNewHand(createTableFromConfig(DEFAULT_ARENA_CONFIG), () => 0.5);
+  assert.equal(defaultTable.potBb, 1.5);
+
+  const twoFiveTable = startNewHand(
+    createTableFromConfig({ ...DEFAULT_ARENA_CONFIG, sbBb: 0.4 }),
+    () => 0.5
+  );
+  assert.equal(twoFiveTable.potBb, 1.4, 'sbBb=0.4 + 1.0 BB must post 1.4bb initial pot');
+  const sbSeat = twoFiveTable.seats.find((s) => s.position === 'SB')!;
+  assert.equal(sbSeat.streetBetBb, 0.4);
+  assert.equal(sbSeat.stackBb, 99.6);
+  const totalChips = roundBb(
+    twoFiveTable.seats.reduce((sum, s) => sum + s.stackBb, 0) + twoFiveTable.potBb
+  );
+  assert.equal(totalChips, 600);
+});
+
+test('handStrengthScore, analyzeBoardTexture, and analyzeHeroDraws handle scare boards and draw equity accurately', () => {
+  // 4-flush board: baby flush (3s4d) must score MUCH lower than nut flush (Qs4d), and top set must be discounted
+  const fourFlushBoard = parseCards(['As', 'Ks', '7s', '2s', '9h']);
+  const babyFlush = handStrengthScore(parseCards(['3s', '4d']) as [any, any], fourFlushBoard);
+  const nutFlush = handStrengthScore(parseCards(['Qs', '4d']) as [any, any], fourFlushBoard);
+  const topSetNoSpade = handStrengthScore(parseCards(['Ah', 'Ac']) as [any, any], fourFlushBoard);
+  assert.ok(nutFlush > babyFlush + 0.25, `Nut flush (${nutFlush}) must greatly exceed baby flush (${babyFlush})`);
+  assert.ok(topSetNoSpade < 0.65, `Top set with no spade on 4-flush must be discounted (<0.65), got ${topSetNoSpade}`);
+
+  // Board trips: KKKAA must greatly exceed KKK77
+  const boardTrips = parseCards(['Ks', 'Kh', 'Kd', '7c', '2s']);
+  const kkk77 = handStrengthScore(parseCards(['7d', '3h']) as [any, any], boardTrips);
+  const kkkaa = handStrengthScore(parseCards(['As', 'Ah']) as [any, any], boardTrips);
+  assert.ok(kkkaa > kkk77 + 0.12, `KKKAA (${kkkaa}) must beat KKK77 (${kkk77})`);
+
+  // Board texture: rainbow straight (JT9) and monotone (A83s) are WET; K72r is DRY with PFR range advantage
+  const rainbowStraightTex = analyzeBoardTexture(parseCards(['Js', 'Td', '9c']));
+  const monotoneTex = analyzeBoardTexture(parseCards(['As', '8s', '3s']));
+  const dryK72Tex = analyzeBoardTexture(parseCards(['Ks', '7d', '2c']));
+  const lowConnectedTex = analyzeBoardTexture(parseCards(['7s', '6s', '5d']));
+  assert.ok(rainbowStraightTex.wetness >= 0.55, `JT9r must be wet, got ${rainbowStraightTex.wetness}`);
+  assert.ok(monotoneTex.wetness >= 0.55 && monotoneTex.isMonotone, `A83 monotone must be wet, got ${monotoneTex.wetness}`);
+  assert.ok(dryK72Tex.wetness < 0.25 && dryK72Tex.rangeAdvForPfr >= 0.3, `K72r must be dry & favor PFR`);
+  assert.ok(lowConnectedTex.rangeAdvForPfr < -0.3, `765ss must favor BB/caller`);
+
+  // Draws: OESD > Gutshot; Flop draw boost > Turn draw boost
+  const oesdFlop = analyzeHeroDraws(parseCards(['Jh', 'Th']) as [any, any], parseCards(['9d', '8c', '2s']));
+  const gutshotFlop = analyzeHeroDraws(parseCards(['Qh', 'Jh']) as [any, any], parseCards(['9d', '8c', '2s']));
+  const oesdTurn = analyzeHeroDraws(parseCards(['Jh', 'Th']) as [any, any], parseCards(['9d', '8c', '2s', '3h']));
+  assert.equal(oesdFlop.oesd, true);
+  assert.equal(gutshotFlop.gutshot, true);
+  assert.equal(gutshotFlop.oesd, false);
+  assert.ok(oesdFlop.drawEquityBoost > gutshotFlop.drawEquityBoost + 0.06);
+  assert.ok(oesdFlop.drawEquityBoost > oesdTurn.drawEquityBoost + 0.05);
+});
+
+test('Hero EV Audit aligns with PREFLOP_TEMPLATES, folds 7-high river air, recognizes OESD/dry c-bets, and tracks street aggressor', () => {
+  // 1. Preflop alignment: UTG pure-raise hands (66, A5s, T9s) from PREFLOP_TEMPLATES must audit as Optimal
+  const baseUtg = startNewHand(createTableFromConfig({ ...DEFAULT_ARENA_CONFIG, heroPositionLock: 'ROTATE' }), () => 0.42);
+  const makeUtgState = (cards: [string, string]): PokerTableState => ({
+    ...baseUtg,
+    phase: 'PREFLOP',
+    preflopRaiseCount: 0,
+    potBb: 1.5,
+    currentBetBb: 1.0,
+    minRaiseBb: 2.0,
+    actingSeatIndex: 0,
+    actionLog: [],
+    seats: baseUtg.seats.map((s) =>
+      s.isHero
+        ? { ...s, position: 'UTG', cards: parseCards(cards) as [any, any], stackBb: 100, streetBetBb: 0, folded: false, allIn: false }
+        : s
+    ),
+  });
+  for (const hand of [['6s', '6h'], ['As', '5s'], ['Ts', '9s']] as [string, string][]) {
+    const res = applyPlayerAction(makeUtgState(hand), 0, 'raise', 2.5);
+    assert.equal(res.heroAudits[0]?.grade, 'Optimal', `UTG ${hand.join('')} open must be Optimal`);
+  }
+
+  // 2. River 7-high air facing 2bb into 12bb pot -> Fold is Optimal, Call is Blunder!
+  const riverAirBase: PokerTableState = {
+    ...baseUtg,
+    phase: 'RIVER',
+    board: parseCards(['As', 'Kd', 'Qh', '9c', '5s']),
+    potBb: 14,
+    currentBetBb: 2,
+    minRaiseBb: 4,
+    preflopAggressorSeatIndex: 1,
+    actingSeatIndex: 0,
+    actionLog: [
+      { street: 'river', seatName: baseUtg.seats[2].name, position: baseUtg.seats[2].position, text: 'Bets 2bb', actionSpec: { kind: 'bet', amountBb: 2 } },
+    ],
+    seats: baseUtg.seats.map((s, idx) => ({
+      ...s,
+      cards: (idx === 0 ? parseCards(['7c', '2d']) : parseCards(['Ac', 'Js'])) as [any, any],
+      stackBb: 80,
+      streetBetBb: idx === 2 ? 2 : 0,
+      folded: idx > 2,
+      allIn: false,
+      actedThisStreet: idx === 2,
+    })),
+  };
+  const foldAudit = applyPlayerAction(riverAirBase, 0, 'fold').heroAudits[0];
+  assert.equal(foldAudit?.grade, 'Optimal', 'Folding 7-high river air facing 2bb into 12bb must be Optimal');
+  assert.equal(foldAudit?.recommendedAction, 'Fold');
+  assert.equal(foldAudit?.villainName, baseUtg.seats[2].name, 'Primary villain must be actual river aggressor (seat 2), not stale PFR (seat 1)');
+
+  const callAudit = applyPlayerAction(riverAirBase, 0, 'call').heroAudits[0];
+  assert.equal(callAudit?.grade, 'Blunder', 'Calling river bet with 7-high air must be Blunder');
+
+  // 3. Flop OESD semi-bluff & dry-board PFR c-bet -> Optimal/Acceptable
+  const flopOesd: PokerTableState = {
+    ...baseUtg,
+    phase: 'FLOP',
+    board: parseCards(['9d', '8c', '2h']),
+    potBb: 6.5,
+    currentBetBb: 0,
+    minRaiseBb: 1,
+    preflopAggressorSeatIndex: 0,
+    actingSeatIndex: 0,
+    actionLog: [],
+    seats: baseUtg.seats.map((s, idx) => ({
+      ...s,
+      cards: (idx === 0 ? parseCards(['Js', 'Ts']) : parseCards(['Ad', 'Qc'])) as [any, any],
+      stackBb: 96,
+      streetBetBb: 0,
+      folded: idx > 1,
+      allIn: false,
+      actedThisStreet: false,
+    })),
+  };
+  const oesdBet = applyPlayerAction(flopOesd, 0, 'raise', 4.0).heroAudits[0];
+  assert.equal(oesdBet?.grade, 'Optimal', 'Flop OESD semi-bluff c-bet must be Optimal');
+  const oesdCheck = applyPlayerAction(flopOesd, 0, 'check').heroAudits[0];
+  assert.equal(oesdCheck?.grade, 'Acceptable', 'Checking back flop OESD should be Acceptable (not punished)');
+});
+
+test('Bot AI respects SPR commitment, has no artificial stack cap, and folds 7-high river air even for Calling Station', () => {
+  const base = startNewHand(createTableFromConfig({ ...DEFAULT_ARENA_CONFIG, tableSize: 2, botArchetypes: ['Calling Station'] }), () => 0.33);
+
+  // 1. Calling Station holding 7c 2d on River facing 10bb into 15bb pot MUST FOLD
+  const csRiverAir: PokerTableState = {
+    ...base,
+    phase: 'RIVER',
+    board: parseCards(['As', 'Kd', 'Qh', '9c', '5s']),
+    potBb: 25,
+    currentBetBb: 10,
+    minRaiseBb: 20,
+    actingSeatIndex: 1,
+    seats: base.seats.map((s, idx) => ({
+      ...s,
+      cards: (idx === 1 ? parseCards(['7c', '2d']) : parseCards(['Ac', 'Js'])) as [any, any],
+      stackBb: 75,
+      streetBetBb: idx === 0 ? 10 : 0,
+      folded: false,
+      allIn: false,
+      actedThisStreet: idx === 0,
+    })),
+  };
+  assert.equal(chooseBotAction(csRiverAir, 1, () => 0.5).type, 'fold', 'Calling Station must fold 7-high pure air to river bet');
+
+  // 2. Low-SPR Top Pair+ getting > 3:1 MUST NEVER FOLD
+  const lowSprTp: PokerTableState = {
+    ...base,
+    phase: 'TURN',
+    board: parseCards(['Kd', '8c', '4s', '2h']),
+    potBb: 55,
+    currentBetBb: 15,
+    minRaiseBb: 30,
+    actingSeatIndex: 1,
+    seats: base.seats.map((s, idx) => ({
+      ...s,
+      archetype: idx === 1 ? 'Tight Nit' : 'Hero',
+      cards: (idx === 1 ? parseCards(['As', 'Kh']) : parseCards(['Qd', 'Jd'])) as [any, any],
+      stackBb: idx === 1 ? 15 : 40,
+      streetBetBb: idx === 0 ? 15 : 0,
+      folded: false,
+      allIn: false,
+      actedThisStreet: idx === 0,
+    })),
+  };
+  const lowSprMove = chooseBotAction(lowSprTp, 1, () => 0.5);
+  assert.notEqual(lowSprMove.type, 'fold', 'Top Pair Top Kicker at low SPR getting > 3:1 must never fold');
+
+  // 3. No hardcoded 35% preflop stack cap: AA facing 40bb 4-bet CAN 5-bet jam all-in!
+  const preflop5Bet: PokerTableState = {
+    ...base,
+    phase: 'PREFLOP',
+    preflopRaiseCount: 3,
+    potBb: 55,
+    currentBetBb: 40,
+    minRaiseBb: 65,
+    actingSeatIndex: 1,
+    seats: base.seats.map((s, idx) => ({
+      ...s,
+      archetype: idx === 1 ? 'Balanced Reg' : 'Hero',
+      cards: (idx === 1 ? parseCards(['As', 'Ah']) : parseCards(['Ks', 'Kh'])) as [any, any],
+      stackBb: idx === 1 ? 85 : 60,
+      streetBetBb: idx === 1 ? 15 : 40,
+      folded: false,
+      allIn: false,
+      actedThisStreet: idx === 0,
+    })),
+  };
+  const aaMove = chooseBotAction(preflop5Bet, 1, () => 0.25);
+  assert.equal(aaMove.type, 'raise', 'AA facing 40bb 4-bet must be able to 5-bet jam (no 35% cap)');
+  assert.equal(aaMove.raiseToBb, 100, 'AA 5-bet should commit full 100bb stack');
+});
+
+test('Seeded 6-max calibration simulation verifies realistic poker envelopes across all 6 bot archetypes', () => {
+  const makeRng = (seedInit: number) => {
+    let s = seedInit >>> 0;
+    return () => {
+      s = (Math.imul(1664525, s) + 1013904223) >>> 0;
+      return s / 0x100000000;
+    };
+  };
+
+  const runSim = (arch: BotArchetype, hands: number) => {
+    const rng = makeRng(2026 + arch.length * 73 + arch.charCodeAt(0) * 19);
+    let table = createTableFromConfig({
+      ...DEFAULT_ARENA_CONFIG,
+      tableSize: 6,
+      startingStackBb: 100,
+      botArchetypes: ['Balanced Reg', 'Balanced Reg', 'Balanced Reg', 'Balanced Reg', 'Balanced Reg'],
+    });
+    table = {
+      ...table,
+      seats: table.seats.map((s, i) => (i === 0 ? { ...s, isHero: false, archetype: arch, name: arch } : s)),
+    };
+
+    let vpip = 0, pfr = 0, threeBet = 0, threeBetOpp = 0;
+    let limp = 0, openLimp = 0, openOpp = 0;
+    let cbet = 0, cbetOpp = 0;
+    let oopDonk = 0, oopDonkOpp = 0;
+    let foldToBet = 0, faceBetOpp = 0;
+    let rivAirCall = 0, rivAirFace = 0;
+
+    for (let h = 0; h < hands; h++) {
+      table = {
+        ...table,
+        seats: table.seats.map((s) => ({ ...s, stackBb: 100, allIn: false })),
+      };
+      table = startNewHand(table, rng);
+      let didLimp = false;
+      let countedCbetOpp = false;
+      let countedDonkOpp = false;
+      let steps = 0;
+
+      while (table.phase !== 'SHOWDOWN' && table.actingSeatIndex !== null && steps < 140) {
+        const idx = table.actingSeatIndex;
+        const move = chooseBotAction(table, idx, rng);
+
+        if (idx === 0) {
+          const s0 = table.seats[0];
+          if (table.phase === 'PREFLOP') {
+            if (table.preflopRaiseCount === 0 && table.potBb <= 1.5 && s0.position !== 'BB') {
+              openOpp++;
+              if (move.type === 'call') openLimp++;
+            }
+            if (table.preflopRaiseCount === 0 && move.type === 'call' && !didLimp) {
+              limp++;
+              didLimp = true;
+            }
+          } else {
+            const ctx = extractPostflopContext(table, 0);
+            if (table.phase === 'FLOP' && table.currentBetBb === 0) {
+              if (ctx.wasPfr && !countedCbetOpp) {
+                cbetOpp++;
+                countedCbetOpp = true;
+                if (move.type === 'raise') cbet++;
+              } else if (!ctx.wasPfr && !ctx.isInPosition && table.preflopAggressorSeatIndex !== null && !countedDonkOpp) {
+                oopDonkOpp++;
+                countedDonkOpp = true;
+                if (move.type === 'raise') oopDonk++;
+              }
+            }
+            if (table.currentBetBb > s0.streetBetBb) {
+              faceBetOpp++;
+              if (move.type === 'fold') foldToBet++;
+              if (table.phase === 'RIVER' && s0.cards) {
+                const tex = analyzeBoardTexture(table.board);
+                const dr = analyzeHeroDraws(s0.cards, table.board);
+                const cl = classifyAndEstimatePostflop(s0.cards, table.board, tex, dr, ctx);
+                if (cl.bucket === 'pure_air') {
+                  rivAirFace++;
+                  if (move.type === 'call') rivAirCall++;
+                }
+              }
+            }
+          }
+        }
+
+        table = applyPlayerAction(table, idx, move.type, move.raiseToBb);
+        steps++;
+      }
+
+      // Chip conservation invariant on every simulated hand
+      const totalChips = roundBb(table.seats.reduce((sum, s) => sum + s.stackBb, 0));
+      assert.equal(totalChips, 600, `${arch} hand #${h + 1} violated 600bb chip conservation`);
+
+      const s0 = table.seats[0];
+      if (s0.didVpipThisHand) vpip++;
+      if (s0.didPfrThisHand) pfr++;
+      if (s0.hadThreeBetOppThisHand) threeBetOpp++;
+      if (s0.didThreeBetThisHand) threeBet++;
+    }
+
+    const pct = (a: number, b: number) => (b > 0 ? (a / b) * 100 : 0);
+    return {
+      vpipPct: pct(vpip, hands),
+      pfrPct: pct(pfr, hands),
+      threeBetPct: pct(threeBet, threeBetOpp),
+      limpPct: pct(limp, hands),
+      openLimpPct: pct(openLimp, openOpp),
+      cbetPct: pct(cbet, cbetOpp),
+      oopDonkPct: pct(oopDonk, oopDonkOpp),
+      foldToBetPct: pct(foldToBet, faceBetOpp),
+      rivAirCallPct: pct(rivAirCall, rivAirFace),
+    };
+  };
+
+  const results = Object.fromEntries(
+    ALL_BOT_ARCHETYPES.map((arch) => [arch, runSim(arch, 400)])
+  ) as Record<BotArchetype, ReturnType<typeof runSim>>;
+
+  // Balanced Reg: disciplined 6-max TAG/GTO baseline
+  const reg = results['Balanced Reg'];
+  assert.ok(reg.vpipPct >= 19 && reg.vpipPct <= 29, `Balanced Reg VPIP out of envelope: ${reg.vpipPct.toFixed(1)}%`);
+  assert.ok(reg.pfrPct >= 15 && reg.pfrPct <= 25, `Balanced Reg PFR out of envelope: ${reg.pfrPct.toFixed(1)}%`);
+  assert.ok(reg.openLimpPct <= 2, `Balanced Reg OpenLimp must be <= 2%, got ${reg.openLimpPct.toFixed(1)}%`);
+  assert.ok(reg.cbetPct >= 45, `Balanced Reg CBet must be >= 45%, got ${reg.cbetPct.toFixed(1)}%`);
+  assert.ok(reg.oopDonkPct <= 15, `Balanced Reg OOP Donk must be <= 15%, got ${reg.oopDonkPct.toFixed(1)}%`);
+  assert.ok(reg.rivAirCallPct <= 3, `Balanced Reg RivAirCall must be <= 3%, got ${reg.rivAirCallPct.toFixed(1)}%`);
+
+  // Tight-Aggressive
+  const tag = results['Tight-Aggressive'];
+  assert.ok(tag.vpipPct >= 14 && tag.vpipPct <= 24, `TAG VPIP out of envelope: ${tag.vpipPct.toFixed(1)}%`);
+  assert.ok(tag.openLimpPct <= 2, `TAG OpenLimp must be <= 2%, got ${tag.openLimpPct.toFixed(1)}%`);
+  assert.ok(tag.cbetPct >= 50, `TAG CBet must be >= 50%, got ${tag.cbetPct.toFixed(1)}%`);
+
+  // Loose-Aggressive
+  const lag = results['Loose-Aggressive'];
+  assert.ok(lag.vpipPct >= 26 && lag.vpipPct <= 40, `LAG VPIP out of envelope: ${lag.vpipPct.toFixed(1)}%`);
+  assert.ok(lag.openLimpPct <= 2, `LAG OpenLimp must be <= 2%, got ${lag.openLimpPct.toFixed(1)}%`);
+  assert.ok(lag.cbetPct >= 55, `LAG CBet must be >= 55%, got ${lag.cbetPct.toFixed(1)}%`);
+
+  // Calling Station: limps heavily, folds >= 12% postflop (was 0%), no 7-high river air calls
+  const cs = results['Calling Station'];
+  assert.ok(cs.vpipPct >= 38 && cs.vpipPct <= 58, `Calling Station VPIP out of envelope: ${cs.vpipPct.toFixed(1)}%`);
+  assert.ok(cs.limpPct >= 15, `Calling Station Limp must be >= 15%, got ${cs.limpPct.toFixed(1)}%`);
+  assert.ok(cs.foldToBetPct >= 12, `Calling Station FoldToBet must be >= 12% (was 0%), got ${cs.foldToBetPct.toFixed(1)}%`);
+  assert.ok(cs.rivAirCallPct <= 5, `Calling Station RivAirCall must be <= 5%, got ${cs.rivAirCallPct.toFixed(1)}%`);
+
+  // Tight Nit: tight VPIP with real PFR >= 8% (was 3.0%), 0% open-limp
+  const nit = results['Tight Nit'];
+  assert.ok(nit.vpipPct >= 9 && nit.vpipPct <= 19, `Tight Nit VPIP out of envelope: ${nit.vpipPct.toFixed(1)}%`);
+  assert.ok(nit.pfrPct >= 8, `Tight Nit PFR must be >= 8% (was 3%), got ${nit.pfrPct.toFixed(1)}%`);
+  assert.ok(nit.openLimpPct <= 2, `Tight Nit OpenLimp must be <= 2%, got ${nit.openLimpPct.toFixed(1)}%`);
+
+  // Maniac: hyper-aggressive yet folds worst pure air
+  const maniac = results['Maniac'];
+  assert.ok(maniac.vpipPct >= 42 && maniac.vpipPct <= 64, `Maniac VPIP out of envelope: ${maniac.vpipPct.toFixed(1)}%`);
+  assert.ok(maniac.pfrPct >= 30, `Maniac PFR must be >= 30%, got ${maniac.pfrPct.toFixed(1)}%`);
+  assert.ok(maniac.threeBetPct >= 14, `Maniac 3Bet must be >= 14%, got ${maniac.threeBetPct.toFixed(1)}%`);
+  assert.ok(maniac.foldToBetPct >= 15, `Maniac FoldToBet must be >= 15% (was 0%), got ${maniac.foldToBetPct.toFixed(1)}%`);
+  assert.ok(maniac.rivAirCallPct <= 5, `Maniac RivAirCall must be <= 5%, got ${maniac.rivAirCallPct.toFixed(1)}%`);
 });

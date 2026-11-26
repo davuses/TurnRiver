@@ -9,6 +9,7 @@ import type {
   TableActionSpec,
   WinnerSummarySpec,
 } from '../poker/tableEngine';
+import { formatChips, type ChipDisplayConfig } from '../poker/currency';
 
 interface PreflopZhCopy {
   title: string;
@@ -806,13 +807,23 @@ export function formatSeatDisplayName(
 export function formatArenaAction(
   locale: Locale,
   spec: TableActionSpec | undefined,
-  fallbackText = ''
+  fallbackText = '',
+  display?: ChipDisplayConfig
 ): string {
-  if (!spec) return translateActionText(locale, fallbackText);
-  const amt = spec.amountBb !== undefined ? `${spec.amountBb}bb` : '';
+  if (!spec) {
+    if (display?.unit === 'usd' && fallbackText) {
+      const converted = fallbackText.replace(/\b(\d+(?:\.\d+)?)\s*bb\b/gi, (_, n: string) =>
+        formatChips(Number(n), display, { compact: true })
+      );
+      return translateActionText(locale, converted);
+    }
+    return translateActionText(locale, fallbackText);
+  }
+  const amt =
+    spec.amountBb !== undefined ? formatChips(spec.amountBb, display, { compact: true }) : '';
 
   if (locale === 'en') {
-    if (fallbackText) return fallbackText;
+    if (fallbackText && display?.unit !== 'usd') return fallbackText;
     switch (spec.kind) {
       case 'post_sb':
         return `Posts SB ${amt}`.trim();
@@ -876,7 +887,8 @@ export function formatArenaAction(
 export function formatWinnerSummary(
   locale: Locale,
   spec: WinnerSummarySpec | null | undefined,
-  fallbackSummary: string | null = null
+  fallbackSummary: string | null = null,
+  display?: ChipDisplayConfig
 ): string {
   if (spec) {
     const contestedPots = spec.potBreakdowns?.filter((p) => !p.isUncalledReturn) ?? [];
@@ -885,18 +897,19 @@ export function formatWinnerSummary(
         const names = pot.winners
           .map((w) => `${formatSeatDisplayName(locale, w.name, w.isHero)} (${w.position})`)
           .join(locale === 'zh-CN' ? '、' : ' & ');
+        const potAmt = formatChips(pot.amountBb, display, { compact: true });
         if (locale === 'en') {
           const potLabel = idx === 0 ? 'Main pot' : `Side pot ${idx}`;
           const hand = pot.handLabel ?? '';
           return pot.isSplit
-            ? `${potLabel} (${pot.amountBb}bb): ${names} split with ${hand}`
-            : `${potLabel} (${pot.amountBb}bb): ${names} wins with ${hand}`;
+            ? `${potLabel} (${potAmt}): ${names} split with ${hand}`
+            : `${potLabel} (${potAmt}): ${names} wins with ${hand}`;
         }
         const potLabelZh = idx === 0 ? '主池' : `边池 ${idx}`;
         const handZh = pot.handLabel ? translateHandRank(locale, pot.handLabel) : '';
         return pot.isSplit
-          ? `${potLabelZh}（${pot.amountBb}bb）：${names} 凭「${handZh}」平分`
-          : `${potLabelZh}（${pot.amountBb}bb）：${names} 凭「${handZh}」赢下`;
+          ? `${potLabelZh}（${potAmt}）：${names} 凭「${handZh}」平分`
+          : `${potLabelZh}（${potAmt}）：${names} 凭「${handZh}」赢下`;
       });
       return locale === 'zh-CN' ? `${parts.join('；')}。` : `${parts.join(' · ')}.`;
     }
@@ -904,24 +917,25 @@ export function formatWinnerSummary(
     const names = spec.winners
       .map((w) => `${formatSeatDisplayName(locale, w.name, w.isHero)} (${w.position})`)
       .join(locale === 'zh-CN' ? '、' : ' & ');
+    const potAmt = formatChips(spec.potBb, display, { compact: true });
     if (locale === 'en') {
       if (spec.type === 'uncontested') {
-        return `${names} wins ${spec.potBb}bb uncontested.`;
+        return `${names} wins ${potAmt} uncontested.`;
       }
       const hand = spec.handLabel ?? '';
       return spec.isSplit
-        ? `${names} split ${spec.potBb}bb pot with ${hand}.`
-        : `${names} wins ${spec.potBb}bb with ${hand}.`;
+        ? `${names} split ${potAmt} pot with ${hand}.`
+        : `${names} wins ${potAmt} with ${hand}.`;
     }
 
     if (spec.type === 'uncontested') {
-      return `${names} 直接收下 ${spec.potBb}bb 底池（其余对手均弃牌）。`;
+      return `${names} 直接收下 ${potAmt} 底池（其余对手均弃牌）。`;
     }
     const handZh = spec.handLabel ? translateHandRank(locale, spec.handLabel) : '';
     if (spec.isSplit) {
-      return `${names} 凭借「${handZh}」平分 ${spec.potBb}bb 底池。`;
+      return `${names} 凭借「${handZh}」平分 ${potAmt} 底池。`;
     }
-    return `${names} 凭借「${handZh}」赢得 ${spec.potBb}bb 底池。`;
+    return `${names} 凭借「${handZh}」赢得 ${potAmt} 底池。`;
   }
 
   return localizeWinnerSummary(locale, fallbackSummary);
@@ -964,9 +978,74 @@ export function localizeWinnerSummary(locale: Locale, summary: string | null): s
 export function formatArenaAuditNote(
   locale: Locale,
   spec: AuditNoteSpec | undefined,
-  fallbackNote = ''
+  fallbackNote = '',
+  display?: ChipDisplayConfig
 ): string {
-  if (locale === 'en') return fallbackNote;
+  const toCallText = formatChips(spec?.toCallBb ?? 0, display, { compact: true });
+
+  if (locale === 'en') {
+    if (display?.unit !== 'usd') return fallbackNote;
+    if (fallbackNote) {
+      return fallbackNote.replace(/\b(\d+(?:\.\d+)?)\s*bb\b/gi, (_, n: string) =>
+        formatChips(Number(n), display, { compact: true })
+      );
+    }
+    if (!spec) return fallbackNote;
+
+    let baseEn = '';
+    switch (spec.reason) {
+      case 'strong_value':
+        baseEn = `Strong holding (${spec.handKey ?? ''}) builds value by betting/raising on ${spec.street}.`;
+        break;
+      case 'semi_bluff_cbet':
+        baseEn = `High-equity draw with preflop initiative makes a strong semi-bluff c-bet on ${spec.street}.`;
+        break;
+      case 'weak_showdown':
+        baseEn = 'Weak showdown value prefers checking or selective bluffing rather than thin betting.';
+        break;
+      case 'pot_control':
+        baseEn = `Medium strength hand plays cleanly as a check for pot control on ${spec.street}.`;
+        break;
+      case 'value_protect_raise':
+        baseEn = 'High equity vs current bet supports raising for value and protection.';
+        break;
+      case 'pot_odds_call':
+        baseEn = `Facing ${toCallText} requires ${spec.reqEqPct ?? 0}% equity—calling is +EV.`;
+        break;
+      case 'pot_odds_fold':
+        baseEn = `Facing ${toCallText} requires ${spec.reqEqPct ?? 0}% equity; folding preserves stack.`;
+        break;
+    }
+
+    let tipEn = '';
+    if (spec.exploitTip && spec.villainName) {
+      const name = spec.villainName.trim();
+      switch (spec.exploitTip) {
+        case 'cs_value':
+          tipEn = ` Exploit vs ${name} (Calling Station): size up value bets—they call too wide.`;
+          break;
+        case 'cs_no_bluff':
+          tipEn = ` Exploit vs ${name} (Calling Station): avoid low-equity bluffs that rarely fold them out.`;
+          break;
+        case 'nit_respect':
+          tipEn = ` Exploit vs ${name} (Tight Nit): respect heavy aggression—their continuing range is value-heavy.`;
+          break;
+        case 'nit_pressure':
+          tipEn = ` Exploit vs ${name} (Tight Nit): steady pressure steals pots when they miss.`;
+          break;
+        case 'lag_bluffcatch':
+          tipEn = ` Exploit vs ${name} (${spec.villainArchetype ?? 'Loose-Aggressive'}): widen bluff-catching calls against over-aggression.`;
+          break;
+        case 'tag_discipline':
+          tipEn = ` Note vs ${name} (TAG): keep ranges disciplined and watch blockers on draw-heavy boards.`;
+          break;
+        case 'reg_mix':
+          tipEn = ` Note vs ${name} (Balanced Reg): mix value and draw semi-bluffs to stay unexploitable.`;
+          break;
+      }
+    }
+    return `${baseEn}${tipEn}`;
+  }
   if (!spec) return localizeArenaNote(locale, fallbackNote);
 
   const stZh = translateStreetLabel(locale, spec.street);
@@ -988,10 +1067,10 @@ export function formatArenaAuditNote(
       base = '对抗当前下注具备明显权益优势，支持加注获取价值并保护手牌权益。';
       break;
     case 'pot_odds_call':
-      base = `面对 ${spec.toCallBb ?? 0}bb 下注至少需要 ${spec.reqEqPct ?? 0}% 胜率，这手牌的牌力足以继续跟注。`;
+      base = `面对 ${toCallText} 下注至少需要 ${spec.reqEqPct ?? 0}% 胜率，这手牌的牌力足以继续跟注。`;
       break;
     case 'pot_odds_fold':
-      base = `面对 ${spec.toCallBb ?? 0}bb 下注至少需要 ${spec.reqEqPct ?? 0}% 胜率，此时弃牌有助于控制损失。`;
+      base = `面对 ${toCallText} 下注至少需要 ${spec.reqEqPct ?? 0}% 胜率，此时弃牌有助于控制损失。`;
       break;
   }
 

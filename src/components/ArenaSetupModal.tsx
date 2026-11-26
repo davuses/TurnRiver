@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bot, EyeOff, SlidersHorizontal, X, Zap } from 'lucide-react';
+import { Bot, DollarSign, EyeOff, RefreshCw, SlidersHorizontal, X, Zap } from 'lucide-react';
 import {
   ALL_BOT_ARCHETYPES,
   buildPresetConfig,
@@ -11,14 +11,26 @@ import {
   type HeroPositionLock,
   type PoolPresetId,
 } from '../poker/tableEngine';
+import type { UserPreferences } from '../poker/types';
+import {
+  CASH_STAKES_LIST,
+  DEFAULT_CHIP_DISPLAY,
+  formatChips,
+  getCashStakes,
+  type CashStakesId,
+  type ChipDisplayConfig,
+  type ChipDisplayUnit,
+} from '../poker/currency';
 import { useLocale } from '../i18n/LocaleContext';
 import { translateArchetype, type TranslationKey } from '../i18n/translations';
 
 interface ArenaSetupModalProps {
   open: boolean;
   config: ArenaConfig;
+  chipDisplay?: ChipDisplayConfig;
+  autoTopUp?: boolean;
   onClose: () => void;
-  onApply: (next: ArenaConfig) => void;
+  onApply: (next: ArenaConfig, prefsPatch?: Partial<UserPreferences>) => void;
 }
 
 const PRESET_LIST: Exclude<PoolPresetId, 'custom'>[] = [
@@ -32,9 +44,19 @@ const PRESET_LIST: Exclude<PoolPresetId, 'custom'>[] = [
 const TABLE_SIZES: ArenaSize[] = [2, 3, 4, 6];
 const STACK_OPTIONS: (50 | 100 | 200)[] = [50, 100, 200];
 
-export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupModalProps) {
+export function ArenaSetupModal({
+  open,
+  config,
+  chipDisplay = DEFAULT_CHIP_DISPLAY,
+  autoTopUp = false,
+  onClose,
+  onApply,
+}: ArenaSetupModalProps) {
   const { locale, t } = useLocale();
   const [draft, setDraft] = useState<ArenaConfig>(config);
+  const [draftUnit, setDraftUnit] = useState<ChipDisplayUnit>(chipDisplay.unit);
+  const [draftStakesId, setDraftStakesId] = useState<CashStakesId>(chipDisplay.stakesId);
+  const [draftAutoTopUp, setDraftAutoTopUp] = useState<boolean>(autoTopUp);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -46,8 +68,16 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
         ...config,
         botArchetypes: [...config.botArchetypes],
       });
+      setDraftUnit(chipDisplay.unit);
+      setDraftStakesId(chipDisplay.stakesId);
+      setDraftAutoTopUp(autoTopUp);
     }
-  }, [open, config]);
+  }, [open, config, chipDisplay.unit, chipDisplay.stakesId, autoTopUp]);
+
+  const draftDisplay: ChipDisplayConfig = {
+    unit: draftUnit,
+    stakesId: draftStakesId,
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -196,6 +226,69 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
             </div>
           </fieldset>
 
+          {/* Chip Display Unit & Cash Stakes */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
+            <fieldset className="sm:col-span-5 border-0 p-0 m-0">
+              <legend className="text-xs font-semibold text-slate-200 mb-2 inline-flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+                {t('arena.chipUnit')}
+              </legend>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(['bb', 'usd'] as ChipDisplayUnit[]).map((unit) => {
+                  const active = draftUnit === unit;
+                  return (
+                    <button
+                      key={unit}
+                      type="button"
+                      data-testid={`setup-unit-${unit}`}
+                      aria-pressed={active}
+                      onClick={() => setDraftUnit(unit)}
+                      className={`px-3 py-2 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
+                        active
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                          : 'bg-[#111917] border-[#22332D] text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      {unit === 'bb' ? t('arena.unitBb') : t('arena.unitUsd')}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <fieldset className="sm:col-span-7 border-0 p-0 m-0">
+              <legend className="text-xs font-semibold text-slate-200 mb-2">
+                {t('arena.stakes')}
+              </legend>
+              <div className="grid grid-cols-4 gap-1.5">
+                {CASH_STAKES_LIST.map((preset) => {
+                  const active = draftStakesId === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      data-testid={`setup-stakes-${preset.id}`}
+                      aria-pressed={active}
+                      onClick={() => {
+                        setDraftStakesId(preset.id);
+                        setDraftUnit('usd');
+                      }}
+                      className={`px-2 py-2 text-xs font-mono tabular-nums rounded-lg border transition-colors cursor-pointer ${
+                        active && draftUnit === 'usd'
+                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200 font-semibold'
+                          : active
+                            ? 'bg-[#15221E] border-emerald-500/40 text-slate-200'
+                            : 'bg-[#111917] border-[#22332D] text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          </div>
+
           {/* Table Size & Starting Stack */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <fieldset className="border-0 p-0 m-0">
@@ -237,13 +330,20 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
                       type="button"
                       aria-pressed={draft.startingStackBb === st}
                       onClick={() => setDraft({ ...draft, startingStackBb: st })}
-                      className={`px-2.5 py-2 text-xs font-mono tabular-nums rounded-lg border transition-colors cursor-pointer ${
+                      className={`px-2 py-2 text-xs font-mono tabular-nums rounded-lg border transition-colors cursor-pointer ${
                         draft.startingStackBb === st
                           ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200 font-semibold'
                           : 'bg-[#111917] border-[#22332D] text-slate-300 hover:text-white'
                       }`}
                     >
-                      {st}bb
+                      {draftUnit === 'usd' ? (
+                        <span className="flex flex-col items-center leading-tight">
+                          <span>{formatChips(st, draftDisplay)}</span>
+                          <span className="text-[10px] text-slate-400 font-normal">{st}bb</span>
+                        </span>
+                      ) : (
+                        `${st}bb`
+                      )}
                     </button>
                   ))}
                 </div>
@@ -343,7 +443,7 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
           </div>
 
           {/* Deliberate Practice Toggles */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
             <button
               type="button"
               aria-pressed={draft.blindReadMode}
@@ -391,6 +491,31 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
                 </p>
               </div>
             </button>
+
+            <button
+              type="button"
+              data-testid="setup-auto-top-up"
+              aria-pressed={draftAutoTopUp}
+              onClick={() => setDraftAutoTopUp((v) => !v)}
+              className={`flex items-start gap-2.5 p-3 rounded-lg border text-left transition-colors cursor-pointer ${
+                draftAutoTopUp
+                  ? 'bg-sky-500/10 border-sky-400/50'
+                  : 'bg-[#111917] border-[#22332D] hover:border-slate-500'
+              }`}
+            >
+              <RefreshCw
+                className={`w-4 h-4 mt-0.5 shrink-0 ${
+                  draftAutoTopUp ? 'text-sky-300' : 'text-slate-400'
+                }`}
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-xs font-semibold text-white">{t('arena.autoTopUp')}</p>
+                <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
+                  {t('arena.autoTopUpDesc')}
+                </p>
+              </div>
+            </button>
           </div>
         </div>
 
@@ -407,7 +532,16 @@ export function ArenaSetupModal({ open, config, onClose, onApply }: ArenaSetupMo
             type="button"
             data-testid="apply-arena-config"
             onClick={() => {
-              onApply(draft);
+              const nextSbBb =
+                draftUnit === 'usd' ? getCashStakes(draftStakesId).sbBb : 0.5;
+              onApply(
+                { ...draft, sbBb: nextSbBb },
+                {
+                  chipDisplayUnit: draftUnit,
+                  cashStakesId: draftStakesId,
+                  autoTopUp: draftAutoTopUp,
+                }
+              );
               onClose();
             }}
             className="px-5 py-2 text-xs font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer"
