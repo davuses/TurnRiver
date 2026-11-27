@@ -22,7 +22,7 @@ import {
   type PokerTableAssembly,
   type Seat3DSpec,
 } from './models';
-import { CasinoSoundEngine } from './soundEngine';
+import { sharedCasinoSoundEngine } from './soundEngine';
 import {
   createCardBackTexture,
   createCardFaceTexture,
@@ -245,7 +245,7 @@ export class PokerScene3D {
   private isSoftwareGl: boolean;
   private pmrem: THREE.PMREMGenerator;
   private envRenderTarget: THREE.WebGLRenderTarget;
-  private soundEngine = new CasinoSoundEngine();
+  private soundEngine = sharedCasinoSoundEngine;
 
   private keyLight: THREE.DirectionalLight;
   private casinoSpotLight: THREE.SpotLight;
@@ -545,7 +545,6 @@ export class PokerScene3D {
       // Clean up appended canvas & WebGL resources cleanly if constructor fails mid-init
       this.disposed = true;
       this.cancelScheduledFrame();
-      this.soundEngine.dispose();
       createdControls?.dispose();
       createdKeyLight?.dispose();
       createdEnvTarget?.dispose();
@@ -2100,7 +2099,6 @@ export class PokerScene3D {
     this.pendingBetChips.clear();
     this.resizeObserver.disconnect();
     this.controls.dispose();
-    this.soundEngine.dispose();
 
     const canvas = this.renderer.domElement;
     canvas.removeEventListener('pointermove', this.handlePointerMove);
