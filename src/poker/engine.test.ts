@@ -20,7 +20,10 @@ import {
   analyzeBoardTexture,
   analyzeHeroDraws,
   classifyAndEstimatePostflop,
+  decideBotAction,
   extractPostflopContext,
+  getProBotGear,
+  inferHeroTendencies,
 } from './botAi';
 import {
   analyzeDrawsAndOuts,
@@ -2107,4 +2110,150 @@ test('SNG tournament mode escalates blinds by hand count and eliminates busted s
   assert.equal(next.seats[2].cards, null, 'Busted SNG seat must not be dealt hole cards');
   // Level 2 blinds: SB 0.75 (rounded 0.8), BB 1.5 -> potBb = 2.3
   assert.ok(next.potBb >= 2.2, `Expected escalated SNG blinds pot >= 2.2bb, got ${next.potBb}`);
+});
+
+test('Bot AI Difficulty tiers: Casual softens river bluffs, Pro profiles Hero leaks & switches gears', () => {
+  const base = createTableFromConfig({
+    ...DEFAULT_ARENA_CONFIG,
+    tableSize: 2,
+    botArchetypes: ['Balanced Reg'],
+    botDifficulty: 'pro',
+  });
+
+  // 1. Small sample (< 6 hands) must stay 'unknown' with 0 confidence
+  const earlyRead = inferHeroTendencies(base);
+  assert.equal(earlyRead.tag, 'unknown');
+  assert.equal(earlyRead.sampleConfidence, 0);
+
+  // 2. Calling Station Hero profile (40 hands, high WTSD, low fold-to-CB)
+  const stationHeroState: PokerTableState = {
+    ...base,
+    seats: base.seats.map((s) =>
+      s.isHero
+        ? {
+            ...s,
+            stats: {
+              ...s.stats,
+              handsDealt: 40,
+              vpipHands: 20,
+              pfrHands: 5,
+              sawFlopHands: 24,
+              wtsdHands: 15,
+              foldToCbetOpps: 14,
+              foldToCbetHands: 2,
+              postflopAggActs: 6,
+              postflopCalls: 24,
+            },
+          }
+        : s
+    ),
+  };
+  const stationRead = inferHeroTendencies(stationHeroState);
+  assert.equal(stationRead.tag, 'calling_station');
+  assert.equal(stationRead.sampleConfidence, 1);
+
+  // 3. Over-Folder Hero profile
+  const overFolderState: PokerTableState = {
+    ...base,
+    seats: base.seats.map((s) =>
+      s.isHero
+        ? {
+            ...s,
+            stats: {
+              ...s.stats,
+              handsDealt: 40,
+              vpipHands: 10,
+              pfrHands: 8,
+              sawFlopHands: 16,
+              wtsdHands: 4,
+              foldToCbetOpps: 15,
+              foldToCbetHands: 12,
+              postflopAggActs: 10,
+              postflopCalls: 8,
+            },
+          }
+        : s
+    ),
+  };
+  assert.equal(inferHeroTendencies(overFolderState).tag, 'over_folder');
+
+  // 4. Hyper-Aggro Hero profile
+  const aggroHeroState: PokerTableState = {
+    ...base,
+    seats: base.seats.map((s) =>
+      s.isHero
+        ? {
+            ...s,
+            stats: {
+              ...s.stats,
+              handsDealt: 40,
+              vpipHands: 18,
+              pfrHands: 15,
+              threeBetOpps: 14,
+              threeBetHands: 5,
+              postflopAggActs: 32,
+              postflopCalls: 6,
+            },
+          }
+        : s
+    ),
+  };
+  assert.equal(inferHeroTendencies(aggroHeroState).tag, 'maniac_aggro');
+
+  // 5. Dynamic gear-switching for skilled archetypes only
+  const regGears = new Set<string>();
+  for (let h = 1; h <= 80; h += 5) {
+    regGears.add(getProBotGear(h, 1, 'Balanced Reg'));
+  }
+  assert.ok(regGears.has('balanced') && regGears.has('pressure') && regGears.has('trap'));
+  assert.equal(getProBotGear(25, 1, 'Calling Station'), 'balanced');
+
+  // 6. Behavioral check: Pro Reg slashes pure-air river bluffs vs Calling Station Hero,
+  // and Casual Reg bluffs less than Standard Reg on the exact same river spot.
+  const riverSpotBase: PokerTableState = {
+    ...stationHeroState,
+    phase: 'RIVER',
+    handNumber: 1, // Balanced gear for seat 1
+    potBb: 18,
+    currentBetBb: 0,
+    minRaiseBb: 1,
+    preflopRaiseCount: 1,
+    preflopAggressorSeatIndex: 1,
+    board: parseCards(['Ks', '9d', '4c', '2h', '7s']),
+    seats: stationHeroState.seats.map((s, idx) => {
+      const hole = parseCards(idx === 1 ? ['Ah', '6h'] : ['Kd', 'Qc']);
+      return {
+        ...s,
+        folded: false,
+        cards: [hole[0], hole[1]],
+        stackBb: 80,
+        streetBetBb: 0,
+      };
+    }),
+  };
+  const legal = {
+    canFold: false,
+    canCheck: true,
+    canCall: false,
+    callAmountBb: 0,
+    canBetOrRaise: true,
+    isBet: true,
+    minTotalBetBb: 1,
+    maxTotalBetBb: 80,
+    isAllInCall: false,
+  };
+  const effOdds = { effectiveToCall: 0, effectivePotBb: 18, reqEq: 0 };
+
+  let stdBluffs = 0;
+  let casualBluffs = 0;
+  let proBluffs = 0;
+  for (let i = 0; i < 100; i++) {
+    const r = (i + 0.5) / 100;
+    const rng = () => r;
+    if (decideBotAction({ ...riverSpotBase, config: { ...riverSpotBase.config, botDifficulty: 'standard' } }, 1, legal, effOdds, rng).type === 'raise') stdBluffs++;
+    if (decideBotAction({ ...riverSpotBase, config: { ...riverSpotBase.config, botDifficulty: 'casual' } }, 1, legal, effOdds, rng).type === 'raise') casualBluffs++;
+    if (decideBotAction({ ...riverSpotBase, config: { ...riverSpotBase.config, botDifficulty: 'pro' } }, 1, legal, effOdds, rng).type === 'raise') proBluffs++;
+  }
+  assert.ok(casualBluffs < stdBluffs, `Casual bluffs (${casualBluffs}) must be < Standard (${stdBluffs})`);
+  assert.ok(proBluffs < stdBluffs, `Pro bluffs vs Station Hero (${proBluffs}) must be < Standard (${stdBluffs})`);
 });

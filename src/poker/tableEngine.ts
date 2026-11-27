@@ -46,6 +46,7 @@ export type PoolPresetId =
 
 export type HeroPositionLock = 'ROTATE' | 'BTN' | 'BB' | 'CO';
 export type BotSpeed = 'normal' | 'fast';
+export type BotDifficulty = 'casual' | 'standard' | 'pro';
 export type ArenaFormat = 'cash' | 'sng_turbo_3' | 'sng_6max';
 
 export const SNG_BLIND_MULTIPLIERS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 25] as const;
@@ -80,6 +81,7 @@ export interface ArenaConfig {
   blindReadMode: boolean;
   fastFold: boolean;
   speed: BotSpeed;
+  botDifficulty?: BotDifficulty;
 }
 
 export interface SeatHudStats {
@@ -346,6 +348,7 @@ export const DEFAULT_ARENA_CONFIG: ArenaConfig = {
   blindReadMode: false,
   fastFold: false,
   speed: 'normal',
+  botDifficulty: 'standard',
 };
 
 export function buildPresetConfig(

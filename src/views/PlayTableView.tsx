@@ -27,6 +27,7 @@ import {
   Zap,
 } from 'lucide-react';
 import type { Card, CoachMode, DrillAttemptRecord, UserPreferences } from '../poker/types';
+import { inferHeroTendencies } from '../poker/botAi';
 import {
   applyPlayerAction,
   buildPresetConfig,
@@ -563,7 +564,10 @@ export function PlayTableView({
   const handleToggleTheater = () => {
     setTheaterMode((prev) => {
       const next = !prev;
-      if (next) setViewMode('3d');
+      if (next) {
+        setViewMode('3d');
+        setTheaterHudOpen(typeof window !== 'undefined' && window.innerWidth >= 1280);
+      }
       if (!next && document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
       }
@@ -572,10 +576,12 @@ export function PlayTableView({
   };
 
   const handleToggleFullscreen = async () => {
+    const openDockedHud = typeof window !== 'undefined' && window.innerWidth >= 1280;
     try {
       if (!document.fullscreenElement) {
         setTheaterMode(true);
         setViewMode('3d');
+        setTheaterHudOpen(openDockedHud);
         const targetEl = arenaRootRef.current ?? document.documentElement;
         if (targetEl.requestFullscreen) {
           await targetEl.requestFullscreen();
@@ -586,6 +592,7 @@ export function PlayTableView({
     } catch {
       // Iframe environments may block native Fullscreen API; Theater Mode still expands to 100% viewport cleanly
       setTheaterMode(true);
+      setTheaterHudOpen(openDockedHud);
     }
   };
 
@@ -2712,6 +2719,34 @@ export function PlayTableView({
               <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
               <span className="hidden sm:inline">{t('arena.configure')}</span>
             </button>
+
+            {(() => {
+              const diff = activeTable.config.botDifficulty ?? 'standard';
+              const heroRead = diff === 'pro' ? inferHeroTendencies(activeTable) : null;
+              const pillCls =
+                diff === 'pro'
+                  ? 'bg-purple-500/15 border-purple-400/50 text-purple-200'
+                  : diff === 'casual'
+                    ? 'bg-sky-500/15 border-sky-400/50 text-sky-200'
+                    : 'bg-[#0E1513] border-[#1F2D28] text-slate-300 hover:text-white';
+              return (
+                <button
+                  type="button"
+                  data-testid="arena-difficulty-pill"
+                  onClick={() => setSetupOpen(true)}
+                  title={t(`arena.diffDesc.${diff}` as TranslationKey)}
+                  className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${pillCls}`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>{t(`arena.diff.${diff}` as TranslationKey)}</span>
+                  {heroRead && (
+                    <span className="hidden lg:inline text-[11px] opacity-85 border-l border-purple-400/35 pl-1.5">
+                      {t(`arena.proRead.${heroRead.tag}` as TranslationKey)}
+                    </span>
+                  )}
+                </button>
+              );
+            })()}
 
             <button
               type="button"

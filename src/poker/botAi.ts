@@ -11,6 +11,7 @@ import { PREFLOP_TEMPLATES, type PreflopCellStrategy } from './preflopRanges';
 import type {
   ArenaSize,
   BotArchetype,
+  BotDifficulty,
   LegalActions,
   PokerTableState,
   TableSeat,
@@ -1728,6 +1729,174 @@ const POSTFLOP_ARCHETYPE_CONFIG: Record<BotArchetype, PostflopArchetypeConfig> =
 };
 
 // ---------------------------------------------------------------------------
+// 7b. Bot Difficulty, Live Hero Profiling & Dynamic Gear-Switching (Pro Mode)
+// ---------------------------------------------------------------------------
+
+export type HeroExploitTag =
+  | 'unknown'
+  | 'balanced'
+  | 'calling_station'
+  | 'over_folder'
+  | 'maniac_aggro'
+  | 'nit';
+
+export interface HeroExploitRead {
+  sampleConfidence: number; // 0 (no data) .. 1 (40+ hands)
+  handsObserved: number;
+  tag: HeroExploitTag;
+  vpip: number;
+  pfr: number;
+  threeBet: number;
+  foldToCbet: number;
+  wtsd: number;
+  af: number;
+}
+
+export type ProBotGear = 'balanced' | 'pressure' | 'trap';
+
+const ADAPTIVE_ARCHETYPES = new Set<BotArchetype>([
+  'Balanced Reg',
+  'Tight-Aggressive',
+  'Loose-Aggressive',
+]);
+
+/**
+ * Infers Hero's live tendencies from TableSeat.stats using Bayesian shrinkage
+ * toward realistic 6-max balanced priors so Pro bots never over-react to tiny samples.
+ */
+export function inferHeroTendencies(state: PokerTableState): HeroExploitRead {
+  const hero = state.seats.find((s) => s.isHero);
+  const neutral: HeroExploitRead = {
+    sampleConfidence: 0,
+    handsObserved: 0,
+    tag: 'unknown',
+    vpip: 0.24,
+    pfr: 0.19,
+    threeBet: 0.085,
+    foldToCbet: 0.44,
+    wtsd: 0.30,
+    af: 2.4,
+  };
+  if (!hero) return neutral;
+
+  const st = hero.stats;
+  const hands = st.handsDealt;
+  if (hands < 6) {
+    return { ...neutral, handsObserved: hands };
+  }
+
+  // Bayesian shrinkage: smooth ramp from 6 hands -> full confidence by ~40 hands
+  const sampleConfidence = clamp((hands - 5) / 35, 0, 1);
+  const vpip = (st.vpipHands + 16 * 0.24) / (hands + 16);
+  const pfr = (st.pfrHands + 16 * 0.19) / (hands + 16);
+  const threeBet = (st.threeBetHands + 8 * 0.085) / (st.threeBetOpps + 8);
+  const foldToCbet = (st.foldToCbetHands + 8 * 0.44) / (st.foldToCbetOpps + 8);
+  const wtsd = (st.wtsdHands + 10 * 0.30) / (st.sawFlopHands + 10);
+  const af = (st.postflopAggActs + 10 * 2.4) / (st.postflopCalls + 10);
+
+  let tag: HeroExploitTag = 'balanced';
+  if (sampleConfidence < 0.22) {
+    tag = 'unknown';
+  } else if (af >= 3.25 || threeBet >= 0.135 || (vpip >= 0.38 && pfr >= 0.28)) {
+    tag = 'maniac_aggro';
+  } else if (wtsd >= 0.40 || (foldToCbet <= 0.32 && vpip >= 0.32)) {
+    tag = 'calling_station';
+  } else if (foldToCbet >= 0.54) {
+    tag = 'over_folder';
+  } else if (vpip <= 0.16 && pfr <= 0.13) {
+    tag = 'nit';
+  }
+
+  return {
+    sampleConfidence,
+    handsObserved: hands,
+    tag,
+    vpip,
+    pfr,
+    threeBet,
+    foldToCbet,
+    wtsd,
+    af,
+  };
+}
+
+/**
+ * Deterministic dynamic gear-switching for skilled bots in Pro mode.
+ * Staggers 18-hand gear blocks per seat so bots shift between Balanced, Pressure,
+ * and Trap gears organically to disguise intent and table image.
+ */
+export function getProBotGear(
+  handNumber: number,
+  seatIndex: number,
+  archetype: BotArchetype
+): ProBotGear {
+  if (!ADAPTIVE_ARCHETYPES.has(archetype)) return 'balanced';
+  const cycle = Math.floor((Math.max(1, handNumber) + seatIndex * 7) / 18) % 4;
+  if (cycle === 1) return 'pressure';
+  if (cycle === 3) return 'trap';
+  return 'balanced';
+}
+
+function applyDifficultyPreflopAdjustments(
+  freqs: PreflopFreqs,
+  ctx: PreflopSpotContext,
+  archetype: BotArchetype,
+  difficulty: BotDifficulty,
+  state: PokerTableState
+): PreflopFreqs {
+  if (difficulty === 'standard') return freqs;
+
+  const rawStr = preflopStrengthFromKey(ctx.handKey);
+  if (difficulty === 'casual') {
+    // Casual: fewer aggressive 3-bets/4-bets with marginal hands -> friendlier for beginners
+    if (ctx.preflopRaiseCount >= 1 && rawStr < 0.78 && freqs.raise > 0) {
+      const reducedRaise = Math.round(freqs.raise * 0.65);
+      const diff = freqs.raise - reducedRaise;
+      return normalizeFreqs(
+        reducedRaise,
+        freqs.call + Math.round(diff * 0.45),
+        freqs.fold + Math.round(diff * 0.55)
+      );
+    }
+    return freqs;
+  }
+
+  // Pro Adaptive mode (skilled archetypes only)
+  if (!ADAPTIVE_ARCHETYPES.has(archetype)) return freqs;
+  const heroRead = inferHeroTendencies(state);
+  const conf = heroRead.sampleConfidence;
+  if (conf <= 0) return freqs;
+
+  const heroSeat = state.seats.find((s) => s.isHero);
+  const villainIsHero = Boolean(heroSeat && ctx.villainPos === heroSeat.position);
+  let r = freqs.raise;
+  let c = freqs.call;
+
+  if (heroRead.tag === 'nit' && ctx.preflopRaiseCount === 0 && !ctx.canCheck) {
+    // Steal wider when Hero is a tight Nit in the pool
+    if (rawStr >= 0.42 && r < 95) {
+      r = Math.min(100, r + Math.round(16 * conf));
+    }
+  } else if (heroRead.tag === 'maniac_aggro' && villainIsHero && ctx.preflopRaiseCount === 1) {
+    // Linear value 3-bet + IP flat vs hyper-aggressive Hero opens
+    if (rawStr >= 0.68) {
+      r = Math.min(96, r + Math.round(24 * conf));
+    } else if (rawStr >= 0.50) {
+      c = Math.min(100 - r, c + Math.round(16 * conf));
+    }
+  } else if (heroRead.tag === 'calling_station' && villainIsHero && ctx.preflopRaiseCount === 1) {
+    // Value-heavy linear raises vs calling-station Hero, trim light blocker 3-bets
+    if (rawStr >= 0.66) {
+      r = Math.min(95, r + Math.round(16 * conf));
+    } else if (rawStr < 0.54 && r > 0) {
+      r = Math.round(r * (1 - 0.5 * conf));
+    }
+  }
+
+  return normalizeFreqs(r, c, Math.max(0, 100 - r - c));
+}
+
+// ---------------------------------------------------------------------------
 // 8. Main Postflop Decision Engine
 // ---------------------------------------------------------------------------
 
@@ -1737,7 +1906,8 @@ function decidePostflopBotAction(
   legal: LegalActions,
   effectivePotOdds: { effectiveToCall: number; effectivePotBb: number; reqEq: number },
   archetype: BotArchetype,
-  rng: () => number
+  rng: () => number,
+  difficulty: BotDifficulty = 'standard'
 ): { type: 'fold' | 'check' | 'call' | 'raise'; raiseToBb?: number } {
   const hole = seat.cards!;
   const texture = analyzeBoardTexture(state.board);
@@ -1749,7 +1919,68 @@ function decidePostflopBotAction(
     effectivePotOdds.effectiveToCall
   );
   const hand = classifyAndEstimatePostflop(hole, state.board, texture, draws, ctx);
-  const cfg = POSTFLOP_ARCHETYPE_CONFIG[archetype];
+  const baseCfg = POSTFLOP_ARCHETYPE_CONFIG[archetype];
+  let cfg: PostflopArchetypeConfig = baseCfg;
+
+  // Difficulty & Pro Adaptive adjustments (Standard leaves baseCfg untouched!)
+  let slowplayBonus = 0;
+  let proHeroStationExploit = false;
+  let proHeroAggroCallBoost = 0;
+  let proStreetTightenMult = 1;
+  let proStreetTightenAdd = 0;
+
+  if (difficulty === 'casual') {
+    cfg = {
+      ...baseCfg,
+      cbetBias: baseCfg.cbetBias - 0.04,
+      barrelBias: baseCfg.barrelBias - 0.08,
+      raiseAggression: baseCfg.raiseAggression * 0.70,
+      riverBluffScale: baseCfg.riverBluffScale * 0.42,
+      callEquitySlack: baseCfg.callEquitySlack - 0.045,
+    };
+  } else if (difficulty === 'pro' && ADAPTIVE_ARCHETYPES.has(archetype)) {
+    const gear = getProBotGear(state.handNumber, seat.seatIndex, archetype);
+    const heroRead = inferHeroTendencies(state);
+    const conf = heroRead.sampleConfidence;
+    const heroActiveInPot = state.seats.some((s) => s.isHero && !s.folded && s.seatIndex !== seat.seatIndex);
+    const aggressorIsHero = ctx.lastAggressorArchetype === 'Hero';
+
+    let cbetDelta = gear === 'pressure' ? 0.07 : gear === 'trap' ? -0.04 : 0;
+    let barrelDelta = gear === 'pressure' ? 0.07 : gear === 'trap' ? -0.02 : 0;
+    let raiseMult = gear === 'trap' ? 1.22 : gear === 'pressure' ? 1.08 : 1.0;
+    let bluffMult = gear === 'pressure' ? 1.18 : 1.0;
+    if (gear === 'trap') slowplayBonus += 0.20;
+
+    if (heroActiveInPot && conf > 0) {
+      if (heroRead.tag === 'over_folder') {
+        cbetDelta += 0.16 * conf;
+        barrelDelta += 0.10 * conf;
+        bluffMult *= 1 + 0.35 * conf;
+      } else if (heroRead.tag === 'calling_station') {
+        proHeroStationExploit = conf >= 0.32;
+        bluffMult *= Math.max(0.18, 1 - 0.80 * conf);
+      } else if (heroRead.tag === 'maniac_aggro') {
+        slowplayBonus += 0.16 * conf;
+        if (aggressorIsHero) {
+          proStreetTightenMult = Math.max(0.25, 1 - 0.72 * conf);
+          proHeroAggroCallBoost = 0.045 * conf;
+        }
+      } else if (heroRead.tag === 'nit') {
+        cbetDelta += 0.08 * conf;
+        if (aggressorIsHero && ctx.street !== 'flop') {
+          proStreetTightenAdd = 0.05 * conf;
+        }
+      }
+    }
+
+    cfg = {
+      ...baseCfg,
+      cbetBias: baseCfg.cbetBias + cbetDelta,
+      barrelBias: baseCfg.barrelBias + barrelDelta,
+      raiseAggression: baseCfg.raiseAggression * raiseMult,
+      riverBluffScale: baseCfg.riverBluffScale * bluffMult,
+    };
+  }
 
   // =========================================================================
   // CASE A: Checked to Bot (legal.canCheck)
@@ -1932,7 +2163,11 @@ function decidePostflopBotAction(
       // Thin value bet (smaller block-bet or medium bet), checks more multiway or on 4-flush/4-straight boards
       const scaryBoard = texture.isFourFlush || texture.isFourStraight;
       let valProb = scaryBoard ? 0.25 : ctx.isMultiway ? 0.42 : 0.68;
-      if (ctx.hasCallingStationOpponent && !scaryBoard && archetype !== 'Calling Station') {
+      if (
+        (ctx.hasCallingStationOpponent || proHeroStationExploit) &&
+        !scaryBoard &&
+        archetype !== 'Calling Station'
+      ) {
         valProb = Math.max(valProb, 0.92);
       }
       if (archetype === 'Calling Station') valProb = 0.42;
@@ -1984,7 +2219,9 @@ function decidePostflopBotAction(
     }
     if (ctx.isMultiway) riverBluffProb *= 0.35;
     if (
-      (ctx.hasCallingStationOpponent || ctx.lastAggressorArchetype === 'Calling Station') &&
+      (ctx.hasCallingStationOpponent ||
+        proHeroStationExploit ||
+        ctx.lastAggressorArchetype === 'Calling Station') &&
       archetype !== 'Maniac'
     ) {
       riverBluffProb *= 0.08;
@@ -1992,6 +2229,7 @@ function decidePostflopBotAction(
 
     if (rng() < clamp(riverBluffProb, 0, 0.78)) {
       const useOverbetBluff =
+        difficulty !== 'casual' &&
         draws.hasNutFlushBlocker &&
         !ctx.isMultiway &&
         ctx.effectiveSpr >= 1.2 &&
@@ -2037,8 +2275,9 @@ function decidePostflopBotAction(
     let raiseProb = 0;
 
     if (hand.bucket === 'nuts_strong_value') {
-      // Value raise strong hands (slowplay occasionally IP on dry boards)
-      const slowplayPenalty = ctx.isIpVsAggressor && texture.wetness < 0.30 && ctx.street !== 'river' ? 0.25 : 0;
+      // Value raise strong hands (slowplay occasionally IP on dry boards or in Pro Trap gear)
+      const baseSlowplay = ctx.isIpVsAggressor && texture.wetness < 0.30 && ctx.street !== 'river' ? 0.25 : 0;
+      const slowplayPenalty = ctx.street !== 'river' ? baseSlowplay + slowplayBonus : 0;
       raiseProb = clamp((0.68 - slowplayPenalty) * cfg.raiseAggression, 0.12, 0.92);
       // Cap infinite min-raising wars unless holding near-nuts
       if (ctx.streetRaiseCount >= 2 && hand.rawStrength < 0.84) {
@@ -2138,11 +2377,13 @@ function decidePostflopBotAction(
       ? 0.08
       : 0;
 
-  const adjustedEquity = hand.estEquity + impliedOddsBonus + tinyBetCushion + stationPairBonus;
+  const adjustedEquity =
+    hand.estEquity + impliedOddsBonus + tinyBetCushion + stationPairBonus + proHeroAggroCallBoost;
   // Turn/River betting ranges polarize & strengthen vs flop c-bets; tighten calling threshold
-  // for disciplined archetypes on later streets except against hyper-bluffing Maniacs.
+  // for disciplined archetypes on later streets except against hyper-bluffing Maniacs (skipped in Casual).
   let streetCallTighten = 0;
   if (
+    difficulty !== 'casual' &&
     archetype !== 'Calling Station' &&
     archetype !== 'Maniac' &&
     ctx.street !== 'flop' &&
@@ -2150,7 +2391,10 @@ function decidePostflopBotAction(
   ) {
     const riverBase = archetype === 'Tight Nit' ? 0.11 : 0.155;
     const baseTighten = ctx.street === 'turn' ? 0.06 : riverBase;
-    streetCallTighten = ctx.lastAggressorArchetype === 'Loose-Aggressive' ? baseTighten * 0.5 : baseTighten;
+    streetCallTighten =
+      (ctx.lastAggressorArchetype === 'Loose-Aggressive' ? baseTighten * 0.5 : baseTighten) *
+        proStreetTightenMult +
+      proStreetTightenAdd;
   }
   const threshold = reqEq + cfg.callEquitySlack + streetCallTighten;
 
@@ -2176,12 +2420,14 @@ export function decideBotAction(
   const seat = state.seats[seatIndex];
   const archetype: BotArchetype =
     seat.archetype === 'Hero' ? 'Balanced Reg' : seat.archetype;
+  const difficulty: BotDifficulty = state.config.botDifficulty ?? 'standard';
 
   // Preflop Engine
   if (state.phase === 'PREFLOP') {
     const preCtx = extractPreflopContext(state, seatIndex, legal);
     const gtoFreqs = getGtoPreflopFreqs(preCtx);
-    const freqs = adjustPreflopFreqsForArchetype(gtoFreqs, preCtx, archetype);
+    const baseFreqs = adjustPreflopFreqsForArchetype(gtoFreqs, preCtx, archetype);
+    const freqs = applyDifficultyPreflopAdjustments(baseFreqs, preCtx, archetype, difficulty, state);
 
     // If cannot raise (e.g. call-only after short all-in), roll raise freq into call
     const effRaise = legal.canBetOrRaise ? freqs.raise : 0;
@@ -2204,7 +2450,7 @@ export function decideBotAction(
   if (!seat.cards || state.board.length < 3) {
     return legal.canCheck ? { type: 'check' } : { type: 'fold' };
   }
-  return decidePostflopBotAction(state, seat, legal, effectivePotOdds, archetype, rng);
+  return decidePostflopBotAction(state, seat, legal, effectivePotOdds, archetype, rng, difficulty);
 }
 
 // ---------------------------------------------------------------------------

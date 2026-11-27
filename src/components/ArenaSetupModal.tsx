@@ -23,6 +23,7 @@ import {
   type ArenaFormat,
   type ArenaSize,
   type BotArchetype,
+  type BotDifficulty,
   type HeroPositionLock,
   type PoolPresetId,
 } from '../poker/tableEngine';
@@ -497,6 +498,44 @@ export function ArenaSetupModal({
                   </select>
                 </div>
               </div>
+
+              {/* Bot AI Difficulty (Casual / Standard / Pro Adaptive) */}
+              <fieldset className="border-0 p-0 m-0 pt-2 border-t border-[#1F2D28]/70">
+                <legend className="text-xs font-semibold text-slate-200 mb-2 inline-flex items-center gap-1.5">
+                  <Bot className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+                  {t('arena.botDifficulty')}
+                </legend>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['casual', 'standard', 'pro'] as BotDifficulty[]).map((diff) => {
+                    const active = (draft.botDifficulty ?? 'standard') === diff;
+                    const activeCls =
+                      diff === 'pro'
+                        ? 'bg-purple-500/20 border-purple-400 text-purple-200 font-semibold'
+                        : diff === 'casual'
+                          ? 'bg-sky-500/20 border-sky-400 text-sky-200 font-semibold'
+                          : 'bg-emerald-500/20 border-emerald-400 text-emerald-200 font-semibold';
+                    return (
+                      <button
+                        key={diff}
+                        type="button"
+                        data-testid={`setup-difficulty-${diff}`}
+                        aria-pressed={active}
+                        onClick={() => setDraft({ ...draft, botDifficulty: diff })}
+                        className={`px-2.5 py-1.5 text-xs rounded-lg border transition-colors cursor-pointer ${
+                          active
+                            ? activeCls
+                            : 'bg-[#111917] border-[#22332D] text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        {t(`arena.diff.${diff}` as TranslationKey)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1.5 leading-snug">
+                  {t(`arena.diffDesc.${draft.botDifficulty ?? 'standard'}` as TranslationKey)}
+                </p>
+              </fieldset>
             </div>
           </div>
 
