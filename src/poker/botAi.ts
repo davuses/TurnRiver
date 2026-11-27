@@ -1547,6 +1547,16 @@ export function classifyAndEstimatePostflop(
     if (ctx.street === 'river' && bucket !== 'nuts_strong_value') {
       estEquity -= 0.06;
     }
+    // 4-flush / 4-straight scare boards crush one-pair hands facing meaningful Turn/River bets
+    if (
+      ctx.street !== 'flop' &&
+      (texture.isFourFlush || texture.isFourStraight) &&
+      ctx.facingBetFracOfPot >= 0.45 &&
+      evalRes.category < HandCategory.Straight &&
+      ctx.lastAggressorArchetype !== 'Maniac'
+    ) {
+      estEquity -= texture.isFourFlush ? 0.14 : 0.11;
+    }
   }
 
   // Multiway discount (harder for one-pair hands to hold up against 2+ opponents)
