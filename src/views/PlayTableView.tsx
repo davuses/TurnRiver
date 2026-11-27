@@ -3078,7 +3078,7 @@ export function PlayTableView({
           className={
             theaterMode
               ? 'flex-1 min-w-0 h-full flex flex-col'
-              : 'xl:col-span-8 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-4 sm:p-5 space-y-5'
+              : 'xl:col-span-8 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-3 sm:p-4 space-y-3'
           }
         >
           {/* Status Strip (standard mode; Theater shows status in its top bar) */}
@@ -3168,7 +3168,7 @@ export function PlayTableView({
             className={
               theaterMode
                 ? 'px-2.5 py-2 sm:px-4 sm:py-2.5 lg:py-3 border-t border-[#1B2823] bg-[#0A100E] shrink-0 min-h-[56px] lg:min-h-[84px] flex flex-col justify-center'
-                : 'pt-4 border-t border-[#1B2823] min-h-[118px] flex flex-col justify-center'
+                : 'sticky bottom-0 z-20 -mx-3 px-3 sm:-mx-4 sm:px-4 pt-3 pb-2 rounded-b-xl bg-[#0E1513]/95 backdrop-blur-sm border-t border-[#1F2D28] min-h-[84px] flex flex-col justify-center'
             }
           >
             {actionConsoleNode}

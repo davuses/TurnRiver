@@ -263,7 +263,7 @@ export function Studio3DTable({
     ? 'h-full min-h-0'
     : fullViewport
       ? 'h-[calc(100vh-116px)] min-h-[520px]'
-      : 'h-[430px] sm:h-[480px]';
+      : 'h-[360px] sm:h-[clamp(320px,46vh,460px)]';
 
   const frameClass = fillParent
     ? 'relative w-full h-full min-h-0 bg-[#070B0A] select-none overflow-hidden'
