@@ -307,7 +307,17 @@ export function LeakTrackerView({
         </div>
         <div className="bg-[#0E1513] p-5 space-y-1">
           <span className="text-xs text-slate-400 block">{t('leaks.optAcceptable')}</span>
-          <span className="text-2xl font-mono tabular-nums font-semibold text-emerald-400">
+          <span
+            className={`text-2xl font-mono tabular-nums font-semibold ${
+              summary.totalDecisions === 0
+                ? 'text-slate-400'
+                : optimalRate >= 75
+                  ? 'text-emerald-400'
+                  : optimalRate >= 50
+                    ? 'text-amber-300'
+                    : 'text-rose-400'
+            }`}
+          >
             {optimalRate}%
           </span>
         </div>
@@ -333,17 +343,17 @@ export function LeakTrackerView({
             {moduleBreakdown.map((row) => (
               <div
                 key={row.module}
-                className="py-3 flex items-center justify-between gap-4 text-sm"
+                className="py-2.5 flex items-center justify-between gap-4 text-sm"
               >
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => onNavigateDrill(row.module)}
-                    className="font-medium text-slate-100 hover:text-emerald-400 transition-colors cursor-pointer"
-                  >
+                <button
+                  type="button"
+                  onClick={() => onNavigateDrill(row.module)}
+                  className="min-h-[44px] py-1 text-left group cursor-pointer"
+                >
+                  <span className="font-medium text-slate-100 group-hover:text-emerald-400 transition-colors block">
                     {row.label}
-                  </button>
-                  <p className="text-xs font-mono tabular-nums text-slate-400">
+                  </span>
+                  <span className="text-xs font-mono tabular-nums text-slate-400 block">
                     {row.count}{' '}
                     {row.module === 'math' || row.module === 'reading'
                       ? row.count === 1
@@ -352,12 +362,20 @@ export function LeakTrackerView({
                       : row.count === 1
                         ? t('leaks.spotSingular')
                         : t('leaks.spotPlural')}
-                  </p>
-                </div>
-                <div className="text-right font-mono tabular-nums text-xs">
+                  </span>
+                </button>
+                <div className="text-right font-mono tabular-nums text-xs shrink-0">
                   {row.accuracyPct !== null ? (
                     <>
-                      <span className="text-emerald-400 font-semibold block">
+                      <span
+                        className={`font-semibold block ${
+                          row.accuracyPct >= 75
+                            ? 'text-emerald-400'
+                            : row.accuracyPct >= 50
+                              ? 'text-amber-300'
+                              : 'text-rose-400'
+                        }`}
+                      >
                         {row.accuracyPct}% {t('leaks.accurate')}
                       </span>
                       <span className="text-slate-400">
@@ -422,7 +440,7 @@ export function LeakTrackerView({
               <button
                 type="button"
                 onClick={() => setGradeFilter('all')}
-                className={`px-3 py-1 text-xs font-medium rounded cursor-pointer whitespace-nowrap ${
+                className={`min-h-[40px] px-3.5 py-1.5 text-xs font-medium rounded cursor-pointer whitespace-nowrap ${
                   gradeFilter === 'all' ? 'bg-[#1E2E28] text-white' : 'text-slate-400'
                 }`}
               >
@@ -431,7 +449,7 @@ export function LeakTrackerView({
               <button
                 type="button"
                 onClick={() => setGradeFilter('leaks')}
-                className={`px-3 py-1 text-xs font-medium rounded cursor-pointer whitespace-nowrap ${
+                className={`min-h-[40px] px-3.5 py-1.5 text-xs font-medium rounded cursor-pointer whitespace-nowrap ${
                   gradeFilter === 'leaks' ? 'bg-[#1E2E28] text-white' : 'text-slate-400'
                 }`}
               >
@@ -443,7 +461,7 @@ export function LeakTrackerView({
               aria-label={t('leaks.ariaModuleFilter')}
               value={moduleFilter}
               onChange={(e) => setModuleFilter(e.target.value as DrillModule | 'all')}
-              className="bg-[#0A100E] border border-[#1F2D28] rounded-lg px-3 py-1.5 text-xs text-slate-200 cursor-pointer"
+              className="min-h-[40px] bg-[#0A100E] border border-[#1F2D28] rounded-lg px-3 py-2 text-xs text-slate-200 cursor-pointer"
             >
               <option value="all">{t('leaks.allDrills')}</option>
               <option value="preflop">{t('nav.preflop')}</option>
@@ -465,55 +483,115 @@ export function LeakTrackerView({
               <button
                 type="button"
                 onClick={() => onNavigateDrill('preflop')}
-                className="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer"
+                className="min-h-[40px] px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer"
               >
                 {t('leaks.startFirst')}
               </button>
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead>
-                <tr className="border-b border-[#1F2D28] text-slate-400">
-                  <th className="py-2.5 pr-4 font-medium">{t('leaks.colSpot')}</th>
-                  <th className="py-2.5 px-3 font-medium">{t('leaks.colModule')}</th>
-                  <th className="py-2.5 px-3 font-medium">{t('leaks.colSeat')}</th>
-                  <th className="py-2.5 px-3 font-medium">{t('leaks.colYourPlay')}</th>
-                  <th className="py-2.5 px-3 font-medium">{t('leaks.colBestPlay')}</th>
-                  <th className="py-2.5 pl-3 font-medium text-right">{t('leaks.colGrade')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#17221E]">
-                {filteredAttempts.slice(0, 40).map((att) => (
-                  <tr key={att.id} className="hover:bg-[#121B18]/60 transition-colors">
-                    <td className="py-3 pr-4 font-medium text-slate-200 max-w-[240px] truncate">
-                      {localizeSpotLabel(locale, att.spotLabel)}
-                    </td>
-                    <td className="py-3 px-3 text-slate-400 whitespace-nowrap">
-                      {translateModuleLabel(locale, att.module)}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-emerald-400 whitespace-nowrap">
-                      {att.position === 'ALL' ? (locale === 'zh-CN' ? '通用' : 'All') : att.position}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-slate-300 whitespace-nowrap">
-                      {translateActionText(locale, att.chosenAction)}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-slate-400 whitespace-nowrap">
-                      {translateActionText(locale, att.bestAction)}
-                    </td>
-                    <td className="py-3 pl-3 text-right whitespace-nowrap">
+          <>
+            {/* Mobile Responsive Decision Cards */}
+            <div className="md:hidden space-y-2.5" data-testid="recent-decisions-mobile-list">
+              {filteredAttempts.slice(0, 40).map((att) => (
+                <article
+                  key={att.id}
+                  className="rounded-lg bg-[#0A100E] border border-[#1B2823] p-3.5 space-y-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-xs font-semibold text-slate-100 leading-snug break-words">
+                        {localizeSpotLabel(locale, att.spotLabel)}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span className="px-2 py-0.5 rounded bg-[#141E1B] border border-[#22332D] text-slate-300">
+                          {translateModuleLabel(locale, att.module)}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-[#0D1E18] border border-emerald-500/30 font-mono text-emerald-400">
+                          {t('leaks.colSeat')}:{' '}
+                          {att.position === 'ALL'
+                            ? locale === 'zh-CN'
+                              ? '通用'
+                              : 'All'
+                            : att.position}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="shrink-0">
                       <GradeBadge
                         grade={att.grade}
                         metricLabel={formatAttemptMetric(att)}
                         size="sm"
                       />
-                    </td>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#17221E] text-xs">
+                    <div className="min-w-0">
+                      <span className="text-[11px] text-slate-400 block">
+                        {t('leaks.colYourPlay')}
+                      </span>
+                      <span className="font-mono text-slate-200 break-words">
+                        {translateActionText(locale, att.chosenAction)}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[11px] text-slate-400 block">
+                        {t('leaks.colBestPlay')}
+                      </span>
+                      <span className="font-mono text-emerald-300 break-words">
+                        {translateActionText(locale, att.bestAction)}
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="border-b border-[#1F2D28] text-slate-400">
+                    <th className="py-2.5 pr-4 font-medium">{t('leaks.colSpot')}</th>
+                    <th className="py-2.5 px-3 font-medium">{t('leaks.colModule')}</th>
+                    <th className="py-2.5 px-3 font-medium">{t('leaks.colSeat')}</th>
+                    <th className="py-2.5 px-3 font-medium">{t('leaks.colYourPlay')}</th>
+                    <th className="py-2.5 px-3 font-medium">{t('leaks.colBestPlay')}</th>
+                    <th className="py-2.5 pl-3 font-medium text-right">{t('leaks.colGrade')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-[#17221E]">
+                  {filteredAttempts.slice(0, 40).map((att) => (
+                    <tr key={att.id} className="hover:bg-[#121B18]/60 transition-colors">
+                      <td className="py-3 pr-4 font-medium text-slate-200 max-w-[240px] truncate">
+                        {localizeSpotLabel(locale, att.spotLabel)}
+                      </td>
+                      <td className="py-3 px-3 text-slate-400 whitespace-nowrap">
+                        {translateModuleLabel(locale, att.module)}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-emerald-400 whitespace-nowrap">
+                        {att.position === 'ALL' ? (locale === 'zh-CN' ? '通用' : 'All') : att.position}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-slate-300 whitespace-nowrap">
+                        {translateActionText(locale, att.chosenAction)}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-slate-400 whitespace-nowrap">
+                        {translateActionText(locale, att.bestAction)}
+                      </td>
+                      <td className="py-3 pl-3 text-right whitespace-nowrap">
+                        <GradeBadge
+                          grade={att.grade}
+                          metricLabel={formatAttemptMetric(att)}
+                          size="sm"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
     </div>

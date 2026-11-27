@@ -34,14 +34,14 @@ export function RangeMatrix13x13(props: RangeMatrixProps) {
   }
 
   return (
-    <div className="w-full overflow-x-auto select-none">
+    <div className="w-full min-w-0 select-none">
       <div
-        className="flex flex-col gap-[2px] bg-[#0A100E] p-1.5 rounded-lg border border-[#1F2D28] min-w-[364px] sm:min-w-0"
+        className="w-full min-w-0 flex flex-col gap-[1px] sm:gap-[2px] bg-[#0A100E] p-1 sm:p-1.5 rounded-lg border border-[#1F2D28]"
         role="grid"
         aria-label={t('matrix.ariaGrid')}
       >
         {rows.map(({ row, cells }) => (
-          <div key={row} role="row" className="grid grid-cols-13 gap-[2px]">
+          <div key={row} role="row" className="grid grid-cols-13 gap-[1px] sm:gap-[2px]">
             {cells.map(({ hand }) => {
               if (props.mode === 'solver') {
                 const strat = props.matrix[hand];
@@ -50,6 +50,7 @@ export function RangeMatrix13x13(props: RangeMatrixProps) {
                 const raisePct = strat?.raise ?? 0;
                 const callPct = strat?.call ?? 0;
                 const foldPct = strat?.fold ?? 100;
+                const activePct = raisePct + callPct;
 
                 // Stacked horizontal bar inside cell: Emerald (Raise), Sky (Call), Obsidian (Fold)
                 const bgStyle =
@@ -57,11 +58,12 @@ export function RangeMatrix13x13(props: RangeMatrixProps) {
                     ? { backgroundColor: '#111917' }
                     : {
                         backgroundImage: `linear-gradient(90deg, #10B981 0%, #10B981 ${raisePct}%, #38BDF8 ${raisePct}%, #38BDF8 ${
-                          raisePct + callPct
-                        }%, #111917 ${raisePct + callPct}%, #111917 100%)`,
+                          activePct
+                        }%, #111917 ${activePct}%, #111917 100%)`,
                       };
 
-                const isActive = raisePct + callPct >= 45;
+                const isSplit = activePct > 12 && activePct < 88;
+                const isActive = activePct >= 88;
                 const solverAriaLabel =
                   locale === 'zh-CN'
                     ? `${hand}：加注 ${raisePct}%，跟注 ${callPct}%，弃牌 ${foldPct}%`
@@ -75,14 +77,16 @@ export function RangeMatrix13x13(props: RangeMatrixProps) {
                       onMouseEnter={() => props.onInspectHand?.(hand)}
                       style={bgStyle}
                       aria-label={solverAriaLabel}
-                      className={`relative aspect-square w-full rounded-[3px] flex items-center justify-center text-[10px] sm:text-[11px] font-mono tabular-nums font-semibold transition-transform duration-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                      className={`relative aspect-square w-full rounded-[2px] sm:rounded-[3px] flex items-center justify-center text-[8.5px] sm:text-[10px] md:text-[11px] leading-none font-mono tabular-nums font-semibold transition-transform duration-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
                         isHero
-                          ? 'ring-2 ring-amber-300 z-10 scale-105 text-white shadow-md'
+                          ? 'ring-2 ring-amber-300 z-10 scale-105 text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.95)] shadow-md'
                           : isInspected
-                            ? 'ring-1 ring-white/80 z-10 text-white'
-                            : isActive
-                              ? 'text-slate-950'
-                              : 'text-slate-400 hover:text-slate-200'
+                            ? 'ring-1 ring-white/80 z-10 text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.95)]'
+                            : isSplit
+                              ? 'text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.95)]'
+                              : isActive
+                                ? 'text-slate-950'
+                                : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
                       {hand}
@@ -133,7 +137,7 @@ export function RangeMatrix13x13(props: RangeMatrixProps) {
                     onClick={() => props.onToggleHand(hand)}
                     aria-pressed={isSelected}
                     aria-label={builderAriaLabel}
-                    className={`aspect-square w-full rounded-[3px] flex items-center justify-center text-[10px] sm:text-[11px] font-mono tabular-nums transition-colors duration-100 cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${cellClasses}`}
+                    className={`aspect-square w-full rounded-[2px] sm:rounded-[3px] flex items-center justify-center text-[8.5px] sm:text-[10px] md:text-[11px] leading-none font-mono tabular-nums transition-colors duration-100 cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${cellClasses}`}
                   >
                     {hand}
                   </button>

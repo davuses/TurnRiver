@@ -75,7 +75,13 @@ export function Studio3DTable({
   const [lighting, setLighting] = useState<LightingPresetId>('studio');
   const [showProps, setShowProps] = useState<boolean>(true);
   const [localSoundEnabled, setLocalSoundEnabled] = useState<boolean>(true);
-  const [dockVisible, setDockVisible] = useState(true);
+  const [isShortViewport, setIsShortViewport] = useState<boolean>(
+    () => typeof window !== 'undefined' && window.innerHeight < 480
+  );
+  // Auto-collapse the 3D bottom dock on short landscape viewports (<480px height) so the 3D table stays unobstructed
+  const [dockVisible, setDockVisible] = useState<boolean>(
+    () => !(typeof window !== 'undefined' && window.innerHeight < 480)
+  );
   const [isNarrow, setIsNarrow] = useState<boolean>(
     () => typeof window !== 'undefined' && window.innerWidth < 640
   );
@@ -141,7 +147,16 @@ export function Studio3DTable({
   }, []);
 
   useEffect(() => {
-    const onResize = () => setIsNarrow(window.innerWidth < 640);
+    const onResize = () => {
+      setIsNarrow(window.innerWidth < 640);
+      const short = window.innerHeight < 480;
+      setIsShortViewport((prev) => {
+        if (short && !prev) {
+          setDockVisible(false);
+        }
+        return short;
+      });
+    };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
@@ -245,13 +260,13 @@ export function Studio3DTable({
   };
 
   const containerHeightClass = fillParent
-    ? 'h-full min-h-[420px]'
+    ? 'h-full min-h-0'
     : fullViewport
       ? 'h-[calc(100vh-116px)] min-h-[520px]'
       : 'h-[430px] sm:h-[480px]';
 
   const frameClass = fillParent
-    ? 'relative w-full h-full bg-[#070B0A] select-none overflow-hidden'
+    ? 'relative w-full h-full min-h-0 bg-[#070B0A] select-none overflow-hidden'
     : `relative w-full ${containerHeightClass} rounded-xl overflow-hidden border border-[#1F2D28] bg-[#070B0A] select-none`;
 
   return (
@@ -356,42 +371,57 @@ export function Studio3DTable({
         </div>
       </div>
 
-      {/* Viewport-First Collapsible Bottom Dock (single-row scroll strip on <640px mobile, NO backdrop-filter) */}
+      {/* Viewport-First Collapsible Bottom Dock (single-row scroll strip on <lg or short viewports, NO backdrop-filter) */}
       {dockVisible && (
-        <div className="no-scrollbar absolute bottom-2 left-2 right-2 sm:bottom-3 sm:left-3 sm:right-3 flex flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible items-center justify-between gap-1.5 sm:gap-2.5 bg-[#0A100E]/94 border border-[#21322C] rounded-xl px-2 py-1.5 sm:px-3.5 sm:py-2.5">
-          {/* Camera Angle Selector */}
-          <div className="flex flex-nowrap sm:flex-wrap shrink-0 items-center gap-1 sm:gap-1.5">
-            <span className="text-[11px] font-medium text-slate-400 inline-flex items-center gap-1 mr-0.5 sm:mr-1 shrink-0">
-              <Camera className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
-              <span className="hidden md:inline">{t('studio3d.cameraLabel')}</span>
-            </span>
-            {(
-              [
-                { id: 'hero', label: t('studio3d.camHero') },
-                { id: 'broadcast', label: t('studio3d.camBroadcast') },
-                { id: 'topdown', label: t('studio3d.camTopDown') },
-                { id: 'closeup', label: t('studio3d.camCloseUp') },
-                { id: 'rail', label: t('studio3d.camRail') },
-              ] as const
-            ).map((cam) => (
-              <button
-                key={cam.id}
-                type="button"
-                aria-pressed={cameraPreset === cam.id}
-                onClick={() => handleSelectCamera(cam.id)}
-                className={`px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  cameraPreset === cam.id
-                    ? 'bg-emerald-500 text-slate-950 font-semibold'
-                    : 'bg-[#131C19] text-slate-300 hover:text-white border border-[#23342E]'
-                }`}
-              >
-                {cam.label}
-              </button>
-            ))}
-          </div>
+        <div className="absolute bottom-2 left-2 right-2 sm:bottom-3 sm:left-3 sm:right-3 bg-[#0A100E]/94 border border-[#21322C] rounded-xl overflow-hidden">
+          <div
+            className={`no-scrollbar flex flex-nowrap overflow-x-auto ${
+              isShortViewport ? '' : 'lg:flex-wrap lg:overflow-visible'
+            } items-center justify-between gap-1.5 sm:gap-2.5 px-2 py-1.5 sm:px-3.5 sm:py-2.5 pr-8 ${
+              isShortViewport ? '' : 'lg:pr-3.5'
+            }`}
+          >
+            {/* Camera Angle Selector */}
+            <div
+              className={`flex flex-nowrap ${
+                isShortViewport ? '' : 'lg:flex-wrap'
+              } shrink-0 items-center gap-1 sm:gap-1.5`}
+            >
+              <span className="text-[11px] font-medium text-slate-400 inline-flex items-center gap-1 mr-0.5 sm:mr-1 shrink-0">
+                <Camera className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+                <span className="hidden md:inline">{t('studio3d.cameraLabel')}</span>
+              </span>
+              {(
+                [
+                  { id: 'hero', label: t('studio3d.camHero') },
+                  { id: 'broadcast', label: t('studio3d.camBroadcast') },
+                  { id: 'topdown', label: t('studio3d.camTopDown') },
+                  { id: 'closeup', label: t('studio3d.camCloseUp') },
+                  { id: 'rail', label: t('studio3d.camRail') },
+                ] as const
+              ).map((cam) => (
+                <button
+                  key={cam.id}
+                  type="button"
+                  aria-pressed={cameraPreset === cam.id}
+                  onClick={() => handleSelectCamera(cam.id)}
+                  className={`px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    cameraPreset === cam.id
+                      ? 'bg-emerald-500 text-slate-950 font-semibold'
+                      : 'bg-[#131C19] text-slate-300 hover:text-white border border-[#23342E]'
+                  }`}
+                >
+                  {cam.label}
+                </button>
+              ))}
+            </div>
 
-          {/* Right Controls: Felt Finish, Studio Light, Props, SFX, Deck & Deal Runout */}
-          <div className="flex flex-nowrap sm:flex-wrap shrink-0 items-center gap-1.5 sm:gap-2">
+            {/* Right Controls: Felt Finish, Studio Light, Props, SFX, Deck & Deal Runout */}
+            <div
+              className={`flex flex-nowrap ${
+                isShortViewport ? '' : 'lg:flex-wrap'
+              } shrink-0 items-center gap-1.5 sm:gap-2`}
+            >
             <select
               aria-label={t('studio3d.feltLabel')}
               value={feltTheme}
@@ -494,7 +524,16 @@ export function Studio3DTable({
                 <span>{t('studio3d.dealNew')}</span>
               </button>
             )}
+            </div>
           </div>
+          {/* Right-edge gradient fade cue indicating horizontally scrollable dock controls */}
+          <div
+            aria-hidden="true"
+            data-testid="studio3d-dock-scroll-cue"
+            className={`pointer-events-none absolute inset-y-0 right-0 w-9 bg-gradient-to-l from-[#0A100E] via-[#0A100E]/85 to-transparent ${
+              isShortViewport ? '' : 'lg:hidden'
+            }`}
+          />
         </div>
       )}
     </div>

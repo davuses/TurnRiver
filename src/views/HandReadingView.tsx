@@ -147,7 +147,7 @@ export function HandReadingView({
               key={s.id}
               type="button"
               onClick={() => selectSpot(idx)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+              className={`min-h-[38px] sm:min-h-0 px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                 idx === spotIndex
                   ? 'bg-[#1E2E28] text-white'
                   : 'text-slate-400 hover:text-slate-200'
@@ -167,7 +167,7 @@ export function HandReadingView({
               window.setTimeout(() => setCopiedLink(false), 1800);
             }
           }}
-          className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:border-emerald-400/50 hover:text-white inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+          className="min-h-[38px] sm:min-h-0 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:border-emerald-400/50 hover:text-white inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
         >
           {copiedLink ? (
             <Check className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
@@ -181,7 +181,7 @@ export function HandReadingView({
       {/* Two-Zone Layout */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         {/* Left Interactive 13x13 Range Builder */}
-        <div className="xl:col-span-7 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-5 sm:p-6 space-y-5">
+        <div className="xl:col-span-7 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-3.5 sm:p-6 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-white">{displaySpot.promptQuestion}</h2>
@@ -204,7 +204,7 @@ export function HandReadingView({
                     key={m}
                     type="button"
                     onClick={() => setMatrixViewMode(m)}
-                    className={`px-2.5 py-1 text-xs font-medium rounded transition-colors cursor-pointer whitespace-nowrap ${
+                    className={`min-h-[38px] sm:min-h-0 px-2.5 py-1 text-xs font-medium rounded transition-colors cursor-pointer whitespace-nowrap ${
                       matrixViewMode === m
                         ? 'bg-[#1E2E28] text-white'
                         : 'text-slate-400 hover:text-slate-200'
@@ -222,7 +222,7 @@ export function HandReadingView({
               <button
                 type="button"
                 onClick={() => setSelectedHands(new Set())}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#141E1B] border border-[#273A33] text-slate-300 hover:text-white inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                className="min-h-[38px] sm:min-h-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-[#141E1B] border border-[#273A33] text-slate-300 hover:text-white inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
               >
                 <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>{t('reading.clearGrid')}</span>
@@ -238,7 +238,7 @@ export function HandReadingView({
                   key={label}
                   type="button"
                   onClick={() => togglePreset(hands)}
-                  className="px-2.5 py-1.5 text-xs font-medium rounded-md bg-[#141E1B] hover:bg-[#1D2D27] border border-[#243630] text-slate-200 transition-colors cursor-pointer whitespace-nowrap"
+                  className="min-h-[38px] sm:min-h-0 px-2.5 py-1.5 text-xs font-medium rounded-md bg-[#141E1B] hover:bg-[#1D2D27] border border-[#243630] text-slate-200 transition-colors cursor-pointer whitespace-nowrap"
                 >
                   + {translateQuickPreset(locale, label)}
                 </button>
@@ -309,7 +309,7 @@ export function HandReadingView({
         </div>
 
         {/* Right Multi-Street Storyline & Range Audit */}
-        <div className="xl:col-span-5 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-5 sm:p-6 space-y-5">
+        <div className="order-first xl:order-none xl:col-span-5 bg-[#0E1513] border border-[#1F2D28] rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5">
           {/* Board Strip */}
           <div className="felt-surface rounded-xl border border-emerald-400/20 p-4 space-y-2.5">
             <div className="flex items-center justify-between text-xs font-mono text-emerald-200/80">

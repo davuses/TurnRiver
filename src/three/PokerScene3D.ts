@@ -640,9 +640,9 @@ export class PokerScene3D {
     const refAspect = 1.82;
     const targetHalfTanH = Math.tan(THREE.MathUtils.degToRad(baseVFov / 2)) * refAspect;
     const desiredVFov = THREE.MathUtils.radToDeg(2 * Math.atan(targetHalfTanH / safeAspect));
-    const vFov = THREE.MathUtils.clamp(desiredVFov, 42, 62);
+    const vFov = THREE.MathUtils.clamp(desiredVFov, 42, 58);
     const actualHalfTanH = Math.tan(THREE.MathUtils.degToRad(vFov / 2)) * safeAspect;
-    const distScale = THREE.MathUtils.clamp(targetHalfTanH / actualHalfTanH, 1, 1.48);
+    const distScale = THREE.MathUtils.clamp(targetHalfTanH / actualHalfTanH, 1, 1.24);
     return { vFov, distScale };
   }
 
@@ -654,7 +654,7 @@ export class PokerScene3D {
     const target = new THREE.Vector3(...cfg.target);
     const basePos = new THREE.Vector3(...cfg.pos);
     const { distScale } = this.computeAspectFraming(aspect);
-    const effectiveScale = preset === 'closeup' ? Math.min(1.42, distScale) : distScale;
+    const effectiveScale = preset === 'closeup' ? Math.min(1.2, distScale) : distScale;
     const pos = target.clone().addScaledVector(basePos.sub(target), effectiveScale);
     return { pos, target };
   }

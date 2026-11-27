@@ -59,6 +59,7 @@ export function FundamentalsView({
   const handleSwitchLesson = (id: FundamentalsLessonId) => {
     setActiveId(id);
     setAnswers({});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const progressPct = Math.round((store.completedCount / FUNDAMENTALS_LESSONS.length) * 100);
@@ -77,7 +78,7 @@ export function FundamentalsView({
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="text-right space-y-1">
+          <div className="text-left sm:text-right space-y-1">
             <div className="text-xs font-medium text-slate-300 tabular-nums">
               {store.completedCount} / {FUNDAMENTALS_LESSONS.length} {t('learn.progress')}
             </div>
@@ -116,7 +117,7 @@ export function FundamentalsView({
               key={item.id}
               type="button"
               onClick={() => handleSwitchLesson(item.id)}
-              className={`px-3 py-2 rounded-lg border text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 cursor-pointer ${
+              className={`min-h-[40px] px-3 py-2 rounded-lg border text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 cursor-pointer ${
                 active
                   ? 'bg-emerald-500/15 border-emerald-400 text-emerald-200'
                   : 'bg-[#0E1513] border-[#1F2D28] text-slate-300'

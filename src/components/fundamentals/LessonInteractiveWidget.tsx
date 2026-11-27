@@ -12,6 +12,25 @@ import { copyShareUrl } from '../../utils/shareLink';
 import { PlayingCard, type CardHighlightState } from '../PlayingCard';
 import { RangeMatrix13x13 } from '../RangeMatrix13x13';
 import { useLocale } from '../../i18n/LocaleContext';
+import { translateHandRank } from '../../i18n/drillContentZh';
+
+const SHOWDOWN_SOLVED_STORAGE_KEY = 'turnriver_showdown_solved_v1';
+
+function readSolvedSlugs(): Set<ShowdownPuzzleSlug> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = window.localStorage.getItem(SHOWDOWN_SOLVED_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    const validSlugs = new Set<string>(SHOWDOWN_PUZZLES.map((p) => p.slug));
+    return new Set(
+      parsed.filter((s): s is ShowdownPuzzleSlug => typeof s === 'string' && validSlugs.has(s))
+    );
+  } catch {
+    return new Set();
+  }
+}
 
 interface LessonInteractiveWidgetProps {
   lessonId: FundamentalsLessonId;
@@ -23,7 +42,9 @@ interface LessonInteractiveWidgetProps {
 const SEAT_GUIDE: {
   pos: Position;
   rfiPct: string;
+  rfiPctZh?: string;
   samples: string;
+  samplesZh?: string;
   noteEn: string;
   noteZh: string;
 }[] = [
@@ -58,14 +79,18 @@ const SEAT_GUIDE: {
   {
     pos: 'SB',
     rfiPct: '~40% (vs BB)',
+    rfiPctZh: '~40%（对 BB）',
     samples: 'Raise or fold vs opens',
+    samplesZh: '面对开池多用加注或弃牌',
     noteEn: 'Worst postflop position — acts first on every street.',
     noteZh: '翻后最不利位置——每条街都必须最先表态。',
   },
   {
     pos: 'BB',
     rfiPct: 'Defend wide',
+    rfiPctZh: '宽范围防守',
     samples: 'Already invested 1bb',
+    samplesZh: '已投入 1bb 大盲注',
     noteEn: 'Closes preflop action with a discount — defend suited & connected hands.',
     noteZh: '已投入 1bb 且翻前最后行动，可凭赔率折扣宽范围防守。',
   },
@@ -167,9 +192,20 @@ export function LessonInteractiveWidget({
     return 0;
   });
   const [showdownGuess, setShowdownGuess] = useState<'hero' | 'villain' | 'split' | null>(null);
-  const [solvedSlugs, setSolvedSlugs] = useState<Set<ShowdownPuzzleSlug>>(() => new Set());
+  const [solvedSlugs, setSolvedSlugs] = useState<Set<ShowdownPuzzleSlug>>(readSolvedSlugs);
   const [tappedCardKey, setTappedCardKey] = useState<string | null>(null);
   const [copiedPuzzleLink, setCopiedPuzzleLink] = useState(false);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        SHOWDOWN_SOLVED_STORAGE_KEY,
+        JSON.stringify(Array.from(solvedSlugs))
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [solvedSlugs]);
 
   useEffect(() => {
     if (!initialPuzzleSlug) return;
@@ -656,6 +692,8 @@ export function LessonInteractiveWidget({
   if (lessonId === 'hand_rankings') {
     const puzzle = SHOWDOWN_PUZZLES[showdownIdx] ?? SHOWDOWN_PUZZLES[0];
     const comparison = compareShowdownCards(puzzle.hero, puzzle.villain, puzzle.board);
+    const heroHandLabel = translateHandRank(locale, comparison.heroEval.label);
+    const villainHandLabel = translateHandRank(locale, comparison.villainEval.label);
     const isAnswered = showdownGuess !== null;
     const isCorrect = showdownGuess === comparison.winner;
     const decidingSet = new Set(comparison.decidingCardKeys);
@@ -735,7 +773,7 @@ export function LessonInteractiveWidget({
               type="button"
               data-testid="copy-puzzle-link-btn"
               onClick={handleCopyLink}
-              className="px-2.5 py-1 text-xs font-medium rounded-md bg-[#0A100E]/90 border border-[#243630] text-slate-200 hover:border-emerald-400/60 hover:text-white inline-flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              className="min-h-[40px] px-3 py-1.5 text-xs font-medium rounded-md bg-[#0A100E]/90 border border-[#243630] text-slate-200 hover:border-emerald-400/60 hover:text-white inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               {copiedPuzzleLink ? (
                 <Check className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
@@ -756,7 +794,7 @@ export function LessonInteractiveWidget({
               type="button"
               aria-label={isZh ? '上一题' : 'Previous puzzle'}
               onClick={() => selectPuzzle(showdownIdx - 1)}
-              className="p-1.5 rounded-md bg-[#0A100E]/90 border border-[#243630] text-slate-300 hover:text-white cursor-pointer"
+              className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-md bg-[#0A100E]/90 border border-[#243630] text-slate-300 hover:text-white cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" aria-hidden="true" />
             </button>
@@ -764,7 +802,7 @@ export function LessonInteractiveWidget({
               type="button"
               aria-label={isZh ? '下一题' : 'Next puzzle'}
               onClick={() => selectPuzzle(showdownIdx + 1)}
-              className="p-1.5 rounded-md bg-[#0A100E]/90 border border-[#243630] text-slate-300 hover:text-white cursor-pointer"
+              className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-md bg-[#0A100E]/90 border border-[#243630] text-slate-300 hover:text-white cursor-pointer"
             >
               <ChevronRight className="w-4 h-4" aria-hidden="true" />
             </button>
@@ -772,7 +810,7 @@ export function LessonInteractiveWidget({
         </div>
 
         {/* 10-Puzzle Quick Selector Strip */}
-        <div className="no-scrollbar flex items-center gap-1 overflow-x-auto pb-0.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {SHOWDOWN_PUZZLES.map((item, idx) => {
             const active = idx === showdownIdx;
             const done = solvedSlugs.has(item.slug);
@@ -781,7 +819,7 @@ export function LessonInteractiveWidget({
                 key={item.slug}
                 type="button"
                 onClick={() => selectPuzzle(idx)}
-                className={`px-2 py-1 text-[11px] font-mono rounded border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                className={`min-h-[36px] min-w-[36px] px-2.5 py-1 text-xs font-mono rounded-md border transition-colors cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
                   active
                     ? 'bg-emerald-500 text-[#04110C] border-emerald-400 font-semibold'
                     : done
@@ -845,7 +883,7 @@ export function LessonInteractiveWidget({
                 </span>
                 <span className="text-xs text-slate-300">
                   {isAnswered
-                    ? comparison.heroEval.label
+                    ? heroHandLabel
                     : isZh
                       ? '先判断谁赢'
                       : 'Who wins?'}
@@ -882,7 +920,7 @@ export function LessonInteractiveWidget({
                 </span>
                 <span className="text-xs text-slate-300">
                   {isAnswered
-                    ? comparison.villainEval.label
+                    ? villainHandLabel
                     : isZh
                       ? '先判断谁赢'
                       : 'Who wins?'}
@@ -931,7 +969,7 @@ export function LessonInteractiveWidget({
                   data-testid={`showdown-guess-${opt.id}`}
                   disabled={isAnswered}
                   onClick={() => handleGuess(opt.id)}
-                  className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors cursor-pointer disabled:cursor-default ${cls}`}
+                  className={`min-h-[40px] px-3 py-2 text-xs font-medium rounded-lg border transition-colors cursor-pointer disabled:cursor-default ${cls}`}
                 >
                   {isZh ? opt.zh : opt.en}
                 </button>
@@ -966,7 +1004,7 @@ export function LessonInteractiveWidget({
                 <div className="space-y-1.5">
                   <div className="text-[11px] font-medium text-slate-300">
                     {isZh ? '我方最佳 5 张' : 'Hero’s Best Five'} ·{' '}
-                    <span className="text-emerald-300">{comparison.heroEval.label}</span>
+                    <span className="text-emerald-300">{heroHandLabel}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     {comparison.heroEval.bestFive.map((c, idx) => (
@@ -983,7 +1021,7 @@ export function LessonInteractiveWidget({
                 <div className="space-y-1.5">
                   <div className="text-[11px] font-medium text-slate-300">
                     {isZh ? '对手最佳 5 张' : 'Villain’s Best Five'} ·{' '}
-                    <span className="text-sky-300">{comparison.villainEval.label}</span>
+                    <span className="text-sky-300">{villainHandLabel}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     {comparison.villainEval.bestFive.map((c, idx) => (
@@ -1067,7 +1105,7 @@ export function LessonInteractiveWidget({
                       setShowdownGuess(null);
                       setTappedCardKey(null);
                     }}
-                    className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-[#141E1B] border border-[#243630] text-slate-300 hover:text-white inline-flex items-center gap-1 cursor-pointer"
+                    className="min-h-[36px] px-3 py-1.5 text-xs font-medium rounded-md bg-[#141E1B] border border-[#243630] text-slate-300 hover:text-white inline-flex items-center gap-1 cursor-pointer"
                   >
                     <RotateCcw className="w-3 h-3" aria-hidden="true" />
                     <span>{isZh ? '重做' : 'Retry'}</span>
@@ -1075,7 +1113,7 @@ export function LessonInteractiveWidget({
                   <button
                     type="button"
                     onClick={() => selectPuzzle(showdownIdx + 1)}
-                    className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-500 hover:bg-emerald-400 text-[#04110C] cursor-pointer"
+                    className="min-h-[36px] px-3 py-1.5 text-xs font-semibold rounded-md bg-emerald-500 hover:bg-emerald-400 text-[#04110C] cursor-pointer"
                   >
                     {isZh ? '下一题 →' : 'Next Puzzle →'}
                   </button>
@@ -1115,7 +1153,7 @@ export function LessonInteractiveWidget({
                     isSel ? 'text-[#04110C]/80' : 'text-slate-400'
                   }`}
                 >
-                  {seat.rfiPct}
+                  {isZh ? (seat.rfiPctZh ?? seat.rfiPct) : seat.rfiPct}
                 </span>
               </button>
             );
@@ -1124,9 +1162,14 @@ export function LessonInteractiveWidget({
         <div className="rounded-lg bg-[#0E1513] border border-[#1F2D28] p-4 space-y-1.5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-sm font-semibold text-white">
-              {active.pos} · <span className="text-emerald-400 tabular-nums">{active.rfiPct}</span>
+              {active.pos} ·{' '}
+              <span className="text-emerald-400 tabular-nums">
+                {isZh ? (active.rfiPctZh ?? active.rfiPct) : active.rfiPct}
+              </span>
             </span>
-            <span className="text-xs tabular-nums text-[#E5B95C]">{active.samples}</span>
+            <span className="text-xs tabular-nums text-[#E5B95C]">
+              {isZh ? (active.samplesZh ?? active.samples) : active.samples}
+            </span>
           </div>
           <p className="text-xs text-slate-300 leading-relaxed">
             {isZh ? active.noteZh : active.noteEn}

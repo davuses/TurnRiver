@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { ArrowRight, BookOpen, CalendarCheck2, CheckCircle2, Play } from 'lucide-react';
 import type { DrillAttemptRecord, DrillModule, MasterySummary } from '../poker/types';
 import { FUNDAMENTALS_LESSONS } from '../poker/fundamentalsLessons';
-import type { DailySlotKind, DailyThreePlan } from '../poker/dailyChallenge';
+import {
+  getLocalizedDailyTitles,
+  type DailySlotKind,
+  type DailyThreePlan,
+} from '../poker/dailyChallenge';
 import { useFundamentalsStore } from '../store/useFundamentalsStore';
 import { useLocale } from '../i18n/LocaleContext';
 import type { TranslationKey } from '../i18n/translations';
@@ -65,8 +69,9 @@ export function OverviewView({
   onLaunchDailySlot,
 }: OverviewViewProps) {
   const [imgFailed, setImgFailed] = useState(false);
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const fundamentals = useFundamentalsStore();
+  const dailyTitles = getLocalizedDailyTitles(locale, dailyPlan);
 
   const optimalRate =
     summary.totalDecisions > 0
@@ -96,7 +101,7 @@ export function OverviewView({
   return (
     <div className="pb-20">
       {/* Full-Bleed Living-Canvas Hero bleeding cleanly to y=0 behind the borderless top bar */}
-      <section className="relative -mt-[110px] lg:-mt-16 min-h-[78vh] sm:min-h-[84vh] flex items-end overflow-hidden bg-[#06120E]">
+      <section className="relative -mt-[116px] lg:-mt-16 min-h-[78vh] sm:min-h-[84vh] flex items-end overflow-hidden bg-[#06120E]">
         {!imgFailed ? (
           <img
             src={heroStudioImg}
@@ -163,7 +168,7 @@ export function OverviewView({
             <button
               type="button"
               onClick={() => onNavigate('table')}
-              className="group lg:col-span-8 text-left rounded-xl p-7 sm:p-9 flex flex-col justify-between gap-8 transition-[border-color,background-color] duration-200 ease-out cursor-pointer border felt-surface border-emerald-400/25 hover:border-emerald-400/55"
+              className="group lg:col-span-8 text-left rounded-xl p-7 sm:p-9 flex flex-col items-stretch justify-between gap-8 transition-[border-color,background-color] duration-200 ease-out cursor-pointer border felt-surface border-emerald-400/25 hover:border-emerald-400/55"
             >
               <div className="space-y-4">
                 <p className="text-[13px] font-medium text-[#E5B95C]">
@@ -192,11 +197,11 @@ export function OverviewView({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-white/10">
+              <div className="w-full flex items-center justify-between gap-3 pt-4 border-t border-white/10">
                 <span className="text-[13px] tabular-nums text-[#99A8A1]">
                   {formatLoggedCount('table')}
                 </span>
-                <span className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-emerald-300 group-hover:text-emerald-200 transition-colors duration-200 ease-out">
+                <span className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-emerald-300 group-hover:text-emerald-200 transition-colors duration-200 ease-out whitespace-nowrap">
                   <span>{t('overview.mod.table.cta')}</span>
                   <ArrowRight
                     className="w-4 h-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5"
@@ -210,7 +215,7 @@ export function OverviewView({
             <button
               type="button"
               onClick={() => onNavigate('leaks')}
-              className="group lg:col-span-4 text-left rounded-xl p-7 sm:p-8 flex flex-col justify-between gap-8 transition-[border-color,background-color] duration-200 ease-out cursor-pointer border bg-[#0E1513] border-[#1F2D28] hover:border-[#344A42] hover:bg-[#111A17]"
+              className="group lg:col-span-4 text-left rounded-xl p-7 sm:p-8 flex flex-col items-stretch justify-between gap-8 transition-[border-color,background-color] duration-200 ease-out cursor-pointer border bg-[#0E1513] border-[#1F2D28] hover:border-[#344A42] hover:bg-[#111A17]"
             >
               <div className="space-y-3">
                 <p className="text-[13px] font-medium text-emerald-400">
@@ -224,13 +229,13 @@ export function OverviewView({
                 </p>
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-white/10">
+              <div className="w-full flex items-center justify-between gap-3 pt-4 border-t border-white/10">
                 <span className="text-[13px] tabular-nums text-[#99A8A1]">
                   {summary.totalDecisions > 0
                     ? `${optimalRate}% · ${avgScore} / 100`
                     : `${summary.totalDecisions} ${t('overview.unitDecisionPlural')}`}
                 </span>
-                <span className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-emerald-300 group-hover:text-emerald-200 transition-colors duration-200 ease-out">
+                <span className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-emerald-300 group-hover:text-emerald-200 transition-colors duration-200 ease-out whitespace-nowrap">
                   <span>{t('overview.leaksCardCta')}</span>
                   <ArrowRight
                     className="w-4 h-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5"
@@ -310,17 +315,17 @@ export function OverviewView({
                 {
                   slot: 'preflop' as const,
                   label: t('daily.slotPreflop'),
-                  detail: dailyPlan.preflopTitle,
+                  detail: dailyTitles.preflopTitle,
                 },
                 {
                   slot: 'postflop' as const,
                   label: t('daily.slotPostflop'),
-                  detail: dailyPlan.postflopTitle,
+                  detail: dailyTitles.postflopTitle,
                 },
                 {
                   slot: 'showdown' as const,
                   label: t('daily.slotShowdown'),
-                  detail: dailyPlan.showdownSlug.replace(/-/g, ' '),
+                  detail: dailyTitles.showdownTitle,
                 },
               ]
             ).map((item) => {
@@ -339,7 +344,7 @@ export function OverviewView({
                 >
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-white">{item.label}</p>
-                    <p className="text-[11px] text-slate-400 truncate capitalize mt-0.5">
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">
                       {item.detail}
                     </p>
                   </div>
@@ -368,7 +373,7 @@ export function OverviewView({
                 key={mod.id}
                 type="button"
                 onClick={() => onNavigate(mod.id)}
-                className="group text-left py-6 md:border-b md:border-[#1F2D28] flex flex-col justify-between gap-5 transition-colors duration-200 ease-out hover:bg-[#0E1513]/70 md:px-4 md:-mx-4 rounded-lg cursor-pointer"
+                className="group text-left py-6 md:border-b md:border-[#1F2D28] flex flex-col items-stretch justify-between gap-5 transition-colors duration-200 ease-out hover:bg-[#0E1513]/70 md:px-4 md:-mx-4 rounded-lg cursor-pointer"
               >
                 <div className="space-y-2">
                   <div className="flex items-baseline justify-between gap-4">

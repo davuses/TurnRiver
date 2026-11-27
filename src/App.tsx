@@ -137,7 +137,7 @@ function TurnRiverShell() {
   const headerSurface =
     isHeroView && !scrolled
       ? 'bg-transparent border-transparent'
-      : 'bg-[#070B0A]/92 border-[#1F2D28] backdrop-blur-md';
+      : 'bg-[#070B0A]/98 border-[#1F2D28] backdrop-blur-md';
 
   return (
     <div className="min-h-screen bg-[#070B0A] text-[#F2F4F1] flex flex-col">
@@ -196,13 +196,13 @@ function TurnRiverShell() {
           </nav>
 
           {/* Right Controls: Locale & Leak Tracker */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={toggleLocale}
               data-testid="locale-toggle"
               aria-label={locale === 'en' ? 'Switch language to Simplified Chinese' : '切换语言为英文'}
-              className="px-3 py-1.5 text-[13px] font-medium rounded-lg bg-[#0E1513]/85 text-[#D8E2DD] border border-[#24352F] hover:border-emerald-400/50 hover:text-white inline-flex items-center gap-1.5 transition-colors duration-200 ease-out whitespace-nowrap shrink-0 cursor-pointer"
+              className="min-h-[40px] px-3 py-1.5 text-[13px] font-medium rounded-lg bg-[#0E1513]/85 text-[#D8E2DD] border border-[#24352F] hover:border-emerald-400/50 hover:text-white inline-flex items-center gap-1.5 transition-colors duration-200 ease-out whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Globe className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
               <span>{locale === 'en' ? '中文' : 'EN'}</span>
@@ -212,7 +212,7 @@ function TurnRiverShell() {
               type="button"
               onClick={() => setActiveView('leaks')}
               aria-current={activeView === 'leaks' ? 'page' : undefined}
-              className={`px-3.5 py-1.5 text-[13px] font-semibold rounded-lg transition-colors duration-200 ease-out whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`min-h-[40px] px-3.5 py-1.5 text-[13px] font-semibold rounded-lg transition-colors duration-200 ease-out whitespace-nowrap shrink-0 cursor-pointer inline-flex items-center ${
                 activeView === 'leaks'
                   ? 'bg-emerald-500 text-[#04110C]'
                   : 'bg-[#141E1B]/90 text-[#F2F4F1] border border-[#283B34] hover:border-emerald-400/50 hover:bg-[#1A2824]'
@@ -224,33 +224,45 @@ function TurnRiverShell() {
         </div>
 
         {/* Mobile / Tablet Drill Strip */}
-        <nav
-          aria-label={t('nav.ariaMobile')}
-          className={`lg:hidden no-scrollbar flex items-center gap-1 overflow-x-auto px-4 pb-2.5 pt-2 border-t ${
+        <div
+          className={`relative lg:hidden border-t ${
             isHeroView && !scrolled
               ? 'border-white/10 bg-[#070B0A]/65 backdrop-blur-md'
               : 'border-[#16211D]'
           }`}
         >
-          {NAV_LINKS.map((item) => {
-            const isActive = activeView === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setActiveView(item.id)}
-                aria-current={isActive ? 'page' : undefined}
-                className={`px-3 py-1.5 text-[13px] font-medium rounded-md whitespace-nowrap shrink-0 transition-colors duration-150 ease-out cursor-pointer ${
-                  isActive
-                    ? 'bg-[#182621] text-emerald-300'
-                    : 'text-[#99A8A1] hover:text-[#F2F4F1]'
-                }`}
-              >
-                {t(item.labelKey)}
-              </button>
-            );
-          })}
-        </nav>
+          <nav
+            aria-label={t('nav.ariaMobile')}
+            className="no-scrollbar flex items-center gap-0.5 overflow-x-auto pl-3 pr-10 pt-1 pb-1.5"
+          >
+            {NAV_LINKS.map((item) => {
+              const isActive = activeView === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveView(item.id)}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`min-h-[40px] px-2.5 py-1.5 text-[13px] font-medium rounded-md whitespace-nowrap shrink-0 inline-flex items-center transition-colors duration-150 ease-out cursor-pointer ${
+                    isActive
+                      ? 'bg-[#182621] text-emerald-300'
+                      : 'text-[#99A8A1] hover:text-[#F2F4F1]'
+                  }`}
+                >
+                  {t(item.labelKey)}
+                </button>
+              );
+            })}
+          </nav>
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l ${
+              isHeroView && !scrolled
+                ? 'from-[#070B0A]/90 via-[#070B0A]/55 to-transparent'
+                : 'from-[#070B0A] via-[#070B0A]/80 to-transparent'
+            }`}
+          />
+        </div>
       </header>
 
       {/* Main Content Stage */}

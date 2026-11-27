@@ -1568,12 +1568,77 @@ export function PlayTableView({
   const heroStrengthPillNode = heroHandDescription ? (
     <span
       data-testid="hero-hand-strength"
-      className="px-2 py-0.5 rounded-md bg-amber-400/10 border border-amber-400/35 text-amber-200 font-mono text-[11px] truncate max-w-[260px]"
+      className="px-2 py-0.5 rounded-md bg-amber-400/10 border border-amber-400/35 text-amber-200 font-mono text-[11px] truncate max-w-[220px] sm:max-w-[260px]"
       title={heroHandDescription}
     >
       {heroHandDescription}
     </span>
   ) : null;
+
+  const heroMiniCardsNode =
+    is3DActive && viewHeroSeat?.cards && viewPhase !== 'IDLE' ? (
+      <span
+        data-testid="mobile-hero-hole-cards"
+        className={`sm:hidden inline-flex items-center gap-1 shrink-0 ${
+          viewHeroSeat.folded ? 'opacity-55' : ''
+        }`}
+      >
+        {viewHeroSeat.cards.map((c, idx) => {
+          const suitCls =
+            c.suit === 's'
+              ? 'text-slate-900'
+              : c.suit === 'h'
+                ? 'text-rose-600'
+                : c.suit === 'd'
+                  ? prefs.fourColorDeck
+                    ? 'text-sky-600'
+                    : 'text-rose-600'
+                  : prefs.fourColorDeck
+                    ? 'text-emerald-700'
+                    : 'text-slate-900';
+          return (
+            <span
+              key={idx}
+              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#F8FAFC] border border-slate-300 font-mono text-xs font-bold leading-none shadow-sm ${suitCls}`}
+            >
+              <span>{c.rank === 'T' ? '10' : c.rank}</span>
+              <span>{SUIT_GLYPH[c.suit]}</span>
+            </span>
+          );
+        })}
+      </span>
+    ) : null;
+
+  const difficultyPillNode = (() => {
+    const diff = activeTable.config.botDifficulty ?? 'standard';
+    const heroRead = diff === 'pro' ? inferHeroTendencies(activeTable) : null;
+    const pillCls =
+      diff === 'pro'
+        ? 'bg-purple-500/15 border-purple-400/50 text-purple-200'
+        : diff === 'casual'
+          ? 'bg-sky-500/15 border-sky-400/50 text-sky-200'
+          : 'bg-[#0E1513] border-[#1F2D28] text-slate-300 hover:text-white';
+    return (
+      <button
+        type="button"
+        data-testid="arena-difficulty-pill"
+        onClick={() => setSetupOpen(true)}
+        title={t(`arena.diffDesc.${diff}` as TranslationKey)}
+        className={`min-h-[38px] min-w-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${pillCls}`}
+      >
+        <Sparkles className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+        <span>{t(`arena.diff.${diff}` as TranslationKey)}</span>
+        {heroRead && (
+          <span
+            data-testid="arena-pro-read-tag"
+            className="inline text-[11px] opacity-90 border-l border-purple-400/35 pl-1.5"
+          >
+            {t(`arena.proRead.${heroRead.tag}` as TranslationKey)}
+          </span>
+        )}
+      </button>
+    );
+  })();
 
   const activeSeat =
     activeTable.actingSeatIndex !== null ? activeTable.seats[activeTable.actingSeatIndex] : null;
@@ -1918,9 +1983,9 @@ export function PlayTableView({
         </div>
       )}
 
-      <div className={theaterMode ? 'flex flex-wrap items-center gap-3' : 'space-y-3'}>
+      <div className={theaterMode ? 'flex flex-wrap items-center gap-2 sm:gap-3' : 'space-y-3'}>
         <div
-          className={`flex flex-wrap items-center gap-2.5 ${theaterMode ? 'flex-1 min-w-[320px]' : ''}`}
+          className={`flex flex-wrap items-center gap-2 sm:gap-2.5 ${theaterMode ? 'flex-1 min-w-0 sm:min-w-[300px]' : ''}`}
         >
           {legal.canFold && (
             <button
@@ -1983,8 +2048,8 @@ export function PlayTableView({
 
         {legal.canBetOrRaise && (
           <div
-            className={`flex flex-wrap items-center gap-3 bg-[#0A100E] border border-[#1B2823] rounded-lg px-3.5 py-2 ${
-              theaterMode ? 'flex-1 min-w-[340px]' : ''
+            className={`flex flex-wrap items-center gap-2.5 sm:gap-3 bg-[#0A100E] border border-[#1B2823] rounded-lg px-3 py-2 sm:px-3.5 ${
+              theaterMode ? 'flex-1 min-w-0 sm:min-w-[320px]' : ''
             }`}
           >
             <div className="flex flex-wrap items-center gap-1.5">
@@ -2037,7 +2102,7 @@ export function PlayTableView({
                         sharedCasinoSoundEngine.playUiTick();
                       }
                     }}
-                    className="px-2.5 py-1 text-xs font-mono rounded bg-[#141E1B] hover:bg-[#1F2F29] border border-[#273A33] text-slate-200 cursor-pointer whitespace-nowrap"
+                    className="min-h-[38px] px-2.5 py-1.5 text-xs font-mono rounded-md bg-[#141E1B] hover:bg-[#1F2F29] border border-[#273A33] text-slate-200 inline-flex items-center justify-center cursor-pointer whitespace-nowrap"
                   >
                     {preset.label}
                   </button>
@@ -2066,7 +2131,7 @@ export function PlayTableView({
                     )
                   )
                 }
-                className="w-full accent-emerald-500 cursor-pointer"
+                className="w-full h-9 accent-emerald-500 cursor-pointer touch-pan-x [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5"
               />
               <span className="font-mono tabular-nums text-xs text-emerald-300 min-w-[4.75rem] text-right shrink-0">
                 {formatChips(raiseAmount, chipDisplay, { compact: true })}
@@ -2642,187 +2707,173 @@ export function PlayTableView({
           : 'space-y-3 sm:space-y-5 pb-10'
       }
     >
-      {/* Header Bar: Compact Cinema Bar in Theater Mode, Full Config Toolbar in Standard Mode */}
+      {/* Header Bar: Compact Single-Row Scrollable Cinema Bar in Theater Mode (<lg), Full Config Toolbar in Standard Mode */}
       {theaterMode ? (
-        <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2.5 border-b border-[#1B2823] bg-[#0A100E] shrink-0">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span
-              data-testid="arena-config-badge"
-              className="px-2.5 py-0.5 text-xs font-mono rounded-md bg-[#121D19] border border-[#253832] text-emerald-300"
-            >
-              {configBadgeText}
-            </span>
-            <span className="text-xs font-mono text-emerald-400 font-semibold">{statusText}</span>
-            {heroStrengthPillNode}
-            {sessionPnlNode}
-            <span className="hidden lg:inline text-xs font-mono tabular-nums text-slate-400">
-              {t('table.heroStack')} {formatChips(heroSeat.stackBb, chipDisplay, { compact: true })} ·{' '}
-              {t('table.currentBet')}{' '}
-              {formatChips(activeTable.currentBetBb, chipDisplay, { compact: true })}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {isFlashback && (
-              <button
-                type="button"
-                data-testid="theater-exit-flashback-btn"
-                onClick={handleExitFlashback}
-                className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-400/20 border border-amber-400/50 text-amber-200 hover:bg-amber-400/30 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-              >
-                <GitBranch className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>{t('arena.exitFlashback')}</span>
-              </button>
-            )}
-            {chipUnitToggleNode}
-
-            <button
-              type="button"
-              data-testid="theater-top-up"
-              onClick={handleRebuy}
-              disabled={!canManualTopUp}
-              className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-200 hover:bg-[#17231F] disabled:opacity-45 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-            >
-              <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="hidden md:inline">
-                {t('table.topUp')} {formatChips(activeTable.config.startingStackBb, chipDisplay)}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="theater-toggle-hud"
-              aria-expanded={theaterHudOpen}
-              aria-controls="theater-hud-drawer"
-              onClick={() => setTheaterHudOpen((v) => !v)}
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                theaterHudOpen
-                  ? 'bg-[#192823] border-emerald-500/50 text-white'
-                  : 'bg-[#0E1513] border-[#1F2D28] text-slate-300 hover:text-white'
-              }`}
-            >
-              {theaterHudOpen ? (
-                <PanelRightClose className="w-3.5 h-3.5" aria-hidden="true" />
-              ) : (
-                <PanelRightOpen className="w-3.5 h-3.5" aria-hidden="true" />
-              )}
-              <span>{t('arena.toggleHudDrawer')}</span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="open-arena-setup"
-              onClick={() => setSetupOpen(true)}
-              aria-label={t('arena.configure')}
-              className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">{t('arena.configure')}</span>
-            </button>
-
-            {(() => {
-              const diff = activeTable.config.botDifficulty ?? 'standard';
-              const heroRead = diff === 'pro' ? inferHeroTendencies(activeTable) : null;
-              const pillCls =
-                diff === 'pro'
-                  ? 'bg-purple-500/15 border-purple-400/50 text-purple-200'
-                  : diff === 'casual'
-                    ? 'bg-sky-500/15 border-sky-400/50 text-sky-200'
-                    : 'bg-[#0E1513] border-[#1F2D28] text-slate-300 hover:text-white';
-              return (
-                <button
-                  type="button"
-                  data-testid="arena-difficulty-pill"
-                  onClick={() => setSetupOpen(true)}
-                  title={t(`arena.diffDesc.${diff}` as TranslationKey)}
-                  className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${pillCls}`}
-                >
-                  <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>{t(`arena.diff.${diff}` as TranslationKey)}</span>
-                  {heroRead && (
-                    <span className="hidden lg:inline text-[11px] opacity-85 border-l border-purple-400/35 pl-1.5">
-                      {t(`arena.proRead.${heroRead.tag}` as TranslationKey)}
-                    </span>
-                  )}
-                </button>
-              );
-            })()}
-
-            <button
-              type="button"
-              data-testid="toggle-blind-read"
-              onClick={toggleBlindRead}
-              aria-pressed={activeTable.config.blindReadMode}
-              aria-label={
-                activeTable.config.blindReadMode ? t('arena.revealStyles') : t('arena.hideStyles')
-              }
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                activeTable.config.blindReadMode
-                  ? 'bg-amber-500/15 border-amber-400/50 text-amber-200'
-                  : 'bg-[#0E1513] border-[#1F2D28] text-slate-300 hover:text-white'
-              }`}
-            >
-              {activeTable.config.blindReadMode ? (
-                <Eye className="w-3.5 h-3.5" aria-hidden="true" />
-              ) : (
-                <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
-              )}
-              <span className="hidden md:inline">
-                {activeTable.config.blindReadMode ? t('arena.revealStyles') : t('arena.hideStyles')}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="toggle-fast-fold"
-              onClick={toggleFastFold}
-              aria-pressed={activeTable.config.fastFold}
-              aria-label={t('arena.fastFoldShort')}
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1 cursor-pointer whitespace-nowrap ${
-                activeTable.config.fastFold
-                  ? 'bg-emerald-500/15 border-emerald-400/50 text-emerald-300'
-                  : 'bg-[#0E1513] border-[#1F2D28] text-slate-400 hover:text-white'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="hidden md:inline">{t('arena.fastFoldShort')}</span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="toggle-fullscreen-btn"
-              onClick={handleToggleFullscreen}
-              aria-label={isFullscreen ? t('arena.exitFullscreen') : t('arena.fullscreen')}
-              className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-200 hover:border-emerald-500/50 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-            >
-              <Expand className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">
-                {isFullscreen ? t('arena.exitFullscreen') : t('arena.fullscreen')}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="exit-theater-btn"
-              onClick={handleToggleTheater}
-              className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#17231F] border border-[#293C35] text-slate-100 hover:bg-[#21332C] inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-            >
-              <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>{t('arena.exitTheater')}</span>
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2.5 sm:gap-3 border-b border-[#1F2D28] pb-3 sm:pb-4">
-          <div className="space-y-1 min-w-0 flex-1 sm:flex-none">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-lg sm:text-2xl font-semibold text-white truncate">{t('table.title')}</h1>
+        <div className="relative border-b border-[#1B2823] bg-[#0A100E] shrink-0">
+          <div className="no-scrollbar flex flex-nowrap lg:flex-wrap items-center justify-between gap-2 lg:gap-2.5 px-2.5 py-1.5 pr-8 lg:px-4 lg:py-2.5 lg:pr-4 overflow-x-auto lg:overflow-visible">
+            <div className="flex flex-nowrap lg:flex-wrap items-center gap-1.5 lg:gap-2.5 shrink-0">
               <span
                 data-testid="arena-config-badge"
-                className="hidden sm:inline-block px-2.5 py-0.5 text-xs font-mono rounded-md bg-[#121D19] border border-[#253832] text-emerald-300"
+                className="px-2 py-0.5 text-[11px] lg:text-xs font-mono rounded-md bg-[#121D19] border border-[#253832] text-emerald-300 whitespace-nowrap shrink-0"
               >
                 {configBadgeText}
               </span>
+              <span className="text-xs font-mono text-emerald-400 font-semibold whitespace-nowrap shrink-0">
+                {statusText}
+              </span>
+              {heroMiniCardsNode}
+              {heroStrengthPillNode}
+              {sessionPnlNode}
+              <span className="hidden lg:inline text-xs font-mono tabular-nums text-slate-400">
+                {t('table.heroStack')} {formatChips(heroSeat.stackBb, chipDisplay, { compact: true })} ·{' '}
+                {t('table.currentBet')}{' '}
+                {formatChips(activeTable.currentBetBb, chipDisplay, { compact: true })}
+              </span>
+            </div>
+
+            <div className="flex flex-nowrap lg:flex-wrap items-center gap-1.5 lg:gap-2 shrink-0">
+              {isFlashback && (
+                <button
+                  type="button"
+                  data-testid="theater-exit-flashback-btn"
+                  onClick={handleExitFlashback}
+                  className="min-h-[38px] px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-400/20 border border-amber-400/50 text-amber-200 hover:bg-amber-400/30 inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <GitBranch className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>{t('arena.exitFlashback')}</span>
+                </button>
+              )}
+              {chipUnitToggleNode}
+
+              <button
+                type="button"
+                data-testid="theater-top-up"
+                onClick={handleRebuy}
+                disabled={!canManualTopUp}
+                className="min-h-[38px] min-w-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-200 hover:bg-[#17231F] disabled:opacity-45 inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+                <span className="hidden md:inline">
+                  {t('table.topUp')} {formatChips(activeTable.config.startingStackBb, chipDisplay)}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="theater-toggle-hud"
+                aria-expanded={theaterHudOpen}
+                aria-controls="theater-hud-drawer"
+                onClick={() => setTheaterHudOpen((v) => !v)}
+                className={`min-h-[38px] min-w-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
+                  theaterHudOpen
+                    ? 'bg-[#192823] border-emerald-500/50 text-white'
+                    : 'bg-[#0E1513] border-[#1F2D28] text-slate-300 hover:text-white'
+                }`}
+              >
+                {theaterHudOpen ? (
+                  <PanelRightClose className="w-3.5 h-3.5" aria-hidden="true" />
+                ) : (
+                  <PanelRightOpen className="w-3.5 h-3.5" aria-hidden="true" />
+                )}
+                <span>{t('arena.toggleHudDrawer')}</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="open-arena-setup"
+                onClick={() => setSetupOpen(true)}
+                aria-label={t('arena.configure')}
+                className="min-h-[38px] min-w-[38px] px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+                <span className="hidden sm:inline">{t('arena.configure')}</span>
+              </button>
+
+              {difficultyPillNode}
+
+              <button
+                type="button"
+                data-testid="toggle-blind-read"
+                onClick={toggleBlindRead}
+                aria-pressed={activeTable.config.blindReadMode}
+                aria-label={
+                  activeTable.config.blindReadMode ? t('arena.revealStyles') : t('arena.hideStyles')
+                }
+                className={`min-h-[38px] min-w-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
+                  activeTable.config.blindReadMode
+                    ? 'bg-amber-500/15 border-amber-400/50 text-amber-200'
+                    : 'bg-[#0E1513] border-[#1F2D28] text-slate-300 hover:text-white'
+                }`}
+              >
+                {activeTable.config.blindReadMode ? (
+                  <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                ) : (
+                  <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
+                )}
+                <span className="hidden md:inline">
+                  {activeTable.config.blindReadMode ? t('arena.revealStyles') : t('arena.hideStyles')}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="toggle-fast-fold"
+                onClick={toggleFastFold}
+                aria-pressed={activeTable.config.fastFold}
+                aria-label={t('arena.fastFoldShort')}
+                className={`min-h-[38px] min-w-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap shrink-0 ${
+                  activeTable.config.fastFold
+                    ? 'bg-emerald-500/15 border-emerald-400/50 text-emerald-300'
+                    : 'bg-[#0E1513] border-[#1F2D28] text-slate-400 hover:text-white'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5" aria-hidden="true" />
+                <span className="hidden md:inline">{t('arena.fastFoldShort')}</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="toggle-fullscreen-btn"
+                onClick={handleToggleFullscreen}
+                aria-label={isFullscreen ? t('arena.exitFullscreen') : t('arena.fullscreen')}
+                className="min-h-[38px] min-w-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-200 hover:border-emerald-500/50 inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <Expand className="w-3.5 h-3.5" aria-hidden="true" />
+                <span className="hidden sm:inline">
+                  {isFullscreen ? t('arena.exitFullscreen') : t('arena.fullscreen')}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="exit-theater-btn"
+                onClick={handleToggleTheater}
+                className="min-h-[38px] min-w-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#17231F] border border-[#293C35] text-slate-100 hover:bg-[#21332C] inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>{t('arena.exitTheater')}</span>
+              </button>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            className="lg:hidden pointer-events-none absolute inset-y-0 right-0 w-7 bg-gradient-to-l from-[#0A100E] via-[#0A100E]/80 to-transparent"
+          />
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2.5 sm:gap-3 border-b border-[#1F2D28] pb-3 sm:pb-4">
+          <div className="space-y-1.5 min-w-0 flex-1 sm:flex-none">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-base sm:text-2xl font-semibold text-white leading-tight">
+                {t('table.title')}
+              </h1>
+              <span
+                data-testid="arena-config-badge"
+                className="inline-block px-2 sm:px-2.5 py-0.5 text-[11px] sm:text-xs font-mono rounded-md bg-[#121D19] border border-[#253832] text-emerald-300 whitespace-nowrap"
+              >
+                {configBadgeText}
+              </span>
+              {difficultyPillNode}
               {(activeTable.config.arenaFormat === 'sng_turbo_3' ||
                 activeTable.config.arenaFormat === 'sng_6max') && (() => {
                 const lvl = getSngBlindLevel(
@@ -2858,7 +2909,7 @@ export function PlayTableView({
               data-testid="open-arena-setup"
               onClick={() => setSetupOpen(true)}
               aria-label={t('arena.configure')}
-              className="px-2.5 sm:px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              className="min-h-[38px] min-w-[38px] px-2.5 sm:px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
             >
               <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
               <span className="hidden sm:inline">{t('arena.configure')}</span>
@@ -2870,7 +2921,7 @@ export function PlayTableView({
               data-testid="enter-theater-btn"
               onClick={handleToggleTheater}
               aria-label={t('arena.theaterMode')}
-              className="px-2.5 sm:px-3 py-2 text-xs font-medium rounded-lg bg-[#121D19] hover:bg-[#1D2D44] border border-emerald-500/40 text-emerald-300 inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              className="min-h-[38px] min-w-[38px] px-2.5 sm:px-3 py-2 text-xs font-medium rounded-lg bg-[#121D19] hover:bg-[#1D2D44] border border-emerald-500/40 text-emerald-300 inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
             >
               <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
               <span className="hidden sm:inline">{t('arena.theaterMode')}</span>
@@ -2884,7 +2935,7 @@ export function PlayTableView({
               aria-expanded={optionsOpen}
               aria-controls="arena-options-strip"
               aria-label={t('arena.optionsAria')}
-              className={`sm:hidden px-2.5 py-2 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              className={`sm:hidden min-h-[38px] min-w-[38px] px-2.5 py-2 text-xs font-medium rounded-lg border inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
                 optionsOpen
                   ? 'bg-[#192823] border-emerald-500/50 text-white'
                   : 'bg-[#0E1513] border-[#1F2D28] text-slate-300'
@@ -2989,7 +3040,7 @@ export function PlayTableView({
               type="button"
               onClick={() => onUpdatePrefs({ fourColorDeck: !prefs.fourColorDeck })}
               aria-label={prefs.fourColorDeck ? t('common.fourColor') : t('common.twoColor')}
-              className={`p-2 rounded-lg border cursor-pointer ${
+              className={`min-h-[38px] min-w-[38px] p-2 rounded-lg border inline-flex items-center justify-center cursor-pointer ${
                 prefs.fourColorDeck
                   ? 'bg-[#172634] border-sky-500/40 text-sky-300'
                   : 'bg-[#0E1513] border-[#1F2D28] text-slate-400'
@@ -3002,7 +3053,7 @@ export function PlayTableView({
               type="button"
               onClick={() => onUpdatePrefs({ soundEnabled: !prefs.soundEnabled })}
               aria-label={prefs.soundEnabled ? t('common.muteSound') : t('common.enableSound')}
-              className="p-2 rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:text-white cursor-pointer"
+              className="min-h-[38px] min-w-[38px] p-2 rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:text-white inline-flex items-center justify-center cursor-pointer"
             >
               {prefs.soundEnabled ? (
                 <Volume2 className="w-4 h-4" aria-hidden="true" />
@@ -3035,6 +3086,7 @@ export function PlayTableView({
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex flex-wrap items-center gap-2 min-w-0">
                 <span className="font-mono text-emerald-400 font-semibold">{statusText}</span>
+                {heroMiniCardsNode}
                 {heroStrengthPillNode}
               </div>
               <span className="font-mono tabular-nums text-slate-400">
@@ -3115,7 +3167,7 @@ export function PlayTableView({
           <div
             className={
               theaterMode
-                ? 'px-4 py-3 border-t border-[#1B2823] bg-[#0A100E] shrink-0 min-h-[84px] flex flex-col justify-center'
+                ? 'px-2.5 py-2 sm:px-4 sm:py-2.5 lg:py-3 border-t border-[#1B2823] bg-[#0A100E] shrink-0 min-h-[56px] lg:min-h-[84px] flex flex-col justify-center'
                 : 'pt-4 border-t border-[#1B2823] min-h-[118px] flex flex-col justify-center'
             }
           >

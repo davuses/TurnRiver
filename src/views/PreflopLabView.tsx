@@ -73,7 +73,14 @@ export function PreflopLabView({
   const [blitzEntries, setBlitzEntries] = useState<BlitzRoundEntry[]>([]);
   const [blitzTimeLeftMs, setBlitzTimeLeftMs] = useState(BLITZ_SECONDS_PER_HAND * 1000);
   const blitzSpotStartRef = useRef<number>(Date.now());
+  const blitzBannerRef = useRef<HTMLDivElement | null>(null);
   const blitzFinished = blitzActive && blitzEntries.length >= BLITZ_TOTAL_HANDS;
+
+  useEffect(() => {
+    if (blitzFinished) {
+      blitzBannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [blitzFinished]);
 
   const startBlitz = useCallback(() => {
     const next = generatePreflopSpot(scenarioFilter, positionFilter);
@@ -279,11 +286,12 @@ export function PreflopLabView({
             {t('preflop.title')}
           </h1>
           <p className="text-xs text-slate-400">
-            {localizedTemplate.subtitle} · {t('preflop.shortcuts')}
+            {localizedTemplate.subtitle}
+            <span className="hidden md:inline"> · {t('preflop.shortcuts')}</span>
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Scenario Filter */}
           <div
             role="group"
@@ -298,7 +306,7 @@ export function PreflopLabView({
                   setScenarioFilter(opt.value);
                   dealNext(opt.value, positionFilter);
                 }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                className={`min-h-[38px] sm:min-h-0 px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                   scenarioFilter === opt.value
                     ? 'bg-[#1E2E28] text-white'
                     : 'text-slate-400 hover:text-slate-200'
@@ -320,7 +328,7 @@ export function PreflopLabView({
                 setPositionFilter(nextPos);
                 dealNext(scenarioFilter, nextPos);
               }}
-              className="bg-[#0E1513] border border-[#1F2D28] rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+              className="min-h-[38px] sm:min-h-0 bg-[#0E1513] border border-[#1F2D28] rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
             >
               {POSITION_OPTIONS.map((pos) => (
                 <option key={pos} value={pos}>
@@ -338,7 +346,7 @@ export function PreflopLabView({
             data-testid="preflop-blitz-toggle"
             aria-pressed={blitzActive}
             onClick={() => (blitzActive ? stopBlitz() : startBlitz())}
-            className={`px-3 py-2 text-xs font-semibold rounded-lg border inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+            className={`min-h-[38px] sm:min-h-0 px-3 py-2 text-xs font-semibold rounded-lg border inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               blitzActive
                 ? 'bg-amber-500/20 border-amber-400 text-amber-200'
                 : 'bg-[#0E1513] border-[#1F2D28] text-amber-300 hover:border-amber-400/50'
@@ -353,7 +361,7 @@ export function PreflopLabView({
             type="button"
             onClick={() => onUpdatePrefs({ fourColorDeck: !prefs.fourColorDeck })}
             aria-pressed={prefs.fourColorDeck}
-            className={`px-3 py-2 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+            className={`min-h-[38px] sm:min-h-0 px-3 py-2 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               prefs.fourColorDeck
                 ? 'bg-[#172634] border-sky-500/40 text-sky-300'
                 : 'bg-[#0E1513] border-[#1F2D28] text-slate-400 hover:text-slate-200'
@@ -367,7 +375,7 @@ export function PreflopLabView({
             type="button"
             onClick={() => onUpdatePrefs({ soundEnabled: !prefs.soundEnabled })}
             aria-label={prefs.soundEnabled ? t('common.muteSound') : t('common.enableSound')}
-            className="p-2 rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:text-white transition-colors cursor-pointer"
+            className="min-h-[38px] min-w-[38px] sm:min-h-0 sm:min-w-0 p-2 rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:text-white inline-flex items-center justify-center transition-colors cursor-pointer"
           >
             {prefs.soundEnabled ? (
               <Volume2 className="w-4 h-4" aria-hidden="true" />
@@ -381,8 +389,13 @@ export function PreflopLabView({
       {/* Speed Blitz Live Shot Clock or Summary */}
       {blitzActive && (
         <div
+          ref={blitzBannerRef}
           data-testid="preflop-blitz-banner"
-          className="bg-[#0E1513] border border-amber-400/35 rounded-xl p-4 space-y-3"
+          className={`bg-[#0E1513]/95 backdrop-blur-md border border-amber-400/35 rounded-xl shadow-lg ${
+            !blitzFinished
+              ? 'sticky top-[116px] lg:top-16 z-20 px-3.5 py-2.5 sm:p-4 space-y-2 sm:space-y-3'
+              : 'p-4 space-y-3 scroll-mt-[124px] lg:scroll-mt-20'
+          }`}
         >
           {!blitzFinished ? (
             <>

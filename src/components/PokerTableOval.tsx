@@ -74,7 +74,7 @@ export function PokerTableOval({
       {mobileTight ? (
         <div className="flex flex-wrap items-center gap-1.5 sm:hidden">
           {otherSeats
-            .filter((s) => !s.folded || s.isVillain || s.actionText)
+            .filter((s) => !s.folded || s.isVillain || s.actionText || s.isDealer)
             .slice(0, 4)
             .map((seat) => (
               <div
@@ -88,6 +88,15 @@ export function PokerTableOval({
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="font-semibold text-slate-200 truncate">{seat.label}</span>
                   <span className="font-mono font-bold text-emerald-400">{seat.position}</span>
+                  {seat.isDealer && (
+                    <span
+                      data-testid={`mobile-dealer-btn-${seat.seatIndex}`}
+                      aria-label={t('common.dealerButton')}
+                      className="w-4 h-4 rounded-full bg-amber-300 text-slate-950 font-bold text-[10px] inline-flex items-center justify-center shrink-0"
+                    >
+                      D
+                    </span>
+                  )}
                   <span className="font-mono tabular-nums text-[10px] text-slate-400">
                     {fmtStack(seat.stackBb, true)}
                   </span>
@@ -103,7 +112,7 @@ export function PokerTableOval({
       ) : (
         <div className="grid grid-cols-3 gap-1.5 sm:hidden">
           {otherSeats
-            .filter((s) => !s.folded || s.isVillain || s.actionText)
+            .filter((s) => !s.folded || s.isVillain || s.actionText || s.isDealer)
             .slice(0, 6)
             .map((seat) => (
               <div
@@ -120,14 +129,42 @@ export function PokerTableOval({
               >
                 <div className="flex items-center justify-between gap-1">
                   <span className="font-semibold text-slate-200 truncate">{seat.label}</span>
-                  <span className="font-mono font-bold text-emerald-400">{seat.position}</span>
+                  <span className="font-mono font-bold text-emerald-400 shrink-0">{seat.position}</span>
                 </div>
-                <div className="font-mono tabular-nums text-[10px] text-slate-400 mt-0.5">
-                  {fmtStack(seat.stackBb, true)}
+                <div className="flex items-center justify-between gap-1 font-mono tabular-nums text-[10px] text-slate-400 mt-0.5">
+                  <span>{fmtStack(seat.stackBb, true)}</span>
+                  {seat.isDealer && (
+                    <span
+                      data-testid={`mobile-dealer-btn-${seat.seatIndex}`}
+                      aria-label={t('common.dealerButton')}
+                      className="w-4 h-4 rounded-full bg-amber-300 text-slate-950 font-bold text-[10px] inline-flex items-center justify-center shrink-0"
+                    >
+                      D
+                    </span>
+                  )}
                 </div>
                 {(seat.actionSpec || seat.actionText) && (
                   <div className="font-mono tabular-nums text-[10px] text-amber-300 truncate mt-0.5">
                     {formatArenaAction(locale, seat.actionSpec, seat.actionText, chipDisplay)}
+                  </div>
+                )}
+                {seat.revealCards && seat.cards && (
+                  <div
+                    data-testid={`mobile-seat-cards-${seat.seatIndex}`}
+                    className="flex items-center gap-1 mt-1"
+                  >
+                    <PlayingCard
+                      card={seat.cards[0]}
+                      fourColor={fourColor}
+                      size="xs"
+                      highlighted={seat.isWinner}
+                    />
+                    <PlayingCard
+                      card={seat.cards[1]}
+                      fourColor={fourColor}
+                      size="xs"
+                      highlighted={seat.isWinner}
+                    />
                   </div>
                 )}
               </div>

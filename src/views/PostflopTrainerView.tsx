@@ -217,13 +217,13 @@ export function PostflopTrainerView({
           <p className="text-[11px] sm:text-xs text-slate-400">{t('postflop.subtitle')}</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 w-full sm:w-auto">
           {/* Direct entry to the Paired River Bet-Size Exercise */}
           <button
             type="button"
             data-testid="paired-bet-size-btn"
             onClick={() => loadSpotById(PAIRED_RIVER_SMALL_ID, true)}
-            className={`px-3 py-1.5 sm:py-2 text-xs font-semibold rounded-lg border inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+            className={`min-h-[38px] sm:min-h-0 px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs font-semibold rounded-lg border inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               isPairedSpot
                 ? 'bg-emerald-500/15 border-emerald-400/60 text-emerald-300'
                 : 'bg-[#121D19] border-[#283B34] text-emerald-300 hover:bg-[#1C2B40]'
@@ -237,7 +237,7 @@ export function PostflopTrainerView({
             type="button"
             data-testid="copy-postflop-link-btn"
             onClick={handleCopySpotLink}
-            className="px-2.5 py-1.5 sm:py-2 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:border-emerald-400/50 hover:text-white inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            className="min-h-[38px] sm:min-h-0 px-2.5 py-1.5 sm:py-2 text-xs font-medium rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:border-emerald-400/50 hover:text-white inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
           >
             {copiedLink ? (
               <Check className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
@@ -252,7 +252,7 @@ export function PostflopTrainerView({
             type="button"
             onClick={() => setShowMobileFilters((v) => !v)}
             aria-expanded={showMobileFilters}
-            className={`sm:hidden px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+            className={`sm:hidden min-h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               showMobileFilters
                 ? 'bg-[#182621] border-emerald-400/50 text-emerald-200'
                 : 'bg-[#0E1513] border-[#1F2D28] text-slate-300'
@@ -262,12 +262,12 @@ export function PostflopTrainerView({
             <span>{t('postflop.filters')}</span>
           </button>
 
-          {/* Sound toggle stays accessible on the single mobile row */}
+          {/* Sound toggle stays accessible alongside mobile quick controls */}
           <button
             type="button"
             onClick={() => onUpdatePrefs({ soundEnabled: !prefs.soundEnabled })}
             aria-label={prefs.soundEnabled ? t('common.muteSound') : t('common.enableSound')}
-            className="sm:hidden ml-auto p-1.5 rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:text-white cursor-pointer"
+            className="sm:hidden min-h-[38px] min-w-[38px] p-2 rounded-lg bg-[#0E1513] border border-[#1F2D28] text-slate-300 hover:text-white inline-flex items-center justify-center cursor-pointer"
           >
             {prefs.soundEnabled ? (
               <Volume2 className="w-4 h-4" aria-hidden="true" />
@@ -296,7 +296,7 @@ export function PostflopTrainerView({
                     setStreetFilter(st);
                     dealNext(st, potFilter, roleFilter);
                   }}
-                  className={`px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                  className={`min-h-[38px] sm:min-h-0 px-2.5 sm:px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                     streetFilter === st
                       ? 'bg-[#1E2E28] text-white'
                       : 'text-slate-400 hover:text-slate-200'
@@ -315,7 +315,7 @@ export function PostflopTrainerView({
                 setPotFilter(v);
                 dealNext(streetFilter, v, roleFilter);
               }}
-              className="bg-[#0E1513] border border-[#1F2D28] rounded-lg px-2.5 py-2 text-xs text-slate-200 cursor-pointer"
+              className="min-h-[38px] sm:min-h-0 bg-[#0E1513] border border-[#1F2D28] rounded-lg px-2.5 py-2 text-xs text-slate-200 cursor-pointer"
             >
               <option value="ALL">{t('postflop.allPots')}</option>
               <option value="SRP">{t('postflop.srp')}</option>
@@ -330,7 +330,7 @@ export function PostflopTrainerView({
                 setRoleFilter(v);
                 dealNext(streetFilter, potFilter, v);
               }}
-              className="bg-[#0E1513] border border-[#1F2D28] rounded-lg px-2.5 py-2 text-xs text-slate-200 cursor-pointer"
+              className="min-h-[38px] sm:min-h-0 bg-[#0E1513] border border-[#1F2D28] rounded-lg px-2.5 py-2 text-xs text-slate-200 cursor-pointer"
             >
               <option value="ALL">{t('postflop.allRoles')}</option>
               <option value="IP">{t('postflop.ip')}</option>
@@ -340,7 +340,7 @@ export function PostflopTrainerView({
             <button
               type="button"
               onClick={() => onUpdatePrefs({ fourColorDeck: !prefs.fourColorDeck })}
-              className={`px-2.5 py-2 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              className={`min-h-[38px] sm:min-h-0 px-2.5 py-2 text-xs font-medium rounded-lg border inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                 prefs.fourColorDeck
                   ? 'bg-[#172634] border-sky-500/40 text-sky-300'
                   : 'bg-[#0E1513] border-[#1F2D28] text-slate-400'
@@ -457,7 +457,7 @@ export function PostflopTrainerView({
                             setSelectedDetail(opt.key);
                             setDetailError(false);
                           }}
-                          className={`px-2.5 py-1.5 sm:py-2 rounded-lg border text-left text-xs font-medium transition-colors cursor-pointer ${
+                          className={`min-h-[38px] sm:min-h-0 px-2.5 py-1.5 sm:py-2 rounded-lg border text-left text-xs font-medium transition-colors cursor-pointer ${
                             active
                               ? 'bg-emerald-500/15 border-emerald-400 text-emerald-200'
                               : 'bg-[#0A100E] border-[#21322C] text-slate-300 hover:border-[#324A41] hover:text-white'

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { PREFLOP_TEMPLATES } from './preflopRanges';
-import { POSTFLOP_BLUEPRINTS } from './postflopSpots';
+import { generatePostflopSpotById, POSTFLOP_BLUEPRINTS } from './postflopSpots';
 import { SHOWDOWN_PUZZLES, type ShowdownPuzzleSlug } from './showdownPuzzles';
+import type { Locale } from '../i18n/translations';
+import { localizePostflopSpot, localizePreflopTemplate } from '../i18n/drillContentZh';
 
 export type DailySlotKind = 'preflop' | 'postflop' | 'showdown';
 
@@ -12,6 +14,34 @@ export interface DailyThreePlan {
   postflopSpotId: string;
   postflopTitle: string;
   showdownSlug: ShowdownPuzzleSlug;
+}
+
+export interface LocalizedDailyTitles {
+  preflopTitle: string;
+  postflopTitle: string;
+  showdownTitle: string;
+}
+
+export function getLocalizedDailyTitles(
+  locale: Locale,
+  plan: DailyThreePlan
+): LocalizedDailyTitles {
+  const preTpl = PREFLOP_TEMPLATES.find((t) => t.id === plan.preflopTemplateId);
+  const preflopTitle = preTpl
+    ? localizePreflopTemplate(locale, preTpl).title
+    : plan.preflopTitle;
+
+  const postSpot = generatePostflopSpotById(plan.postflopSpotId, { preserveSuits: true });
+  const postflopTitle = postSpot
+    ? localizePostflopSpot(locale, postSpot).title
+    : plan.postflopTitle;
+
+  const showdownPuzzle = SHOWDOWN_PUZZLES.find((p) => p.slug === plan.showdownSlug);
+  const showdownTitle = showdownPuzzle
+    ? showdownPuzzle.title[locale]
+    : plan.showdownSlug.replace(/-/g, ' ');
+
+  return { preflopTitle, postflopTitle, showdownTitle };
 }
 
 const DAILY_STORAGE_KEY = 'turnriver_daily_v1';
