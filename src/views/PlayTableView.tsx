@@ -708,6 +708,32 @@ export function PlayTableView({
     setTable((prev) => applyAutoTopUp(settleAndStartNewHand(prev), autoTopUpRef.current));
   };
 
+  // Fast-forward remaining bot actions directly to SHOWDOWN after Hero has folded
+  const handleJumpToResult = () => {
+    const fastForward = (curr: PokerTableState): PokerTableState => {
+      let next = curr;
+      let guard = 0;
+      while (next.phase !== 'SHOWDOWN' && next.phase !== 'IDLE' && guard < 64) {
+        guard++;
+        if (next.awaitingRunItTwiceChoice) {
+          next = resolveRunItTwice(next, false);
+          continue;
+        }
+        const actorIdx = next.actingSeatIndex;
+        if (actorIdx === null || actorIdx === 0) break;
+        const botChoice = chooseBotAction(next, actorIdx);
+        next = applyPlayerAction(next, actorIdx, botChoice.type, botChoice.raiseToBb);
+      }
+      return next;
+    };
+
+    if (flashbackTableRef.current !== null) {
+      setFlashbackTable((prev) => (prev && prev.seats[0]?.folded ? fastForward(prev) : prev));
+      return;
+    }
+    setTable((prev) => (prev.seats[0]?.folded ? fastForward(prev) : prev));
+  };
+
   // Reset queued Pre-Action on every new hand, street transition, or branch switch
   useEffect(() => {
     setPreAction('none');
@@ -2186,13 +2212,26 @@ export function PlayTableView({
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleDealNext}
-          className="px-3.5 py-2 text-xs font-medium rounded-lg bg-[#141E1B] hover:bg-[#1F2F29] border border-[#283B34] text-slate-200 cursor-pointer whitespace-nowrap"
-        >
-          {t('table.skipNext')}
-        </button>
+        {heroSeat.folded && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="jump-to-result-btn"
+              onClick={handleJumpToResult}
+              className="px-3.5 py-2 min-h-[38px] text-xs font-semibold rounded-lg bg-emerald-500/18 hover:bg-emerald-500/28 border border-emerald-400/50 text-emerald-200 cursor-pointer whitespace-nowrap"
+            >
+              {t('table.jumpToResult')}
+            </button>
+            <button
+              type="button"
+              data-testid="skip-next-hand-btn"
+              onClick={handleDealNext}
+              className="px-3 py-2 min-h-[38px] text-xs font-medium rounded-lg bg-[#141E1B] hover:bg-[#1F2F29] border border-[#283B34] text-slate-300 cursor-pointer whitespace-nowrap"
+            >
+              {t('table.nextHandShort')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

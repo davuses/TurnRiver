@@ -421,35 +421,40 @@ function drawVectorSuitPip(
     ctx.closePath();
     ctx.fill();
   } else if (suit === 's') {
-    // Classic spade leaf + flared pedestal stem
+    // Classic sharp-tipped spade leaf + crisp flared pedestal stem (distinct from 3-lobed club)
     const s = size;
-    ctx.moveTo(0, -s * 1.02);
-    ctx.bezierCurveTo(s * 0.92, -s * 0.22, s * 1.02, s * 0.48, s * 0.48, s * 0.62);
-    ctx.bezierCurveTo(s * 0.22, s * 0.68, s * 0.09, s * 0.5, s * 0.07, s * 0.44);
-    ctx.quadraticCurveTo(s * 0.12, s * 0.82, s * 0.34, s * 0.96);
-    ctx.lineTo(-s * 0.34, s * 0.96);
-    ctx.quadraticCurveTo(-s * 0.12, s * 0.82, -s * 0.07, s * 0.44);
-    ctx.bezierCurveTo(-s * 0.09, s * 0.5, -s * 0.22, s * 0.68, -s * 0.48, s * 0.62);
-    ctx.bezierCurveTo(-s * 1.02, s * 0.48, -s * 0.92, -s * 0.22, 0, -s * 1.02);
+    ctx.moveTo(0, -s * 1.08);
+    ctx.bezierCurveTo(s * 0.86, -s * 0.28, s * 1.04, s * 0.44, s * 0.48, s * 0.62);
+    ctx.bezierCurveTo(s * 0.22, s * 0.70, s * 0.10, s * 0.50, s * 0.08, s * 0.42);
+    ctx.quadraticCurveTo(s * 0.13, s * 0.82, s * 0.36, s * 0.98);
+    ctx.lineTo(-s * 0.36, s * 0.98);
+    ctx.quadraticCurveTo(-s * 0.13, s * 0.82, -s * 0.08, s * 0.42);
+    ctx.bezierCurveTo(-s * 0.10, s * 0.50, -s * 0.22, s * 0.70, -s * 0.48, s * 0.62);
+    ctx.bezierCurveTo(-s * 1.04, s * 0.44, -s * 0.86, -s * 0.28, 0, -s * 1.08);
     ctx.closePath();
     ctx.fill();
   } else {
-    // Classic trefoil club + concave pedestal stem
+    // Crisp 3-lobed clover club with wide lobe separation so it never blobs into a spade at distance
     const s = size;
-    const r = s * 0.41;
-    ctx.arc(0, -s * 0.46, r, 0, Math.PI * 2);
-    ctx.moveTo(-s * 0.46 + r, s * 0.1);
-    ctx.arc(-s * 0.46, s * 0.1, r, 0, Math.PI * 2);
-    ctx.moveTo(s * 0.46 + r, s * 0.1);
-    ctx.arc(s * 0.46, s * 0.1, r, 0, Math.PI * 2);
+    const r = s * 0.35;
+    ctx.arc(0, -s * 0.54, r, 0, Math.PI * 2);
+    ctx.moveTo(-s * 0.54 + r, s * 0.08);
+    ctx.arc(-s * 0.54, s * 0.08, r, 0, Math.PI * 2);
+    ctx.moveTo(s * 0.54 + r, s * 0.08);
+    ctx.arc(s * 0.54, s * 0.08, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Small center join + slender flared pedestal stem
+    ctx.beginPath();
+    ctx.arc(0, -s * 0.08, s * 0.20, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.beginPath();
-    ctx.moveTo(-s * 0.14, -s * 0.12);
-    ctx.lineTo(s * 0.14, -s * 0.12);
-    ctx.quadraticCurveTo(s * 0.12, s * 0.68, s * 0.36, s * 0.96);
-    ctx.lineTo(-s * 0.36, s * 0.96);
-    ctx.quadraticCurveTo(-s * 0.12, s * 0.68, -s * 0.14, -s * 0.12);
+    ctx.moveTo(-s * 0.11, -s * 0.04);
+    ctx.lineTo(s * 0.11, -s * 0.04);
+    ctx.quadraticCurveTo(s * 0.12, s * 0.68, s * 0.34, s * 0.98);
+    ctx.lineTo(-s * 0.34, s * 0.98);
+    ctx.quadraticCurveTo(-s * 0.12, s * 0.68, -s * 0.11, -s * 0.04);
     ctx.closePath();
     ctx.fill();
   }
@@ -508,9 +513,9 @@ export function createCardFaceTexture(
       ctx.rotate(Math.PI);
     }
     const cx = isJumbo ? 68 : 48;
-    const rankY = isJumbo ? 88 : 66;
-    const pipY = isJumbo ? 182 : 132;
-    const pipSize = isJumbo ? 31 : 23;
+    const rankY = isJumbo ? 88 : 64;
+    const pipY = isJumbo ? 182 : 138;
+    const pipSize = isJumbo ? 32 : 28;
 
     ctx.fillStyle = color;
     ctx.textAlign = 'center';
@@ -1001,29 +1006,29 @@ export function createCardFaceTexture(
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Opposite-corner interior suit pips inside the court frame (authentic Bicycle/KEM placement)
-    drawVectorSuitPip(ctx, card.suit, fx + 34, fy + 38, 20, color);
-    ctx.save();
-    ctx.translate(fx + fw - 34, fy + fh - 38);
-    ctx.rotate(Math.PI);
-    drawVectorSuitPip(ctx, card.suit, 0, 0, 20, color);
-    ctx.restore();
+    // Large, unmistakable opposite-corner suit emblems inside the court frame (Bicycle style)
+    const drawCourtCornerPip = (px: number, py: number, inverted: boolean) => {
+      ctx.save();
+      ctx.translate(px, py);
+      if (inverted) ctx.rotate(Math.PI);
+      // Clean white halo so the large suit emblem pops cleanly over royal art
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 44, 0, Math.PI * 2);
+      ctx.fill();
+      drawVectorSuitPip(ctx, card.suit, 0, 0, 40, color);
+      ctx.restore();
+    };
+    drawCourtCornerPip(fx + 50, fy + 56, false);
+    drawCourtCornerPip(fx + fw - 50, fy + fh - 56, true);
 
     ctx.restore(); // end court frame clip
 
-    // Crisp gilded outer border + suit-tinted inner hairline
-    drawRoundedRect(fx, fy, fw, fh, 12);
-    ctx.strokeStyle = '#a87d28';
-    ctx.lineWidth = 4.5;
+    // Crisp classic dark court border
+    drawRoundedRect(fx, fy, fw, fh, 6);
+    ctx.strokeStyle = '#1e242c';
+    ctx.lineWidth = 3.5;
     ctx.stroke();
-
-    ctx.save();
-    ctx.globalAlpha = 0.55;
-    drawRoundedRect(fx + 8, fy + 8, fw - 16, fh - 16, 7);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
   };
 
   // Draw center artwork based on style ('classic' vs 'jumbo')
