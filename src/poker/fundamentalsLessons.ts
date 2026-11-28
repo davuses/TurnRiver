@@ -72,8 +72,8 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
         'zh-CN': '用你的 2 张底牌和 5 张公共牌凑出最强 5 张牌——可以用 2 张、1 张，甚至 0 张底牌。',
       },
       {
-        en: 'The Dealer Button (D) rotates clockwise by one seat after every hand so everyone pays blinds equally.',
-        'zh-CN': '庄位按钮（D）每手牌顺时针移动一格，确保每位玩家轮流公平地支付盲注。',
+        en: 'The Dealer Button (D) rotates clockwise by one seat after every hand so everyone pays blinds equally. Action moves clockwise: preflop starts left of the Big Blind (UTG), and postflop starts left of the Button (SB).',
+        'zh-CN': '庄位按钮（D）每手牌顺时针移动一格，确保大家轮流公平支付盲注。行动按顺时针推进：翻前从大盲左侧（枪口位 UTG）先动，翻后从庄位左侧（小盲 SB）先动。',
       },
     ],
     questions: [
@@ -140,8 +140,16 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
         'zh-CN': '跟注只需补差额：例如你大盲已投 $2，对手加注到 $6，你只需再补 $4 即可跟注。',
       },
       {
-        en: 'Folding forfeits the chips already in the pot, but saves every chip still in your stack—good players fold most hands!',
-        'zh-CN': '弃牌会放弃已投入底池的筹码，但能保住剩余筹码——优秀玩家大部分手牌都会果断弃牌。',
+        en: 'Folding forfeits the chips already in the pot, but saves every chip still in your stack—good players fold most hands! A betting round ends once every remaining player has matched the highest bet (and any raise must be at least as large as the previous bet or raise).',
+        'zh-CN': '弃牌会放弃已投入底池的筹码，但能保住剩余筹码——优秀玩家大部分手牌都会果断弃牌！当所有未弃牌玩家都跟平最高下注额时本轮结束（加注增量至少要等于上一次下注或加注额）。',
+      },
+      {
+        en: 'All-In & Side Pots: You can never be forced to fold just because you have fewer chips—going All-In locks your chance to win the main pot (matching your stack from each caller), while extra chips between deeper players go into a separate side pot.',
+        'zh-CN': '全下与边池：筹码少于对手时绝不会被逼弃牌——全下（All-In）可争夺与你等额的主池，其余深筹码玩家多出的部分会自动进入独立的边池。',
+      },
+      {
+        en: 'Why "bb" instead of "$"? Poker trainers measure stacks and bets in Big Blinds (bb) so strategy works at any stake—if the Big Blind is $2, then 2.5bb = $5 and 100bb = $200.',
+        'zh-CN': '为什么常用 “bb” 而不是 “$”？训练工具统一以大盲（bb）计量筹码和下注，便于跨级别通用——如果大盲是 $2，那么 2.5bb = $5，100bb = $200。',
       },
     ],
     questions: [
@@ -272,8 +280,12 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
         'zh-CN': '始终只算最强的 5 张牌：第 6 张牌无效，公共牌出现更高对子可能让小口袋对失效。',
       },
       {
-        en: 'Top pair with a weak kicker (like A6o facing heavy pressure) is a classic domination trap.',
-        'zh-CN': '顶对配弱踢脚（例如 A6o 面对连续重注）是最经典的被压制陷阱。',
+        en: 'Top pair with a weak kicker (like Ace-Six of different suits facing heavy pressure) is a classic domination trap.',
+        'zh-CN': '顶对配弱踢脚（例如不同花色的 A-6 面对连续重注）是最经典的被压制陷阱。',
+      },
+      {
+        en: 'Split (Chopped) Pots: When two players share the exact same best 5-card ranks at showdown (for example, both playing the same board straight or pair + same kickers), they split the pot equally—suits never break a tie.',
+        'zh-CN': '平分底池（Split Pot）：摊牌时若双方最强 5 张牌的点数完全相同（例如都共用牌面顺子或同对子同踢脚），则均分底池——花色永远不用于打破平局。',
       },
       {
         en: 'Flushes always beat straights, and a full house beats any flush.',
@@ -366,8 +378,8 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
     },
     keyTakeaways: [
       {
-        en: 'UTG acts first preflop with 5 players still behind—stick to ~16–18% strong hands.',
-        'zh-CN': 'UTG 身后还有 5 位玩家未行动，开池范围应控制在约 16%–18% 的强牌。',
+        en: '6-max seat order clockwise: UTG (Under the Gun) → HJ (Hijack) → CO (Cutoff) → BTN (Button) → SB (Small Blind) → BB (Big Blind). Stick to ~16–18% strong hands from UTG.',
+        'zh-CN': '6 人桌顺时针位置顺序：UTG（枪口位）→ HJ（劫持位）→ CO（关位）→ BTN（庄位）→ SB（小盲）→ BB（大盲）。UTG 身后还有 5 人未行动，开池范围应控制在约 16%–18% 的强牌。',
       },
       {
         en: 'BTN acts last on every postflop street and can profitably open ~43–48% of hands when folded to.',
@@ -396,8 +408,8 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
         ],
         correctOptionId: 'raise',
         explanation: {
-          en: 'With only the blinds left to act and guaranteed postflop position, K8s is a clear, profitable Button open-raise.',
-          'zh-CN': '身后只剩大小盲且翻后稳居有位置，K8s 在 BTN 是非常标准的盈利开池加注牌。',
+          en: 'With only the blinds left to act and guaranteed postflop position, K♠ 8♠ (suited King-Eight) is a clear, profitable Button open-raise.',
+          'zh-CN': '身后只剩大小盲且翻后稳居有位置，同花 K♠ 8♠ 在 BTN 是非常标准的盈利开池加注牌。',
         },
       },
       {
@@ -413,8 +425,8 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
         ],
         correctOptionId: 'sb',
         explanation: {
-          en: 'The Small Blind acts first on every postflop street against every other seat at the table, so it should play tight and mostly 3-bet or fold vs opens.',
-          'zh-CN': '小盲位翻后面对桌上任何位置都必须最先行动，因此面对开池应以紧手 3-Bet 或弃牌为主。',
+          en: 'The Small Blind acts first on every postflop street against every other seat at the table, so it should play tight and mostly 3-bet (re-raise) or fold vs opens.',
+          'zh-CN': '小盲位翻后面对桌上任何位置都必须最先行动，因此面对开池应以紧手 3-Bet（翻前再加注）或弃牌为主。',
         },
       },
     ],
@@ -584,8 +596,8 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
     },
     keyTakeaways: [
       {
-        en: 'Dry high boards (K♠ 7♦ 2♣): PFR holds more AK, KQ, KK—bet small (25–33% pot) at high frequency.',
-        'zh-CN': '高张干燥面（如 K♠ 7♦ 2♣）：翻前加注者拥有更多 AK、KQ、KK，适合用 25%–33% 小尺度高频持续下注。',
+        en: 'Dry high boards (K♠ 7♦ 2♣ “rainbow” — three different suits): the preflop raiser holds more AK, KQ, KK—bet small (25–33% pot) at high frequency.',
+        'zh-CN': '高张干燥面（如 K♠ 7♦ 2♣ “彩虹面”——三种不同花色）：翻前加注者拥有更多 AK、KQ、KK，适合用 25%–33% 小尺度高频持续下注。',
       },
       {
         en: 'Wet low connected boards (9♥ 8♥ 6♣): BB holds tons of two pair, straights, and combo draws—check often and size up when betting.',
@@ -670,8 +682,8 @@ export const FUNDAMENTALS_LESSONS: FundamentalsLesson[] = [
         'zh-CN': '紧弱型 Nit（低 VPIP 约 14%、低 PFR 约 11%）：积极偷他们的盲注；一旦他们突然重注加注，尊重其极强的牌力。',
       },
       {
-        en: 'Maniac / LAG (high VPIP & high PFR): Tighten your bluffs, widen your bluff-catchers, and let them hang themselves.',
-        'zh-CN': '松凶 / 激进型（高 VPIP 且高 PFR）：减少无谓诈唬，放宽抓诈唬范围，让对手自己把筹码送进底池。',
+        en: 'Maniac / LAG (high VPIP & high PFR): Tighten your bluffs, widen your bluff-catchers, and let them hang themselves. On the Bot Arena HUD, also glance at 3B (3-Bet %, how often they re-raise preflop) and AF (Aggression Factor, bets & raises vs. calls).',
+        'zh-CN': '松凶 / 激进型（高 VPIP 且高 PFR）：减少无谓诈唬，放宽抓诈唬范围，让对手自己把筹码送进底池。在 Bot Arena 的 HUD 中，还可留意 3B（翻前再加注率）与 AF（激进因子：下注加注与跟注的比值）。',
       },
     ],
     questions: [

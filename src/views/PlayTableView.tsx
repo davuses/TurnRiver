@@ -2356,11 +2356,52 @@ export function PlayTableView({
                   <tr className="border-b border-[#1B2823] text-slate-400">
                     <th className="py-2 px-2 font-medium">{t('arena.hudColPlayer')}</th>
                     <th className="py-2 px-1.5 font-medium">{t('arena.hudColStyle')}</th>
-                    <th className="py-2 px-1 text-right font-medium">{t('arena.hudColHands')}</th>
-                    <th className="py-2 px-1 text-right font-medium">{t('arena.hudColVpip')}</th>
-                    <th className="py-2 px-1 text-right font-medium">{t('arena.hudColPfr')}</th>
-                    <th className="py-2 px-1 text-right font-medium">{t('arena.hudCol3b')}</th>
-                    <th className="py-2 px-1.5 text-right font-medium">{t('arena.hudColAf')}</th>
+                    <th
+                      className="py-2 px-1 text-right font-medium cursor-help underline decoration-dotted decoration-slate-600 underline-offset-2"
+                      title={locale === 'zh-CN' ? '已观察的手牌数量' : 'Hands observed at this table'}
+                    >
+                      {t('arena.hudColHands')}
+                    </th>
+                    <th
+                      className="py-2 px-1 text-right font-medium cursor-help underline decoration-dotted decoration-slate-600 underline-offset-2"
+                      title={
+                        locale === 'zh-CN'
+                          ? '主动入池率（VPIP）：翻前主动跟注或加注的频率'
+                          : 'VPIP (Voluntarily Put Money In Pot): % of hands entered preflop'
+                      }
+                    >
+                      {t('arena.hudColVpip')}
+                    </th>
+                    <th
+                      className="py-2 px-1 text-right font-medium cursor-help underline decoration-dotted decoration-slate-600 underline-offset-2"
+                      title={
+                        locale === 'zh-CN'
+                          ? '翻前加注率（PFR）：翻前主动加注或再加注的频率'
+                          : 'PFR (Preflop Raise): % of hands raised preflop'
+                      }
+                    >
+                      {t('arena.hudColPfr')}
+                    </th>
+                    <th
+                      className="py-2 px-1 text-right font-medium cursor-help underline decoration-dotted decoration-slate-600 underline-offset-2"
+                      title={
+                        locale === 'zh-CN'
+                          ? '3-Bet 率（3B）：面对开池时翻前再加注的频率'
+                          : '3B (3-Bet %): % of times player re-raises an open preflop'
+                      }
+                    >
+                      {t('arena.hudCol3b')}
+                    </th>
+                    <th
+                      className="py-2 px-1.5 text-right font-medium cursor-help underline decoration-dotted decoration-slate-600 underline-offset-2"
+                      title={
+                        locale === 'zh-CN'
+                          ? '激进因子（AF）：翻后下注与加注次数 ÷ 跟注次数'
+                          : 'AF (Aggression Factor): postflop (bets + raises) ÷ calls'
+                      }
+                    >
+                      {t('arena.hudColAf')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody data-testid="opponent-hud-rows">
