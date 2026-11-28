@@ -103,35 +103,46 @@ export function PlayingCard({
           ? 'border-emerald-400 ring-2 ring-emerald-400/50'
           : 'border-slate-300';
 
-  const baseClass = `${s.box} playing-card-shadow relative bg-[#F8FAFC] border ${stateClass} select-none shrink-0 flex flex-col justify-between p-1.5 transition-all duration-150 ${
+  const baseClass = `${s.box} playing-card-shadow relative bg-white border ${stateClass} select-none shrink-0 flex flex-col justify-between p-1.5 transition-all duration-150 ${
     onClick ? 'cursor-pointer hover:-translate-y-1 hover:ring-2 hover:ring-amber-300/80' : ''
   }`;
 
-  if (onClick) {
-    return (
-      <button type="button" aria-label={cardAriaLabel} onClick={onClick} className={baseClass}>
-        <div className={`flex flex-col items-start ${colorClass}`}>
-          <span className={`${s.rank} font-mono tabular-nums tracking-tighter`}>
+  const showBottomCorner = size === 'md' || size === 'lg';
+  const cardInner = (
+    <>
+      <div className={`flex flex-col items-center leading-none self-start ${colorClass}`}>
+        <span className={`${s.rank} font-serif tabular-nums tracking-tighter`}>
+          {rankDisplay}
+        </span>
+        <span className={s.cornerSuit}>{symbol}</span>
+      </div>
+      <div className={`self-center ${s.centerSuit} ${colorClass} ${showBottomCorner ? '' : '-mt-1'}`}>
+        {symbol}
+      </div>
+      {showBottomCorner ? (
+        <div className={`flex flex-col items-center leading-none self-end rotate-180 ${colorClass}`}>
+          <span className={`${s.rank} font-serif tabular-nums tracking-tighter`}>
             {rankDisplay}
           </span>
           <span className={s.cornerSuit}>{symbol}</span>
         </div>
-        <div className={`self-center ${s.centerSuit} ${colorClass} -mt-1`}>{symbol}</div>
+      ) : (
         <div className="h-1" />
+      )}
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button type="button" aria-label={cardAriaLabel} onClick={onClick} className={baseClass}>
+        {cardInner}
       </button>
     );
   }
 
   return (
     <div aria-label={cardAriaLabel} className={baseClass}>
-      <div className={`flex flex-col items-start ${colorClass}`}>
-        <span className={`${s.rank} font-mono tabular-nums tracking-tighter`}>
-          {rankDisplay}
-        </span>
-        <span className={s.cornerSuit}>{symbol}</span>
-      </div>
-      <div className={`self-center ${s.centerSuit} ${colorClass} -mt-1`}>{symbol}</div>
-      <div className="h-1" />
+      {cardInner}
     </div>
   );
 }

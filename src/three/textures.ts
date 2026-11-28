@@ -383,7 +383,7 @@ function suitHex(suit: Suit, fourColor: boolean): string {
         return '#0a5e2a';
     }
   }
-  return suit === 'h' || suit === 'd' ? '#a80f24' : '#0a0e16';
+  return suit === 'h' || suit === 'd' ? '#c8102e' : '#090b10';
 }
 
 function drawVectorSuitPip(
@@ -466,24 +466,15 @@ export function createCardFaceTexture(
   const h = 720;
   const [canvas, ctx] = makeCanvas(w, h);
 
-  // Calibrated warm matte casino parchment cardstock (crisp readability without spotlight glare)
-  const paperGrad = ctx.createRadialGradient(w * 0.45, h * 0.35, 30, w / 2, h / 2, w * 0.9);
-  paperGrad.addColorStop(0, '#eee8db');
-  paperGrad.addColorStop(0.7, '#e5decb');
-  paperGrad.addColorStop(1, '#dcd3be');
+  // Crisp high-contrast bright white playing card face (classic Bicycle-style legibility)
+  const paperGrad = ctx.createRadialGradient(w * 0.48, h * 0.42, 40, w / 2, h / 2, w * 0.95);
+  paperGrad.addColorStop(0, '#ffffff');
+  paperGrad.addColorStop(0.75, '#fbfcfe');
+  paperGrad.addColorStop(1, '#f3f5f8');
   ctx.fillStyle = paperGrad;
   ctx.fillRect(0, 0, w, h);
 
-  // Subtle embossed linen cardstock cross-hatch micro-texture
-  ctx.fillStyle = 'rgba(130, 118, 96, 0.032)';
-  for (let y = 0; y < h; y += 6) {
-    ctx.fillRect(0, y, w, 1);
-  }
-  for (let x = 0; x < w; x += 6) {
-    ctx.fillRect(x, 0, 1, h);
-  }
-
-  // Crisp rounded inner casino card border
+  // Crisp rounded outer card border
   const drawRoundedRect = (x: number, y: number, rw: number, rh: number, r: number) => {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -498,9 +489,9 @@ export function createCardFaceTexture(
     ctx.closePath();
   };
 
-  drawRoundedRect(16, 16, w - 32, h - 32, 26);
-  ctx.strokeStyle = 'rgba(176, 162, 136, 0.68)';
-  ctx.lineWidth = 3.5;
+  drawRoundedRect(12, 12, w - 24, h - 24, 24);
+  ctx.strokeStyle = 'rgba(42, 48, 58, 0.72)';
+  ctx.lineWidth = 3;
   ctx.stroke();
 
   const color = suitHex(card.suit, fourColor);
@@ -516,9 +507,9 @@ export function createCardFaceTexture(
       ctx.translate(w, h);
       ctx.rotate(Math.PI);
     }
-    const cx = isJumbo ? 68 : 56;
-    const rankY = isJumbo ? 88 : 74;
-    const pipY = isJumbo ? 182 : 148;
+    const cx = isJumbo ? 68 : 48;
+    const rankY = isJumbo ? 88 : 66;
+    const pipY = isJumbo ? 182 : 132;
     const pipSize = isJumbo ? 31 : 23;
 
     ctx.fillStyle = color;
@@ -529,11 +520,15 @@ export function createCardFaceTexture(
     ctx.translate(cx, rankY);
     if (card.rank === 'T') {
       // Authentic horizontally condensed "10" so it sits neatly above the corner pip without ever colliding
-      ctx.scale(0.62, 1);
-      ctx.font = `800 ${isJumbo ? 128 : 98}px "JetBrains Mono", ui-monospace, sans-serif`;
+      ctx.scale(isJumbo ? 0.62 : 0.68, 1);
+      ctx.font = isJumbo
+        ? '800 128px "JetBrains Mono", ui-monospace, sans-serif'
+        : '800 90px Georgia, "Times New Roman", serif';
       ctx.fillText('10', 0, 0);
     } else {
-      ctx.font = `800 ${isJumbo ? 126 : 96}px "JetBrains Mono", ui-monospace, sans-serif`;
+      ctx.font = isJumbo
+        ? '800 126px "JetBrains Mono", ui-monospace, sans-serif'
+        : '800 88px Georgia, "Times New Roman", serif';
       ctx.fillText(rankDisplay, 0, 0);
     }
     ctx.restore();
@@ -617,14 +612,13 @@ export function createCardFaceTexture(
     const fw = w - fx * 2;
     const fh = h - fy * 2;
 
-    // Rich ivory-gold court panel backdrop
-    const courtGrad = ctx.createLinearGradient(fx, fy, fx + fw, fy + fh);
-    courtGrad.addColorStop(0, '#f3ebd8');
-    courtGrad.addColorStop(0.5, '#e8dbc0');
-    courtGrad.addColorStop(1, '#dfd0ae');
-    drawRoundedRect(fx, fy, fw, fh, 12);
-    ctx.fillStyle = courtGrad;
+    // Clean white classic court panel backdrop with crisp dark outline
+    drawRoundedRect(fx, fy, fw, fh, 6);
+    ctx.fillStyle = '#ffffff';
     ctx.fill();
+    ctx.strokeStyle = '#1e242c';
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
 
     // Primary & secondary royal robe palette (classic French-deck harmonies)
     const isRedSuit = card.suit === 'h' || card.suit === 'd';
@@ -1047,71 +1041,26 @@ export function createCardFaceTexture(
       drawVectorSuitPip(ctx, card.suit, w / 2, h / 2, isAce ? 104 : 92, color);
     }
   } else if (isAce) {
-    if (card.suit === 's') {
-      // Ornate filigree Ace of Spades medallion
-      const cx = w / 2;
-      const cy = h / 2;
-      ctx.save();
-      ctx.strokeStyle = 'rgba(182, 142, 58, 0.65)';
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 134, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.strokeStyle = 'rgba(182, 142, 58, 0.35)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 122, 0, Math.PI * 2);
-      ctx.stroke();
-
-      for (let k = 0; k < 24; k++) {
-        const a = (k / 24) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(a) * 122, cy + Math.sin(a) * 122);
-        ctx.lineTo(cx + Math.cos(a) * 134, cy + Math.sin(a) * 134);
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      drawVectorSuitPip(ctx, 's', cx, cy, 108, color);
-
-      ctx.save();
-      ctx.strokeStyle = 'rgba(236, 224, 194, 0.72)';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(cx, cy + 4, 34, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = '#ece0c2';
-      ctx.font = 'bold 28px Georgia, serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('TR', cx, cy + 5);
-      ctx.restore();
-    } else {
-      ctx.strokeStyle = 'rgba(182, 144, 66, 0.42)';
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.arc(w / 2, h / 2, 118, 0, Math.PI * 2);
-      ctx.stroke();
-      drawVectorSuitPip(ctx, card.suit, w / 2, h / 2, 102, color);
-    }
+    // Crisp, bold, uncluttered Ace center pip (classic Bicycle proportion)
+    const acePipSize = card.suit === 's' ? 88 : 80;
+    drawVectorSuitPip(ctx, card.suit, w / 2, h / 2, acePipSize, color);
   } else if (isCourt) {
     drawCourtPortrait();
   } else {
-    // Authentic symmetrical casino pip grids for 2-10 with clean margin clearance from corner indices
+    // Bold, high-contrast classic Bicycle pip grids for 2-10 with clean clearance from corner indices
     const PIP_LAYOUTS: Record<string, Array<[number, number, boolean?]>> = {
-      '2': [[0.5, 0.23], [0.5, 0.77, true]],
-      '3': [[0.5, 0.21], [0.5, 0.5], [0.5, 0.79, true]],
-      '4': [[0.35, 0.23], [0.65, 0.23], [0.35, 0.77, true], [0.65, 0.77, true]],
-      '5': [[0.35, 0.23], [0.65, 0.23], [0.5, 0.5], [0.35, 0.77, true], [0.65, 0.77, true]],
-      '6': [[0.35, 0.21], [0.65, 0.21], [0.35, 0.5], [0.65, 0.5], [0.35, 0.79, true], [0.65, 0.79, true]],
-      '7': [[0.35, 0.21], [0.65, 0.21], [0.5, 0.355], [0.35, 0.5], [0.65, 0.5], [0.35, 0.79, true], [0.65, 0.79, true]],
-      '8': [[0.35, 0.21], [0.65, 0.21], [0.5, 0.355], [0.35, 0.5], [0.65, 0.5], [0.5, 0.645, true], [0.35, 0.79, true], [0.65, 0.79, true]],
-      '9': [[0.35, 0.195], [0.65, 0.195], [0.35, 0.395], [0.65, 0.395], [0.5, 0.5], [0.35, 0.605, true], [0.65, 0.605, true], [0.35, 0.805, true], [0.65, 0.805, true]],
-      'T': [[0.35, 0.19], [0.65, 0.19], [0.5, 0.305], [0.35, 0.405], [0.65, 0.405], [0.35, 0.595, true], [0.65, 0.595, true], [0.5, 0.695, true], [0.35, 0.81, true], [0.65, 0.81, true]],
+      '2': [[0.5, 0.21], [0.5, 0.79, true]],
+      '3': [[0.5, 0.195], [0.5, 0.5], [0.5, 0.805, true]],
+      '4': [[0.34, 0.21], [0.66, 0.21], [0.34, 0.79, true], [0.66, 0.79, true]],
+      '5': [[0.34, 0.21], [0.66, 0.21], [0.5, 0.5], [0.34, 0.79, true], [0.66, 0.79, true]],
+      '6': [[0.34, 0.195], [0.66, 0.195], [0.34, 0.5], [0.66, 0.5], [0.34, 0.805, true], [0.66, 0.805, true]],
+      '7': [[0.34, 0.195], [0.66, 0.195], [0.5, 0.345], [0.34, 0.5], [0.66, 0.5], [0.34, 0.805, true], [0.66, 0.805, true]],
+      '8': [[0.34, 0.195], [0.66, 0.195], [0.5, 0.345], [0.34, 0.5], [0.66, 0.5], [0.5, 0.655, true], [0.34, 0.805, true], [0.66, 0.805, true]],
+      '9': [[0.34, 0.18], [0.66, 0.18], [0.34, 0.39], [0.66, 0.39], [0.5, 0.5], [0.34, 0.61, true], [0.66, 0.61, true], [0.34, 0.82, true], [0.66, 0.82, true]],
+      'T': [[0.34, 0.175], [0.66, 0.175], [0.5, 0.295], [0.34, 0.395], [0.66, 0.395], [0.34, 0.605, true], [0.66, 0.605, true], [0.5, 0.705, true], [0.34, 0.825, true], [0.66, 0.825, true]],
     };
     const pips = PIP_LAYOUTS[card.rank] ?? [[0.5, 0.5]];
-    const pipSize = pips.length >= 9 ? 30 : pips.length >= 6 ? 33 : 37;
+    const pipSize = pips.length >= 9 ? 47 : pips.length >= 6 ? 51 : 55;
     for (const [nx, ny, inverted] of pips) {
       const px = nx * w;
       const py = ny * h;
